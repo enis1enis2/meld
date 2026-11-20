@@ -1,0 +1,4 @@
+#meld bash
+@bash##"
+printf '%s\n' 'bash-feed-ok'
+"##

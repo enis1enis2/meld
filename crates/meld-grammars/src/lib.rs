@@ -24,6 +24,25 @@ static LANGUAGES: LazyLock<Vec<(&'static str, Language)>> = LazyLock::new(|| vec
     ("python", tree_sitter_python::LANGUAGE.into()),
     ("javascript", tree_sitter_javascript::LANGUAGE.into()),
     ("lua", tree_sitter_lua::LANGUAGE.into()),
+    // JUDGMENT CALL (language expansion, 2026-11-20): each id below matches a
+    // strict Lang Pack in packs/ and an exact crate version in Cargo.toml.
+    // Multi-grammar crates expose separate constants; TypeScript and TSX share
+    // one pinned crate, as do PHP and OCaml's implementation grammar.
+    ("typescript", tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into()),
+    ("tsx", tree_sitter_typescript::LANGUAGE_TSX.into()),
+    ("bash", tree_sitter_bash::LANGUAGE.into()),
+    ("ruby", tree_sitter_ruby::LANGUAGE.into()),
+    ("php", tree_sitter_php::LANGUAGE_PHP.into()),
+    ("yaml", tree_sitter_yaml::LANGUAGE.into()),
+    ("toml", tree_sitter_toml_ng::LANGUAGE.into()),
+    ("csharp", tree_sitter_c_sharp::LANGUAGE.into()),
+    ("haskell", tree_sitter_haskell::LANGUAGE.into()),
+    ("ocaml", tree_sitter_ocaml::LANGUAGE_OCAML.into()),
+    ("scala", tree_sitter_scala::LANGUAGE.into()),
+    ("zig", tree_sitter_zig::LANGUAGE.into()),
+    ("r", tree_sitter_r::LANGUAGE.into()),
+    ("dart", tree_sitter_dart::LANGUAGE.into()),
+    ("solidity", tree_sitter_solidity::LANGUAGE.into()),
 ]);
 
 fn language_entries() -> &'static [(&'static str, Language)] {

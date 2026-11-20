@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import os
 import re
-import shutil
 import sys
 import tomllib
 from pathlib import Path
@@ -31,6 +30,29 @@ CRATE_OVERRIDES = {
 QUERY_SUBDIRS = {
     "tree-sitter-md": "tree-sitter-markdown",
 }
+
+# JUDGMENT CALL: tree-sitter-solidity 1.2.13 ships a trailing `.` anchor inside
+# a grouped capture that tree-sitter 0.27's Query constructor rejects. The
+# anchor is redundant for this single-child field, so the normalizer below
+# removes it. This is a mechanical compatibility fix applied by this tool in
+# both copy and --check modes, not a hand-maintained divergent query.
+QUERY_FIXUPS = {
+    "tree-sitter-solidity": {
+        "highlights.scm": [(
+            "(struct_expression type: ((expression(identifier)) @type .))",
+            "(struct_expression type: ((expression (identifier)) @type))",
+        )],
+    },
+}
+
+
+def normalize_query(crate: str, name: str, data: bytes) -> bytes:
+    text = data.decode("utf-8")
+    for old, new in QUERY_FIXUPS.get(crate, {}).get(name, []):
+        if old not in text:
+            raise SystemExit(f"expected query fixup not found in {crate} {name}: {old!r}")
+        text = text.replace(old, new)
+    return text.encode("utf-8")
 
 
 def source_dir(registry_src: Path, crate: str, version: str) -> Path:
@@ -85,14 +107,16 @@ def main() -> int:
             if upstream is None:
                 continue
             target = qdir / name
-            expected = upstream.read_bytes()
+            expected = normalize_query(crate, name, upstream.read_bytes())
             if args.check:
                 if not target.is_file() or target.read_bytes() != expected:
                     print(f"STALE: {target.relative_to(ROOT)}")
                     count += 1
                 continue
             if not target.is_file() or target.read_bytes() != expected:
-                shutil.copyfile(upstream, target)
+                # JUDGMENT CALL: write the normalized bytes, not the raw upstream
+                # bytes, so --check and copy mode agree even with fixups.
+                target.write_bytes(expected)
                 print(f"copied {crate}@{version} {name} -> {target.relative_to(ROOT)}")
                 count += 1
     if args.check:

@@ -228,6 +228,12 @@ pub fn default_scanners() -> std::collections::HashMap<String, Box<dyn EndScanne
     for lang in [
         "python", "javascript", "lua", "rust", "go", "c", "cpp", "java", "json", "sql",
         "html", "css", "markdown",
+        // JUDGMENT CALL (language expansion): every bundled L0 grammar shares
+        // the generic brace fallback for plain `@lang { ... }` blocks. Languages
+        // with indentation or template delimiters should still use raw hash
+        // delimiters; registering them here only makes the fallback explicit.
+        "typescript", "tsx", "bash", "ruby", "php", "yaml", "toml", "csharp",
+        "haskell", "ocaml", "scala", "zig", "r", "dart", "solidity",
     ] {
         m.insert(lang.to_string(), Box::new(BalancedBraceScanner) as Box<dyn EndScanner>);
     }

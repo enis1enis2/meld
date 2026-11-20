@@ -1,0 +1,103 @@
+#meld text
+# JUDGMENT CALL: raw hash delimiters are used throughout because several of
+# these languages (YAML, Haskell, TOML) are indentation- or layout-sensitive
+# and the generic brace scanner cannot see their region ends reliably.
+
+@typescript##"
+const nums: number[] = [1, 2, 3];
+console.log(nums.length);
+"##
+
+@tsx##"
+function App() {
+  return <div className="meld">hello</div>;
+}
+"##
+
+@bash##"
+printf '%s\n' 'bash-ok'
+"##
+
+@ruby##"
+def twice(x)
+  x * 2
+end
+puts twice(3)
+"##
+
+@php##"
+<?php
+function twice($x) { return $x * 2; }
+echo twice(3);
+?>
+"##
+
+@yaml##"
+name: meld
+items:
+  - one
+  - two
+flags:
+  strict: true
+"##
+
+@toml##"
+name = "meld"
+strict = true
+count = 3
+"##
+
+@csharp##"
+using System;
+public class Program {
+  public static void Main() { Console.WriteLine("meld"); }
+}
+"##
+
+@haskell##"
+module Main where
+
+double :: Int -> Int
+double x = x * 2
+
+main :: IO ()
+main = print (double 3)
+"##
+
+@ocaml##"
+let double x = x * 2
+let () = print_int (double 3)
+"##
+
+@scala##"
+object Main extends App {
+  val xs = List(1, 2, 3)
+  println(xs.map(_ * 2).mkString(","))
+}
+"##
+
+@zig##"
+pub fn main() void {
+  const xs = [_]i32{ 1, 2, 3 };
+  _ = xs;
+}
+"##
+
+@r##"
+double <- function(x) x * 2
+print(double(3))
+"##
+
+@dart##"
+void main() {
+  final xs = [1, 2, 3];
+  print(xs.map((x) => x * 2).join(','));
+}
+"##
+
+@solidity##"
+pragma solidity ^0.8.0;
+contract Meld {
+  function twice(uint256 x) public pure returns (uint256) { return x * 2; }
+}
+"##

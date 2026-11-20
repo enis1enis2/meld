@@ -39,3 +39,23 @@ SELECT 1;
 ```css
 body { color: red; }
 ```
+
+```typescript
+const x: number = 1;
+```
+
+```ruby
+puts 1
+```
+
+```yaml
+meld: true
+```
+
+```toml
+meld = true
+```
+
+```bash
+echo meld
+```

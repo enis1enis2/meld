@@ -726,7 +726,9 @@ fn cmd_repl() -> i32 {
 }
 
 fn cmd_doctor() -> i32 {
-    for tool in ["rustc", "cargo", "python3", "node", "lua"] {
+    // JUDGMENT CALL: `sh` is included because the built-in Bash pack executes
+    // through it; doctor reports only, never installs (project.md §9).
+    for tool in ["rustc", "cargo", "python3", "node", "lua", "sh"] {
         let found = Command::new("sh")
             .arg("-c")
             .arg(format!("command -v {tool}"))

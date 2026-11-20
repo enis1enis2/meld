@@ -45,6 +45,24 @@ fn every_bundled_grammar_parses_a_real_snippet_without_errors() {
         ("python", "def f(x):\n    return x + 1\n"),
         ("javascript", "function f(x) { return x + 1; }"),
         ("lua", "local function f(x) return x + 1 end\n"),
+        // JUDGMENT CALL (language expansion): real snippets for each new
+        // bundled grammar keep the registry honest; the same bodies are used
+        // in examples/10-more-languages.meld.
+        ("typescript", "const nums: number[] = [1, 2, 3];\nconsole.log(nums.length);"),
+        ("tsx", "function App() {\n  return <div className=\"meld\">hello</div>;\n}"),
+        ("bash", "printf '%s\\n' 'bash-ok'"),
+        ("ruby", "def twice(x)\n  x * 2\nend\nputs twice(3)\n"),
+        ("php", "<?php\nfunction twice($x) { return $x * 2; }\necho twice(3);\n?>"),
+        ("yaml", "name: meld\nitems:\n  - one\n  - two\nflags:\n  strict: true\n"),
+        ("toml", "name = \"meld\"\nstrict = true\ncount = 3\n"),
+        ("csharp", "using System;\npublic class Program {\n  public static void Main() { Console.WriteLine(\"meld\"); }\n}"),
+        ("haskell", "module Main where\n\ndouble :: Int -> Int\ndouble x = x * 2\n\nmain :: IO ()\nmain = print (double 3)\n"),
+        ("ocaml", "let double x = x * 2\nlet () = print_int (double 3)\n"),
+        ("scala", "object Main extends App {\n  val xs = List(1, 2, 3)\n  println(xs.map(_ * 2).mkString(\",\"))\n}"),
+        ("zig", "pub fn main() void {\n  const xs = [_]i32{ 1, 2, 3 };\n  _ = xs;\n}"),
+        ("r", "double <- function(x) x * 2\nprint(double(3))\n"),
+        ("dart", "void main() {\n  final xs = [1, 2, 3];\n  print(xs.map((x) => x * 2).join(','));\n}"),
+        ("solidity", "pragma solidity ^0.8.0;\ncontract Meld {\n  function twice(uint256 x) public pure returns (uint256) { return x * 2; }\n}"),
     ];
     for (lang, code) in cases {
         let info = parse(lang, code)
@@ -67,7 +85,9 @@ fn every_packs_published_highlight_query_compiles() {
             .unwrap_or_else(|e| panic!("{}: invalid published query: {e}", query_file.display()));
         checked += 1;
     }
-    assert_eq!(checked, 13);
+    // JUDGMENT CALL: the count follows the registry instead of hard-coding 13,
+    // so adding a Lang Pack + grammar cannot silently skip its query check.
+    assert_eq!(checked, meld_grammars_tests_language_ids().len());
 }
 
 fn meld_grammars_tests_language_ids() -> Vec<(&'static str, ())> {

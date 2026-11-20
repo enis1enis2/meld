@@ -95,3 +95,30 @@ Additional judgment calls (all also inline in the relevant spec/code):
 
 Phase completion evidence is in `../status/phase-4.md` through
 `../status/phase-7.md`.
+
+## Language expansion (2026-11-20)
+
+Fifteen strict Lang Packs were added without a core redesign: `typescript`,
+`tsx`, `bash`, `ruby`, `php`, `yaml`, `toml`, `csharp`, `haskell`, `ocaml`,
+`scala`, `zig`, `r`, `dart`, and `solidity`. crates.io was queried again before
+selection; exact versions are recorded in `crates/meld-grammars/Cargo.toml`
+and each `pack.toml`, and copied upstream queries are checked by
+`tools/sync_grammars.py --check`.
+
+Additional judgment calls (also inline in the affected files):
+
+15. `tree-sitter-perl 1.1.2` was rejected because it keeps `tree-sitter 0.26`
+    as a normal dependency, which Cargo refuses alongside the core's 0.27
+    `links = "tree-sitter"` library. It is deferred, not claimed as supported.
+16. TypeScript/TSX share one pinned crate and PHP/OCaml use their published
+    implementation-grammar constants; pack ids are aliases over those choices.
+17. `bash` is L1 (statements + stdout + structured errors) and deliberately not
+    L2: the proven third-party shell worker has no value bridge.
+18. The upstream Solidity 1.2.13 query contains a trailing `.` anchor rejected
+    by tree-sitter 0.27 `Query`; `tools/sync_grammars.py` normalizes it in both
+    copy and check modes rather than maintaining a divergent hand-written pack
+    query.
+19. New L0 fixtures use `##"... "##` raw delimiters; indentation-sensitive
+    languages never rely on the generic brace scanner.
+
+Evidence and verification results are in `../status/language-expansion.md`.

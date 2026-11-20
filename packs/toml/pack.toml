@@ -1,0 +1,20 @@
+# JUDGMENT CALL: exact crate version pinned here and in
+# crates/meld-grammars/Cargo.toml. Queries are copied from the published crate
+# by tools/sync_grammars.py; this generator never hand-writes them.
+id = "toml"
+aliases = []
+extensions = ["toml"]
+version = "0.1.0"
+tier = "L0"
+level = "L0"
+capabilities = ["syntax"]
+grammar_rev = "crate:tree-sitter-toml-ng@0.7.0"
+strict = true
+
+[tree_sitter]
+crate = "tree-sitter-toml-ng"
+rev = "0.7.0"
+
+[sandbox]
+network = false
+fs = []

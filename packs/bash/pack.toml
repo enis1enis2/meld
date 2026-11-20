@@ -1,0 +1,21 @@
+# JUDGMENT CALL: the built-in Bash pack is the executable counterpart of the
+# third-party `shell` fixture. It promotes that proven L1 worker to a strict
+# built-in pack with a real pinned tree-sitter grammar; no Rust core change is
+# needed. Version is pinned here and in crates/meld-grammars/Cargo.toml.
+id = "bash"
+aliases = ["sh", "shell", "posix-sh"]
+extensions = ["sh", "bash"]
+version = "0.1.0"
+tier = "T2"
+level = "L1"
+capabilities = ["stdout", "env:PATH"]
+grammar_rev = "crate:tree-sitter-bash@0.25.1"
+strict = true
+
+[tree_sitter]
+crate = "tree-sitter-bash"
+rev = "0.25.1"
+
+[sandbox]
+network = false
+fs = ["project"]

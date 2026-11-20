@@ -1,0 +1,7 @@
+# JUDGMENT CALL: no external language server is bundled for generated L0
+# packs. Keywords give the Meld LSP deterministic fallback completions while
+# keeping the core free of language-id tables.
+[lsp]
+language_id = "toml"
+extension = "toml"
+keywords = ["true", "false"]

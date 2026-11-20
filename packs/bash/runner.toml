@@ -1,0 +1,14 @@
+# T2 launch profile (spec/lang-pack.md §4, spec/t2-protocol.md §6).
+tier = "T2"
+protocol = "meld-t2/1"
+command = "sh"
+# JUDGMENT CALL: project-root-relative path matches the other built-in T2 packs.
+# The CLI's rebase_arg() falls back to this pack's basename after installation.
+args = ["packs/bash/worker.sh"]
+cwd = "project"
+stdout = "protocol"
+stderr = "forward"
+
+[limits]
+max_line_bytes = 1048576
+idle_timeout_ms = 30000

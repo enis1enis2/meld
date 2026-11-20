@@ -139,6 +139,12 @@ manifest, grammar reference, empty end scanner stub, highlight query, and a
 feeder test. This is the "cheap route to a long tail" from project.md §4. The
 generator never downloads or executes grammar code; it writes references only.
 
+**JUDGMENT CALL:** `--strict` adds an exact crate pin, aliases/extensions,
+version, LSP fallback keywords, and a raw-delimiter feeder fixture so a
+reviewed pack can be signed immediately by `packtool`. The 15 packs from
+`status/language-expansion.md` were created this way; the default mode still
+emits `generated-placeholder` and `strict = false`.
+
 ## 6. Security
 
 - Packs are data + small sandboxed plugins; Wasm preferred for `region_end` and
