@@ -28,14 +28,19 @@ fn rust_component_function_is_callable_with_typed_args() -> Result<()> {
 
 #[test]
 fn t5_toolchain_fallback_compiles_and_runs_a_region() -> Result<()> {
+    // JUDGMENT CALL 55: use PATH-resolved `sh` for both stages. The old
+    // `/bin/sh` program name does not exist on Windows, and CreateProcess
+    // cannot execute the generated shebang script directly there. Invoking
+    // `sh` explicitly keeps the same POSIX build/run semantics on every host
+    // while letting Windows find Git Bash through PATH.
     let backend = T5Backend::new(
         "sh",
         vec![
-            "/bin/sh".to_string(),
+            "sh".to_string(),
             "-c".to_string(),
             "cp {src} {out} && chmod +x {out}".to_string(),
         ],
-        vec!["{out}".to_string()],
+        vec!["sh".to_string(), "{out}".to_string()],
         PathBuf::from("."),
     );
     let code = "#!/bin/sh\necho t5-ok\necho '@meld \"7\"'\n";
