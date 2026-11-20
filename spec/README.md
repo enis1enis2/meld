@@ -282,6 +282,12 @@ Additional judgment calls (also inline in the affected specs/code):
 45. CI requests a floating Python 3.12 patch instead of 3.12.9, which is absent
     from the Ubuntu 26.04 runner image (CI job 136453004450). The Python
     dependency itself remains pinned in `requirements-ci.txt`.
+46. The CI supply-chain job pins `taiki-e/install-action` to the same commit and
+    tool versions as `audit.yml` (`cargo-audit@0.23.0`, `cargo-deny@0.22.0`).
+    The floating `@cargo-deny` branch installed 0.21.0, which rejects the
+    unmaintained `fxhash` advisory even though `deny.toml` is unchanged; the
+    pinned version honours the config and passes. No advisory exception was
+    added and `--deny warnings` stays in force.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

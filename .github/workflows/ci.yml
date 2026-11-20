@@ -102,10 +102,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
-      - name: Install cargo-deny
-        uses: taiki-e/install-action@cargo-deny
+      # JUDGMENT CALL 46: pin the same tool versions as audit.yml. The floating
+      # @cargo-deny branch installed 0.21.0, which still reports unmaintained
+      # fxhash as an error; the pinned 0.22.0 honours deny.toml and passes.
+      - name: Install cargo-audit and cargo-deny
+        uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+        with:
+          tool: cargo-audit@0.23.0,cargo-deny@0.22.0
+          fallback: cargo-install
       - name: cargo audit
         run: cargo audit --deny warnings
       - name: cargo deny
