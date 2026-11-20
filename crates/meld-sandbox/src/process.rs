@@ -454,21 +454,6 @@ impl SpawnedProcess {
         self.guard.child_mut().try_wait().map_err(Into::into)
     }
 
-    /// TEMPORARY DIAGNOSTIC (removed before merge): worker state at timeout.
-    #[cfg(debug_assertions)]
-    pub fn debug_state(&mut self) -> String {
-        let status = self.guard.child_mut().try_wait().ok();
-        format!(
-            "pid={} elapsed={:?} try_wait={:?} stderr={:?} stdout_buf={} lines={}",
-            self.guard.pid(),
-            self.started.elapsed(),
-            status,
-            self.stderr_text,
-            self.stdout_buf.len(),
-            self.lines_seen,
-        )
-    }
-
     pub fn wait(&mut self) -> Result<ExitStatus> {
         self.guard.wait()
     }

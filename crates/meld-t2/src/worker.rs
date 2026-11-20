@@ -241,12 +241,6 @@ impl T2Backend {
 
     fn crash(&mut self, message: impl Into<String>) -> MeldError {
         let message = message.into();
-        // TEMPORARY DIAGNOSTIC (removed before merge): expose worker state when
-        // an initialize/eval response does not arrive on Windows CI.
-        #[cfg(debug_assertions)]
-        if let Some(process) = self.process.as_mut() {
-            eprintln!("MELDDBG T2 crash [{message}] {}", process.debug_state());
-        }
         self.terminate();
         MeldError::WorkerCrashed(self.with_stderr(message))
     }
@@ -301,9 +295,6 @@ impl T2Backend {
         };
         match received {
             Ok(Some(line)) => {
-                // TEMPORARY DIAGNOSTIC (removed before merge).
-                #[cfg(debug_assertions)]
-                eprintln!("MELDDBG T2 recv [{what}] {line:?}");
                 if Instant::now() > deadline {
                     Err(self.timeout(what))
                 } else {
