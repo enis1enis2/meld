@@ -326,6 +326,11 @@ Additional judgment calls (also inline in the affected specs/code):
     Mixed line endings and bare carriage returns are rejected rather than
     silently normalized. The signed checksum bytes are still verified byte for
     byte, so this does not weaken signature enforcement.
+54. `packtool sign` now recomputes payload digests and refuses a canonical but
+    stale `checksums.sha256` instead of publishing a pack that fails on every
+    verifier. The installer test fixture refreshes checksums after copying the
+    pack so the Ed25519 signature covers the exact working-tree bytes stored by
+    Git, regardless of host line endings.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

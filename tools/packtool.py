@@ -281,7 +281,13 @@ def sign_pack(pack_dir: Path, private_key_path: Path) -> Path:
     if key_path.resolve().is_relative_to(pack_dir.resolve()):
         raise PackToolError("private key file must not be inside the pack directory")
     key = _load_private_key(key_path)
-    read_checksums(pack_dir)  # never sign a pack whose checksums are stale/malformed
+    # JUDGMENT CALL 54: signing a canonical but stale manifest would produce a
+    # pack that fails verification on every host. Recompute and compare the
+    # payload digests before signing; the signed message still uses the exact
+    # checksum bytes on disk, including their platform line endings.
+    _expected, _actual, problems = _checksum_problems(pack_dir)
+    if problems:
+        raise PackToolError("refusing to sign stale checksums: " + "; ".join(problems))
     manifest = load_manifest(pack_dir)
     message = _pack_message(
         str(manifest["id"]), _version(manifest), (pack_dir / CHECKSUM_FILE).read_bytes()

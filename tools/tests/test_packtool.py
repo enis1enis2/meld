@@ -160,6 +160,18 @@ class PackToolTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("not canonical", result.stderr)
 
+    def test_sign_refuses_stale_checksums(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            private, _public = key_pair(base)
+            pack, _ = self.make_pack(base, private_key=private)
+            (pack / "worker.py").write_text("# changed\n", encoding="utf-8")
+            result = cli("sign", pack, "--private-key", private)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertIn("refusing to sign stale checksums", result.stderr)
+            self.assertIn("checksum mismatch: worker.py", result.stderr)
+            self.assertFalse((pack / packtool.SIGNATURE_FILE).exists())
+
     def test_ed25519_sign_verify_unknown_key_revocation_and_tamper(self):
         with tempfile.TemporaryDirectory() as td:
             base = Path(td)

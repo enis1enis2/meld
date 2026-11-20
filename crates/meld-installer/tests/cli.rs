@@ -217,6 +217,11 @@ fn make_repo(base: &Path, name: &str, private: &Path, public: &Path) -> Repo {
     let pack = repo.join("packs/shell");
     fs::create_dir_all(repo.join("packs/registry")).unwrap();
     copy_dir(&root().join("tests/fixtures/pack-third-party"), &pack);
+    // JUDGMENT CALL 54: the checked-in fixture carries checksums for its own
+    // host's line endings. Recompute them over the copied working-tree bytes
+    // before signing; `packtool sign` now refuses stale manifests, and Git for
+    // Windows can preserve CRLF in both the fixture commit and the clone.
+    refresh_checksums(&pack);
 
     let output = packtool(&[
         "sign",
