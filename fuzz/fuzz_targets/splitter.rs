@@ -7,7 +7,7 @@ fuzz_target!(|data: &[u8]| {
     // The splitter operates on UTF-8 source text. InvalidUTF-8 is normalized
     // here so the target exercises region parsing rather than string decoding.
     let source = String::from_utf8_lossy(data);
-    let scanners = splitter::default_scanners();
+    let scanners = splitter::ScannerRegistry::default_registry();
 
     if let Ok(doc) = splitter::split(&source, &scanners) {
         // A successful split must cover the source exactly once: rendering the

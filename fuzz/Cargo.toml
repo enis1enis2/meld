@@ -12,6 +12,8 @@ libfuzzer-sys = "=0.4.13"
 serde_json = "=1.0.154"
 meld-core = { path = "../crates/meld-core" }
 meld-value = { path = "../crates/meld-value" }
+meld-sandbox = { path = "../crates/meld-sandbox" }
+meld-t2 = { path = "../crates/meld-t2" }
 
 [[bin]]
 name = "splitter"
@@ -22,6 +24,24 @@ doc = false
 [[bin]]
 name = "value_decode"
 path = "fuzz_targets/value_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sandbox_manifest"
+path = "fuzz_targets/sandbox_manifest.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sandbox_policy"
+path = "fuzz_targets/sandbox_policy.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "t2_envelope"
+path = "fuzz_targets/t2_envelope.rs"
 test = false
 doc = false
 
