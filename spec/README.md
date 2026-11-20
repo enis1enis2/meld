@@ -310,6 +310,10 @@ Additional judgment calls (also inline in the affected specs/code):
     `hostname contains invalid characters` before any signature check ran.
     `\\?\UNC\` is mapped back to `\\server\share`. This mirrors judgment call 48
     at the spawn boundary and leaves filesystem checks on canonical paths.
+51. Temporary pack clones set `core.autocrlf=false` before checkout. Git for
+    Windows otherwise rewrites `checksums.sha256` and `signature.ed25519` to
+    CRLF, making the verifier parse paths with a trailing `\r` and report signed
+    files as missing. Pack bytes are signed, so no host may normalize them.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

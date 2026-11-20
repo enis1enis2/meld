@@ -401,6 +401,20 @@ impl TempClone {
         let clone = Self { dir };
         let str_dir = git_path(&clone.dir);
         git(&["init".into(), "-q".into(), str_dir.clone()])?;
+        // JUDGMENT CALL 51: pack checksums and signatures are byte-exact.
+        // Git for Windows defaults `core.autocrlf=true`, which rewrites
+        // `checksums.sha256` and `signature.ed25519` to CRLF on checkout; the
+        // verifier then sees paths such as `README.md\r` and reports them as
+        // missing even though the files are present. Disable conversion in the
+        // temporary clone so every checked-out pack byte matches the signed
+        // manifest on every host.
+        git(&[
+            "-C".into(),
+            str_dir.clone(),
+            "config".into(),
+            "core.autocrlf".into(),
+            "false".into(),
+        ])?;
         git(&[
             "-C".into(),
             str_dir.clone(),
