@@ -236,6 +236,29 @@ fn revocations_path(opts: &Options) -> Option<PathBuf> {
     })
 }
 
+/// JUDGMENT CALL 50: `std::fs::canonicalize` on Windows returns `\\?\`-prefixed
+/// device paths. Passing one to `git remote add` makes Git parse `\\?\C:\...`
+/// as a network-style URL whose host is `?`, so every local-source test fails
+/// before signature verification with `hostname contains invalid characters`.
+/// Strip the prefix only in argv handed to Git; policy and filesystem checks
+/// keep the canonical path. `\\?\UNC\` maps back to `\\server\share`.
+#[cfg(windows)]
+fn git_path(path: &Path) -> String {
+    let text = path.as_os_str().to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{rest}")
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        rest.to_string()
+    } else {
+        text.into_owned()
+    }
+}
+
+#[cfg(not(windows))]
+fn git_path(path: &Path) -> String {
+    path.as_os_str().to_string_lossy().into_owned()
+}
+
 #[derive(Clone, Debug)]
 struct SourceSpec {
     url: String,
@@ -277,7 +300,7 @@ impl SourceSpec {
             let absolute = base_path
                 .canonicalize()
                 .map_err(|e| (1, format!("cannot resolve local source {base:?}: {e}")))?;
-            let text = absolute.to_string_lossy().into_owned();
+            let text = git_path(&absolute);
             (text.clone(), format!("local:{text}"))
         } else if let Some(slug) = base.strip_prefix("github:") {
             (
@@ -376,7 +399,7 @@ impl TempClone {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).map_err(|e| (1, format!("{}: {e}", dir.display())))?;
         let clone = Self { dir };
-        let str_dir = clone.dir.to_string_lossy().into_owned();
+        let str_dir = git_path(&clone.dir);
         git(&["init".into(), "-q".into(), str_dir.clone()])?;
         git(&[
             "-C".into(),
@@ -896,4 +919,28 @@ fn cmd_self_uninstall(opts: &Options) -> AppResult {
         println!("not installed: {}", dest.display());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn git_path_strips_windows_verbatim_prefix() {
+        assert_eq!(
+            git_path(Path::new(r"\\?\D:\a\meld\meld\source")),
+            r"D:\a\meld\meld\source"
+        );
+        assert_eq!(
+            git_path(Path::new(r"\\?\UNC\server\share\source")),
+            r"\\server\share\source"
+        );
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn git_path_keeps_posix_paths() {
+        assert_eq!(git_path(Path::new("/tmp/source")), "/tmp/source");
+    }
 }

@@ -304,6 +304,12 @@ Additional judgment calls (also inline in the affected specs/code):
 49. The 10 s T2 idle/call deadline is deliberately unchanged. The Windows
     worker exited in under 5 s with a deterministic `EISDIR`, so a longer
     timeout would only delay the same failure.
+50. Local pack sources are canonicalized for validation, but the verbatim
+    `\\?\` prefix is stripped from the string handed to `git`. Git parsed
+    `\\?\C:\...` as a URL with host `?`, so Windows installer tests failed with
+    `hostname contains invalid characters` before any signature check ran.
+    `\\?\UNC\` is mapped back to `\\server\share`. This mirrors judgment call 48
+    at the spawn boundary and leaves filesystem checks on canonical paths.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
