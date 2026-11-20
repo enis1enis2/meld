@@ -1,0 +1,11 @@
+[book]
+title = "Meld release and reliability documentation"
+authors = ["Meld contributors"]
+description = "Release, schema stability and artifact verification notes for Meld"
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/enis1enis2/meld"
