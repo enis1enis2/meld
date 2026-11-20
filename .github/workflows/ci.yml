@@ -5,6 +5,7 @@ on:
     branches: [main, "production/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -99,3 +100,19 @@ jobs:
         run: cargo audit --deny warnings
       - name: cargo deny
         run: cargo deny --all-features check
+
+  windows-diagnostics:
+    if: github.event_name == 'workflow_dispatch'
+    name: windows sandbox diagnostics
+    runs-on: windows-latest
+    env:
+      RUST_BACKTRACE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reproduce JavaScript worker failure
+        shell: bash
+        run: cargo test -p meld-cli --test cli repl_switches_languages_and_keeps_running -- --nocapture
+      - name: Reproduce shell worker failure
+        shell: bash
+        run: cargo test -p meld-cli --test cli third_party_shell_pack_runs_without_core_changes -- --nocapture

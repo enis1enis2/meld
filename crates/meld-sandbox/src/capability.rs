@@ -384,13 +384,25 @@ pub fn reject_parent_components(path: &Path) -> Result<()> {
 /// final component we validate its nearest existing ancestor; the caller must
 /// re-check after creating files (see `SafeRoot::resolve`).
 pub fn reject_symlinks_in_path(path: &Path) -> Result<()> {
+    eprintln!("MELDDBG symlink-walk path={path:?}");
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component.as_os_str());
+        eprintln!(
+            "MELDDBG symlink-walk current={current:?} comp={:?}",
+            component.as_os_str()
+        );
         let meta = match std::fs::symlink_metadata(&current) {
             Ok(meta) => meta,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
-            Err(e) => return Err(SandboxError::Io(e)),
+            Err(e) => {
+                eprintln!(
+                    "MELDDBG symlink-walk FAIL current={current:?} raw={:?} kind={:?}",
+                    e.raw_os_error(),
+                    e.kind()
+                );
+                return Err(SandboxError::Io(e));
+            }
         };
         if meta.file_type().is_symlink() {
             return Err(escape(path, "symlink component"));
