@@ -91,6 +91,10 @@ turning a pack or runner limitation into host authority.
 - **T2:** the JSON line protocol is a compatibility contract only. It does not
   enforce capabilities. Worker launch must apply OS-enforced confinement plus
   bounded I/O, timeouts, process-tree termination, and a hostcall allowlist.
+  A worker that handshakes as `L1` is limited to stdout-only `execute`; value
+  imports/exports, inline `eval`, `fetch`, and worker-initiated host calls are
+  `L2`-only and denied by the host before dispatch. Host calls received before
+  initialization are always denied because no level has been established.
 - **T3:** Wasmtime isolation is enforced independently with a strict config:
   no WASI, no unexpected imports, fresh store per call, fuel and epoch
   deadlines, stack/memory/table/instance/handle limits, and trap-to-denied
@@ -101,7 +105,9 @@ turning a pack or runner limitation into host authority.
 
 **JUDGMENT CALL:** T2 protocol declarations are requests, not enforcement;
 T3 limits are strict even when OS confinement is present. Multiple layers are
-intentional because the tiers have different failure modes.
+intentional because the tiers have different failure modes. A narrower L1
+worker is accepted for legacy compatibility only inside the stdout-only slice;
+the host, not the worker's self-report, enforces that boundary.
 
 ### 4.3 Parsing and scanner safety
 
@@ -155,9 +161,11 @@ verification as a downgrade path.
   process tree on failure.
 - Wasm execution has fuel, epoch interruption, memory/table/handle limits, and
   a watchdog. Exhaustion maps to a structured sandbox denial, not a host panic.
-- Fuzz targets cover every parser/decoder boundary: splitter/scanners, Meld
-  value decoding, T2 envelopes, pack manifests, trust roots, revocations, and
-  installer inputs.
+- Fuzz targets cover the parser/decoder boundaries reachable from untrusted
+  bytes: splitter/scanners, Meld value decoding, sandbox manifests and grants,
+  T2 envelopes, and packtool trust roots, revocations, mirrors, registry,
+  checksums, and signatures. Installer negative cases are covered by
+  integration tests rather than a dedicated fuzz target.
 - Pack extraction rejects traversal, absolute paths, symlinks that leave the
   destination, oversized entries, and undeclared files.
 
@@ -193,6 +201,13 @@ verification as a downgrade path.
    language. Raw delimiters remain the correctness escape hatch.
 6. Performance counters and timing side channels are out of scope unless a
    deployment explicitly requires multi-tenant isolation.
+7. This host cannot create user namespaces, so CLI fixture tests use the
+   debug-only `MELD_TEST_UNSANDBOXED=1` path. The escape hatch is compiled out
+   of release builds, prints a warning, and does not relax production launches.
+   Native Linux CI with namespace/cgroup privileges remains required.
+8. Manifest roots are canonicalized before policy validation; a `MELD_ROOT`
+   containing `..` is normalized to a real path rather than silently changing
+   the meaning of declared safe roots.
 
 ## 7. Verification obligation
 
@@ -221,3 +236,12 @@ executed and evidence is recorded in
    raising the MSRV for production hardening (recorded during implementation).
 7. Release artifacts are signed and reproducible where possible, with honest
    platform limitations recorded rather than claimed (§4.4, §6).
+8. OS backends are host-specific and attest their mechanisms before use;
+   unsupported or unenforceable policy fails closed (§4.1, §6).
+9. L1 compatibility is bounded by the host to stdout-only execution; all value
+   and hostcall operations require L2 (§4.2).
+10. The unsandboxed test switch exists only in debug fixtures, never in release
+    launches (§6).
+11. Canonicalized roots prevent `..`-based validation ambiguity (§6).
+12. Fuzz coverage includes sandbox policy/manifest and T2 envelope boundaries;
+    stable smoke runs are not a substitute for instrumented CI (§4.5).

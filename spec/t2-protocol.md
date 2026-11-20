@@ -32,25 +32,36 @@ Worker → host:
 ```
 
 Protocol mismatch is `E_PROTOCOL` and the worker is terminated. The host also
-validates `level` (when present) and `caps`: only `values`, `stdout`, and `eval`
-are known capabilities, `values` and `stdout` are required, and any unknown
-capability is a hard `SandboxDenied`. `eval` stays optional so workers that only
-support statements remain usable for ordinary regions.
+validates `level` (when present; older workers default to `L2`) and `caps`. Only
+`values`, `stdout`, and `eval` are known capabilities, `stdout` is required for
+every level, an unknown level or capability is a hard `SandboxDenied`, and any
+level other than `L1` or `L2` is rejected. `L2` workers must advertise `values`;
+`L1` workers must not advertise `values` or `eval`. `eval` stays optional on
+`L2` so workers that only support statements remain usable for ordinary regions.
+
+**JUDGMENT CALL:** `L1` is a stdout-only compatibility level for installed
+shell packs. It is accepted for `run`, but the host rejects value imports,
+exports, inline `eval`, `fetch`, and worker-initiated host calls from `L1`
+before dispatch. The level is therefore a real capability boundary rather than
+a label trusted from the worker.
 
 ## 3. Methods
 
-| method | params | result |
-|---|---|---|
-| `execute` | `{region_id, code, env}` | `{stdout:[...], exports:[{name,value}]}` |
-| `eval` | `{region_id, code}` | `{value}` — evaluate one expression and return a Meld Value |
-| `fetch` | `{name}` | `{value}` — read a native binding produced by `execute` |
-| `export` | `{name, value}` | `{ok:true}` — host pushes a value into the worker |
-| `import` | `{name, value}` | `{ok:true}` |
-| `call` | `{fn,args}` | `{value}` or `{error}` |
-| `drop` | `{handle_id}` | `{ok:true}` |
-| `shutdown` | `{}` | `{ok:true}` |
+| method | levels | params | result |
+|---|---|---|---|
+| `execute` | L1, L2 | `{region_id, code, env}` | `{stdout:[...], exports:[{name,value}]}` |
+| `eval` | L2 only | `{region_id, code}` | `{value}` — evaluate one expression and return a Meld Value |
+| `fetch` | L2 only | `{name}` | `{value}` — read a native binding produced by `execute` |
+| `export` | L2 only | `{name, value}` | `{ok:true}` — host pushes a value into the worker |
+| `import` | L2 only | `{name, value}` | `{ok:true}` |
+| `call` | L2 only | `{fn,args}` | `{value}` or `{error}` |
+| `drop` | L2 only | `{handle_id}` | `{ok:true}` |
+| `shutdown` | L1, L2 | `{}` | `{ok:true}` |
 
-`execute` runs the region body. `export`/`import` are invoked by the host after
+`execute` runs the region body; an `L1` worker may return stdout with an empty
+`exports` array, but a request with declared or returned exports is rejected by
+the host unless the worker is `L2`. Value-bearing methods are never dispatched
+to `L1`. `export`/`import` are invoked by the host after
 the binding resolver computes the DAG; glue lines are stripped from `code`.
 `eval` exists for inline islands `⟦lang: expr⟧`: the host evaluates the expression
 in its own language's worker, receives a Meld Value, then renders that value as
@@ -101,6 +112,12 @@ callbacks for one request are hard denials. A callback that does not answer in
 callback thread itself cannot be cancelled safely, so callers must keep
 callbacks short-lived.
 
+**JUDGMENT CALL:** worker-initiated callbacks require an initialized `L2`
+worker. Before the handshake assigns a level, every `__host_call` is answered
+with a structured `SandboxDenied` and the callback is not invoked; after the
+handshake, an `L1` worker is denied on the same path. This prevents a restricted
+worker from using callbacks to escape its value boundary.
+
 ## 4. Values
 
 Values use the Meld Value Model wire encoding (`spec/value-model.md`). Errors
@@ -128,7 +145,9 @@ policy cannot be enforced on the current host, launch fails with
 `SandboxDenied`; there is no silent unconfined fallback. `runner.toml` declares
 the profile, `meld doctor` reports capability, and `meld-sandbox` is the
 authority at spawn time. The stdio hardening in §1–§3.1 is defence in depth, not
-a substitute for the OS sandbox.
+a substitute for the OS sandbox. A debug-only `MELD_TEST_UNSANDBOXED=1` switch
+exists for fixture tests on hosts without namespace/cgroup privileges; it is
+compiled out of release builds and never changes production launch behavior.
 
 ## 7. Example session (Python worker)
 

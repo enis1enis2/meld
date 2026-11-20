@@ -194,6 +194,31 @@ Additional judgment calls (also inline in the affected specs/code):
     SemVer 2.0.0, and the system package name is `meld-lang` to avoid collision
     with the existing Meld diff tool. Binaries remain `meld`, `meld-lsp`, and
     `meld-pack`.
+31. OS sandbox backends are selected per host: Linux uses namespaces, seccomp,
+    Landlock where available, cgroups, and a probed OCI fallback; macOS uses
+    Seatbelt via `sandbox-exec`; Windows uses Job Objects plus AppContainer. A
+    backend must attest the mechanisms required by the effective policy or the
+    launch fails closed. Landlock, OCI, Seatbelt, and AppContainer are not
+    runtime-proven on this Linux host and require native CI.
+32. L1 T2 workers are accepted only for stdout-only `execute`. Value imports,
+    exports, inline `eval`, `fetch`, and worker-initiated host calls are L2-only
+    and are rejected by the host before dispatch. L1 must advertise `stdout`
+    only; L2 must advertise `values`. Host calls received before initialization
+    are denied unconditionally because no worker level is trusted yet.
+33. `MELD_TEST_UNSANDBOXED=1` is a debug-only escape hatch for fixture tests on
+    hosts without namespace/cgroup privileges. It is compiled out of release
+    builds, prints a loud warning, and never changes production launch behavior:
+    production still probes and enforces the OS policy or fails closed.
+34. Manifest roots are canonicalized before policy parsing, so a `MELD_ROOT`
+    containing `..` cannot create a path-validation ambiguity. CLI and installer
+    temp helpers honor `TMPDIR`/`MELD_TEST_TMP` and do not embed host-specific
+    temporary paths.
+35. Fuzz coverage is extended to five Rust libFuzzer targets (`splitter`,
+    `value_decode`, `sandbox_manifest`, `sandbox_policy`, `t2_envelope`) plus a
+    deterministic Python harness for packtool trust roots, revocations, mirrors,
+    registry, checksums, and signatures. Stable local smoke runs are evidence
+    of crash-freedom only; instrumented nightly CI remains the required
+    continuous gate.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
