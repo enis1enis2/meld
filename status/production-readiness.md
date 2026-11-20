@@ -84,6 +84,30 @@ Debian chroot toolchain while preserving the caller's working directory. Node
 and Lua wrappers were added for the same reason. These wrappers are host
 configuration only and are not committed to the repository.
 
+The installer integration test initially failed because the host filesystem
+was full (`No space left on device` during `git add`), not because of Meld
+logic. After `cargo clean` freed 14.3 GiB and the test used a chroot-visible
+`TMPDIR`, `cargo test -p meld-installer --test cli` passed with
+`1 passed; 0 failed`.
+
+Release engineering assets from `production/release-eng` were merged. Local
+re-verification in this worktree passed:
+
+| Command | Result |
+|---|---|
+| `sh -n` on `install.sh`, `packaging/deb/rules`, `scripts/*.sh` | PASS |
+| `python3 -m py_compile` on new Python tooling | PASS |
+| JSON parse of `bucket/meld-lang.json`, `grammar-sources.json` | PASS |
+| `cargo metadata --manifest-path fuzz/Cargo.toml --format-version 1 --locked` | PASS (targets: `splitter`, `value_decode`) |
+| `python3 tools/check_grammar_sources.py` | PASS (27 pinned grammars) |
+| `python3 tools/generate_third_party_notices.py` | PASS (notices current) |
+
+GitHub push remains blocked: the available OAuth credential has only the
+`repo` scope and GitHub rejects pushes that create or update workflow files
+without the `workflow` scope. All CI and release workflows are committed
+locally; public CI run links remain pending until a workflow-scoped credential
+or SSH deploy key is available.
+
 ## 2. Security
 
 Status: NOT STARTED.
