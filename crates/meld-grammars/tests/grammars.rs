@@ -98,6 +98,31 @@ fn meld_grammars_tests_language_ids() -> Vec<(&'static str, ())> {
 }
 
 #[test]
+fn bundled_grammars_match_the_pinned_tree_sitter_abi_range() {
+    // Exact grammar pins are only safe while every generated Language uses an
+    // ABI accepted by the exact `tree-sitter` version in Cargo.toml. Some
+    // pinned grammars are generated with an older-but-compatible ABI (e.g.
+    // tree-sitter-cpp 0.23.4 emits ABI 14 for parser ABI 15), so assert the
+    // supported range rather than requiring the newest ABI. This still catches
+    // a version bump that leaves one grammar behind --- the Perl deferral in
+    // Cargo.toml is the motivating example.
+    for id in meld_grammars_tests_language_ids()
+        .into_iter()
+        .map(|(id, _)| id)
+    {
+        let lang = language(id).unwrap_or_else(|| panic!("no bundled grammar for {id}"));
+        let abi = lang.abi_version();
+        assert!(
+            (tree_sitter::MIN_COMPATIBLE_LANGUAGE_VERSION..=tree_sitter::LANGUAGE_VERSION)
+                .contains(&abi),
+            "{id} was generated for ABI {abi}; the pinned parser supports ABI {}..={}",
+            tree_sitter::MIN_COMPATIBLE_LANGUAGE_VERSION,
+            tree_sitter::LANGUAGE_VERSION
+        );
+    }
+}
+
+#[test]
 fn source_map_points_are_relative_to_the_whole_meld_file() {
     // JUDGMENT CALL: a region after a multi-line header must keep its real
     // row in tree-sitter coordinates. This catches the old placeholder that

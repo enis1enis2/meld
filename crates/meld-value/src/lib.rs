@@ -22,6 +22,10 @@ pub enum Value {
     Null,
     Bool(bool),
     /// Canonical decimal string, arbitrary precision.
+    ///
+    /// Wire note: `Int` is encoded as a JSON string, the same JSON shape used
+    /// by `String`. `from_json` therefore applies the compatibility rule
+    /// documented on that method when decoding decimal-looking strings.
     Int(String),
     Float(f64),
     String(String),
@@ -111,6 +115,17 @@ impl Value {
         }
     }
 
+    /// Decode a Meld value from its JSON wire representation.
+    ///
+    /// Wire compatibility rules:
+    ///
+    /// - `Int` and `String` both encode as JSON strings. Because the wire
+    ///   format has no discriminator between them, this decoder treats any
+    ///   decimal-looking string (including leading zeros and an optional `-`)
+    ///   as `Int`. A safer tagged representation would break existing wire
+    ///   fixtures and is deliberately not introduced here.
+    /// - `$bytes` payloads must be canonical padded base64. Whitespace,
+    ///   missing padding, and non-zero trailing bits are rejected.
     pub fn from_json(j: &serde_json::Value) -> Result<Self, ValueError> {
         use serde_json::Value as J;
         match j {
@@ -400,39 +415,63 @@ fn base64(bytes: &[u8]) -> String {
     out
 }
 
+fn base64_value(c: u8) -> Option<u8> {
+    match c {
+        b'A'..=b'Z' => Some(c - b'A'),
+        b'a'..=b'z' => Some(c - b'a' + 26),
+        b'0'..=b'9' => Some(c - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
+    }
+}
+
+/// Decode canonical padded base64. Rejects non-alphabet bytes, whitespace,
+/// missing/excess padding, `=` outside the final two positions, and non-zero
+/// trailing bits. This matches the base64 emitted by [`base64`] and by the
+/// bundled Python/JavaScript/Lua marshalers.
 fn unbase64(s: &str) -> Result<Vec<u8>, ValueError> {
-    let mut out = Vec::new();
+    let invalid = || ValueError::InvalidTag("$bytes".to_string());
     let bytes = s.as_bytes();
-    let mut i = 0;
-    while i + 4 <= bytes.len() {
-        let mut n = 0u32;
-        let mut count = 0;
-        for j in 0..4 {
-            let c = bytes[i + j];
+    if !bytes.len().is_multiple_of(4) {
+        return Err(invalid());
+    }
+    let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
+    for chunk in bytes.chunks_exact(4) {
+        let mut values = [0u8; 4];
+        let mut data = 0usize;
+        let mut padding = 0usize;
+        for (i, &c) in chunk.iter().enumerate() {
             if c == b'=' {
-                break;
+                if i < 2 {
+                    return Err(invalid());
+                }
+                padding += 1;
+                continue;
             }
-            let v = match c {
-                b'A'..=b'Z' => c - b'A',
-                b'a'..=b'z' => c - b'a' + 26,
-                b'0'..=b'9' => c - b'0' + 52,
-                b'+' => 62,
-                b'/' => 63,
-                _ => return Err(ValueError::InvalidTag("$bytes".to_string())),
-            };
-            n = (n << 6) | v as u32;
-            count += 1;
+            if padding > 0 {
+                return Err(invalid());
+            }
+            values[data] = base64_value(c).ok_or_else(invalid)?;
+            data += 1;
         }
-        if count >= 2 {
-            out.push((n >> 16) as u8);
+        let n = (u32::from(values[0]) << 18)
+            | (u32::from(values[1]) << 12)
+            | (u32::from(values[2]) << 6)
+            | u32::from(values[3]);
+        match (data, padding) {
+            (4, 0) => {
+                out.push((n >> 16) as u8);
+                out.push((n >> 8) as u8);
+                out.push(n as u8);
+            }
+            (3, 1) if values[2] & 0b11 == 0 => {
+                out.push((n >> 16) as u8);
+                out.push((n >> 8) as u8);
+            }
+            (2, 2) if values[1] & 0b1111 == 0 => out.push((n >> 16) as u8),
+            _ => return Err(invalid()),
         }
-        if count >= 3 {
-            out.push((n >> 8) as u8);
-        }
-        if count >= 4 {
-            out.push(n as u8);
-        }
-        i += 4;
     }
     Ok(out)
 }

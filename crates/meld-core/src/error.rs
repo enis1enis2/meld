@@ -20,6 +20,14 @@ pub enum MeldError {
     Parse { region_id: String, message: String },
     #[error("unknown language: {0}")]
     UnknownLang(String),
+    /// A binding import named a source region that is not present in the
+    /// split document. This is distinct from `UnknownLang`: the language may
+    /// be perfectly well known, but the referenced region does not exist.
+    #[error("missing region source in {importing_region_id}: no region '{source_region}'")]
+    MissingRegionSource {
+        importing_region_id: String,
+        source_region: String,
+    },
     #[error("toolchain missing: {0}")]
     ToolchainMissing(String),
     #[error("worker crashed: {0}")]

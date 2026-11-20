@@ -65,13 +65,18 @@ impl SyntaxLayer {
                 column: 0,
             };
         }
+        let range = Range {
+            start_byte: region.start,
+            end_byte,
+            start_point: start,
+            end_point: end,
+        };
+        // Tree-sitter requires included ranges to be non-empty, ordered by
+        // start byte and non-overlapping. Check even for the single-range case
+        // so future composition changes fail loudly before `set_included_ranges`.
+        assert_included_ranges_ordered(std::slice::from_ref(&range));
         parser
-            .set_included_ranges(&[Range {
-                start_byte: region.start,
-                end_byte,
-                start_point: start,
-                end_point: end,
-            }])
+            .set_included_ranges(&[range])
             .map_err(|e| MeldError::Parse {
                 region_id: region.id.clone(),
                 message: format!("set_included_ranges: {e}"),
@@ -125,6 +130,33 @@ pub fn sanitize_source(source: &str, region: &Region) -> String {
     String::from_utf8(bytes).expect("byte-preserving rewrite remains valid UTF-8")
 }
 
+/// Assert the Tree-sitter included-range invariants documented for
+/// `Parser::set_included_ranges`: each range must be non-empty and the slice
+/// must be ordered by byte offset with no overlap
+/// (`ranges[i].end_byte <= ranges[i + 1].start_byte`).
+#[track_caller]
+pub fn assert_included_ranges_ordered(ranges: &[Range]) {
+    for (i, range) in ranges.iter().enumerate() {
+        assert!(
+            range.start_byte <= range.end_byte,
+            "included range {i} is reversed: {}..{}",
+            range.start_byte,
+            range.end_byte
+        );
+    }
+    for pair in ranges.windows(2) {
+        let (left, right) = (&pair[0], &pair[1]);
+        assert!(
+            left.end_byte <= right.start_byte,
+            "included ranges must be ordered and non-overlapping: {}..{} then {}..{}",
+            left.start_byte,
+            left.end_byte,
+            right.start_byte,
+            right.end_byte
+        );
+    }
+}
+
 /// Byte offset -> tree-sitter Point in the original source. Tree-sitter
 /// columns are byte offsets, so `str::len()` is correct here (not char count).
 fn point_at(source: &str, offset: usize) -> Point {
@@ -142,4 +174,66 @@ fn count_named(node: tree_sitter::Node<'_>) -> usize {
         }
     }
     n
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::splitter::{split, RegionKind, ScannerRegistry};
+
+    #[test]
+    fn composed_inline_document_ranges_are_ordered_and_non_overlapping() {
+        let source = "#meld python\nprint(⟦python: 2 + 3⟧)\n```python\nx = 1\n```\n";
+        let doc =
+            split(source, &ScannerRegistry::default_registry()).expect("split composed source");
+        assert!(doc.regions.iter().any(|r| r.kind == RegionKind::Inline));
+
+        let ranges: Vec<Range> = doc
+            .regions
+            .iter()
+            .map(|r| Range {
+                start_byte: r.start,
+                end_byte: r.end,
+                start_point: point_at(source, r.start),
+                end_point: point_at(source, r.end),
+            })
+            .collect();
+        assert!(
+            ranges.len() > 2,
+            "expected header, fragments, inline and fence"
+        );
+        assert_included_ranges_ordered(&ranges);
+    }
+
+    #[test]
+    #[should_panic(expected = "included ranges must be ordered and non-overlapping")]
+    fn overlapping_included_ranges_are_rejected() {
+        let ranges = [
+            Range {
+                start_byte: 0,
+                end_byte: 8,
+                start_point: Point { row: 0, column: 0 },
+                end_point: Point { row: 0, column: 8 },
+            },
+            Range {
+                start_byte: 7,
+                end_byte: 12,
+                start_point: Point { row: 0, column: 7 },
+                end_point: Point { row: 0, column: 12 },
+            },
+        ];
+        assert_included_ranges_ordered(&ranges);
+    }
+
+    #[test]
+    #[should_panic(expected = "included range 0 is reversed")]
+    fn reversed_included_range_is_rejected() {
+        let ranges = [Range {
+            start_byte: 9,
+            end_byte: 4,
+            start_point: Point { row: 0, column: 9 },
+            end_point: Point { row: 0, column: 4 },
+        }];
+        assert_included_ranges_ordered(&ranges);
+    }
 }

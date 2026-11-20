@@ -5,6 +5,24 @@
 //! `region_end.py/js/lua/sh/wat` payloads are never loaded or executed. An
 //! unknown schema, unknown kind or `kind = "wasm"` warns and uses the balanced
 //! brace fallback, never pack code and never a Wasm runtime.
+//!
+//! # Scanner fallback table
+//!
+//! Only `kind` and `options.dialect` select a scanner; `fallback` and `hint`
+//! are descriptive metadata and are never treated as executable paths.
+//!
+//! | `region_end.toml` input | Selected built-in scanner |
+//! |---|---|
+//! | Malformed TOML | [`BalancedBraceScanner`] |
+//! | `schema != "meld-region-end/1"` | [`BalancedBraceScanner`] |
+//! | `kind = "brace"` (or omitted) | [`BalancedBraceScanner`] |
+//! | `kind = "heredoc"` + `options.dialect` | [`HeredocScanner`] (Ruby default) |
+//! | `kind = "indent"` + `options.dialect` | [`IndentScanner`] (Python default) |
+//! | `kind = "delimited"` + `options.dialect` | [`DelimitedScanner`] (Lua default) |
+//! | `kind = "counted"` + `options.dialect` | [`CountedScanner`] (Rust default) |
+//! | `kind = "template"` | [`TemplateScanner`] |
+//! | `kind = "wasm"` | [`BalancedBraceScanner`], warning, no Wasm runtime |
+//! | Any other `kind` | [`BalancedBraceScanner`], warning |
 use crate::scanners::{
     counted::{CountedDialect, CountedScanner},
     delimited::{DelimitedDialect, DelimitedScanner},
@@ -223,5 +241,45 @@ mod tests {
     fn bad_schema_is_ignored() {
         let spec = RegionEndSpec::parse("schema = \"other/9\"\nkind = \"heredoc\"\n");
         assert!(matches!(spec.kind, ScannerKind::Brace));
+    }
+
+    #[test]
+    fn malformed_or_unsupported_metadata_falls_back_without_payload_effects() {
+        let payloadish_options =
+            "[options]\nmodule = \"region_end.py\"\ncommand = \"sh region_end.sh\"\n";
+        let inputs = [
+            format!(
+                "schema = \"{}\"\nkind = \"heredoc\"\n[options\n",
+                RegionEndSpec::SCHEMA
+            ),
+            format!("schema = \"other/9\"\nkind = \"heredoc\"\n{payloadish_options}"),
+            format!(
+                "schema = \"{}\"\nkind = \"wasm\"\n{payloadish_options}",
+                RegionEndSpec::SCHEMA
+            ),
+        ];
+
+        for text in inputs {
+            let spec = RegionEndSpec::parse(&text);
+            // Bad schema/malformed TOML return the default spec; wasm retains
+            // its inert kind/options, but neither path consults payload paths.
+            assert!(
+                matches!(spec.kind, ScannerKind::Brace | ScannerKind::Wasm),
+                "input: {text}"
+            );
+            let src = "@ruby { x = <<~SQL\n } hidden brace\nSQL\nputs x }";
+            let body_start = src.find('{').unwrap() + 1;
+            let expected = BalancedBraceScanner.find_region_end(src, body_start);
+            assert_eq!(
+                spec.scanner().find_region_end(src, body_start),
+                expected,
+                "input: {text}"
+            );
+            assert_ne!(
+                expected.map(|e| e.body_end),
+                Some(src.rfind('}').unwrap()),
+                "brace fallback should not behave like the heredoc scanner: {text}"
+            );
+        }
     }
 }

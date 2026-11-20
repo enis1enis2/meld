@@ -45,6 +45,62 @@ fn bigint_does_not_round_trip_through_f64() {
 }
 
 #[test]
+fn decimal_strings_decode_as_int_for_wire_compatibility() {
+    // Pinned compatibility behaviour: `Int` and `String` share the JSON string
+    // shape, so decimal-looking strings are intentionally decoded as `Int`.
+    let decimal = serde_json::json!("123");
+    assert_eq!(
+        Value::from_json(&decimal).unwrap(),
+        Value::Int("123".to_string())
+    );
+    assert_eq!(Value::String("123".to_string()).to_json(), decimal);
+    assert_eq!(
+        Value::from_json(&serde_json::json!("-42")).unwrap(),
+        Value::Int("-42".to_string())
+    );
+    // Leading zeros are also treated as decimal strings today; changing this
+    // would alter the existing wire contract.
+    assert_eq!(
+        Value::from_json(&serde_json::json!("007")).unwrap(),
+        Value::Int("007".to_string())
+    );
+}
+
+#[test]
+fn bytes_accept_canonical_base64_only() {
+    for (encoded, decoded) in [
+        ("", vec![]),
+        ("QQ==", vec![0x41]),
+        ("QUI=", vec![0x41, 0x42]),
+        ("QUJD", vec![0x41, 0x42, 0x43]),
+        ("////", vec![0xff, 0xff, 0xff]),
+    ] {
+        let wire = serde_json::json!({ "$bytes": encoded });
+        assert_eq!(
+            Value::from_json(&wire).unwrap(),
+            Value::Bytes(decoded),
+            "canonical base64 {encoded:?} should decode"
+        );
+    }
+
+    for encoded in [
+        "QQ",     // missing padding
+        "QQ===",  // excess padding
+        "QR==",   // non-zero trailing bits
+        "QUJD=",  // length not a multiple of four
+        "QQ=A",   // data after padding
+        "QQ==\n", // whitespace
+        "Q Q=",   // non-alphabet byte
+    ] {
+        let wire = serde_json::json!({ "$bytes": encoded });
+        assert!(
+            Value::from_json(&wire).is_err(),
+            "non-canonical base64 {encoded:?} should be rejected"
+        );
+    }
+}
+
+#[test]
 fn result_and_handle_tags() {
     let ok = Value::ResultOk(Box::new(Value::String("x".to_string())));
     assert_eq!(Value::from_json(&ok.to_json()).unwrap(), ok);

@@ -91,7 +91,10 @@ pub fn execution_plan(doc: &SplitDocument, b: &Bindings) -> Result<Vec<String>> 
     }
     for imp in &b.imports {
         if !b.region_ids.contains(&imp.source_region) {
-            return Err(MeldError::UnknownLang(imp.source_region.clone()));
+            return Err(MeldError::MissingRegionSource {
+                importing_region_id: imp.region_id.clone(),
+                source_region: imp.source_region.clone(),
+            });
         }
         *indegree.entry(imp.region_id.clone()).or_insert(0) += 1;
         edges
@@ -123,4 +126,76 @@ pub fn execution_plan(doc: &SplitDocument, b: &Bindings) -> Result<Vec<String>> 
         return Err(MeldError::BridgeCycle("import graph is cyclic".to_string()));
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::splitter::RegionKind;
+
+    fn region(id: &str) -> Region {
+        Region {
+            id: id.to_string(),
+            lang: "python".to_string(),
+            kind: RegionKind::Block,
+            start: 0,
+            end: 0,
+            full_start: 0,
+            full_end: 0,
+            open_marker: String::new(),
+            close_marker: String::new(),
+            confidence: 1.0,
+        }
+    }
+
+    #[test]
+    fn missing_source_region_has_a_precise_error() {
+        let doc = SplitDocument {
+            source: String::new(),
+            default_lang: "python".to_string(),
+            regions: vec![region("consumer")],
+        };
+        let mut bindings = Bindings::default();
+        bindings.region_ids.insert("consumer".to_string());
+        bindings.imports.push(Import {
+            region_id: "consumer".to_string(),
+            name: "value".to_string(),
+            source_region: "ghost".to_string(),
+            bridge_name: "value".to_string(),
+        });
+
+        let error = execution_plan(&doc, &bindings).expect_err("missing source must fail");
+        assert!(matches!(
+            error,
+            MeldError::MissingRegionSource {
+                ref importing_region_id,
+                ref source_region,
+            } if importing_region_id == "consumer" && source_region == "ghost"
+        ));
+        assert!(!matches!(error, MeldError::UnknownLang(_)));
+        assert!(error.to_string().contains("no region 'ghost'"));
+    }
+
+    #[test]
+    fn valid_import_source_still_orders_producer_before_consumer() {
+        let doc = SplitDocument {
+            source: String::new(),
+            default_lang: "python".to_string(),
+            regions: vec![region("consumer"), region("producer")],
+        };
+        let mut bindings = Bindings::default();
+        bindings.region_ids.insert("consumer".to_string());
+        bindings.region_ids.insert("producer".to_string());
+        bindings.imports.push(Import {
+            region_id: "consumer".to_string(),
+            name: "value".to_string(),
+            source_region: "producer".to_string(),
+            bridge_name: "value".to_string(),
+        });
+
+        assert_eq!(
+            execution_plan(&doc, &bindings).expect("valid plan"),
+            vec!["producer".to_string(), "consumer".to_string()]
+        );
+    }
 }
