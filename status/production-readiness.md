@@ -263,10 +263,14 @@ Status: DONE.
 - **Test totals:** Rust workspace 102 passed / 0 failed / 1 ignored; Python 10
   tests passed. Formatter, clippy (`-D warnings`), check, tests, and docs all
   pass locally.
-- **CI run links:** pending — the available OAuth credential has only `repo`
-  scope and GitHub rejects pushes that create/update workflow files without
-  `workflow` scope. All workflows are committed locally; public run links
-  require a workflow-scoped credential or SSH deploy key.
+- **CI run links:** pending. `git push -u origin
+  production/security-from-baseline` was attempted against
+  `https://github.com/enis1enis2/meld.git` and rejected verbatim:
+  `! [remote rejected] production/security-from-baseline ->
+  production/security-from-baseline (refusing to allow an OAuth App to create
+  or update workflow '.github/workflows/audit.yml' without 'workflow' scope)`.
+  All workflows are committed locally; public run links require a
+  workflow-scoped credential or SSH deploy key.
 
 ## 6. Performance and reliability
 
