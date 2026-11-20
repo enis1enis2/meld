@@ -74,6 +74,17 @@ typed `TypeMismatch` rather than wrapping silently (`spec/value-model.md` §2).
 **JUDGMENT CALL:** the `meld:t3/*` namespace is reserved so a pack cannot
 accidentally bind an ordinary export to a host callback.
 
+**JUDGMENT CALL:** every call uses `strict_config()`/`strict_engine()`: the
+pooling allocator pins instances, memories, tables and stack; each call gets a
+fresh `Store` with 2M fuel, an 8 MiB memory ceiling, at most 256 component
+handles, and a one-epoch watchdog with a 500 ms deadline. Components larger
+than 16 MiB are rejected before JIT, debug info and backtraces are off, and any
+component that declares imports is rejected by `T3Backend::from_bytes` because
+T3 registers no host functions. Fuel exhaustion and stack overflow map to
+`SandboxDenied`; epoch interruption maps to a worker timeout. `wasmtime` is
+pinned to `=36.0.23`: later releases declare a `rust-version` above the
+workspace MSRV 1.90, while 36 supports 1.86 and keeps the pin auditable.
+
 ## 4. Python → T2 → T3 bridge
 
 The Python pack exposes `meld_call(name, *args)`. It sends a worker-initiated
@@ -101,10 +112,19 @@ toolchain; `meld doctor` only reports what is present (project.md §9).
 ## 6. Security
 
 T3 gives real Wasm sandboxing: no filesystem or network access unless the host
-adds imports, which the demo component has none. T5 and T2 rely on OS-level
-confinement declared in `runner.toml`; the Component Model copy boundary does
-not apply to them (project.md §9). Errors cross as structured values, never
-raw host panics.
+adds imports, which the demo component has none, and the hardened engine bounds
+CPU, memory, stack and handles per call. T5 and T2 are ordinary processes and
+must run under **mandatory** OS confinement declared in `runner.toml`; the
+Component Model copy boundary does not apply to them (project.md §9).
+
+**JUDGMENT CALL:** the `meld-sandbox` core is the authority for process launch.
+Effective permissions are the **intersection** `pack maximum ∩ runner
+constraints ∩ file default grant ∩ region grant`; grants only narrow. Missing
+`[sandbox]` means network denied and an empty filesystem grant set. A backend
+that cannot enforce a declared policy must fail closed with `SandboxDenied`,
+never fall back to an unconfined process. T2's stdio bounds and host-call
+allowlist (spec/t2-protocol.md §1–§3.1) are defence in depth, not a replacement
+for this OS layer. Errors cross as structured values, never raw host panics.
 
 ## 7. Verification
 
@@ -129,4 +149,6 @@ the committed artifact must be rebuilt in the same commit as its source.
 2. Commit the component so tests are toolchain-independent (§1).
 3. Resolve componentized interface exports and unary result tuples explicitly (§3).
 4. Reserve `meld:t3/*` for checked host callbacks and share one T3 backend per run (§3–§4).
-5. T5 uses argv vectors, placeholder substitution and an `@meld` result line (§5).
+5. Harden T3 with a strict engine, fresh bounded stores, import rejection, and a wasmtime pin compatible with MSRV 1.90 (§3).
+6. Treat OS sandbox intersection and fail-closed launch as mandatory for T2/T5; T3 wasm isolation does not relax it (§6).
+7. T5 uses argv vectors, placeholder substitution and an `@meld` result line (§5).

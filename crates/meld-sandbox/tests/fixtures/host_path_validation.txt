@@ -1,0 +1,9 @@
+# Escape-attempt fixtures for host-side path validation.
+# These are DATA, not shell commands. The sandbox never passes them to a shell.
+../etc/passwd
+project/../../etc/passwd
+project/link/secret
+/etc/passwd
+project/subdir/./file
+project/src/**
+project/data.txt:read

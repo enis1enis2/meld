@@ -1,0 +1,46 @@
+[workspace]
+
+[package]
+name = "meld-sandbox"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"
+description = "Deny-by-default OS sandbox policy model and backends for Meld"
+
+# NOTE: this crate is a STANDALONE workspace on purpose. The parent agent wires
+# it into the root workspace after review; no root Cargo.toml/Cargo.lock changes
+# are made by this branch.
+[dependencies]
+toml = "1.0"
+thiserror = "1"
+libc = "0.2"
+serde_json = { version = "1.0.154", optional = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+seccompiler = "0.5"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Isolation",
+    "Win32_System_JobObjects",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+    "Win32_Storage_FileSystem",
+] }
+
+[features]
+default = []
+# Optional OCI/runc fallback. Never enabled by default: it needs a runtime
+# installed on the host and is only used when the platform backend cannot
+# enforce the declared policy itself.
+oci = ["dep:oci-spec", "dep:serde_json"]
+
+[dependencies.oci-spec]
+version = "0.10"
+default-features = false
+features = ["runtime"]
+optional = true
