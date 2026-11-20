@@ -115,7 +115,7 @@ pub fn seatbelt_profile(spec: &CommandSpec, policy: &SandboxPolicy) -> Result<St
 
 fn apply_rlimits(command: &mut Command, policy: &SandboxPolicy) -> Result<()> {
     // pre_exec closures must be 'static, so capture the limit values by copy.
-    let limits = policy.limits.clone();
+    let limits = policy.limits;
     // SAFETY: pre_exec runs in the child before exec. Use the platform's
     // setrlimit through the standard library's libc dependency.
     unsafe {

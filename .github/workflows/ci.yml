@@ -62,6 +62,26 @@ jobs:
           done
           exit "$status"
 
+  cross-target:
+    name: cross-target clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - name: Install cross targets
+        run: |
+          rustup target add aarch64-apple-darwin
+          rustup target add x86_64-apple-darwin
+          rustup target add x86_64-pc-windows-msvc
+      - name: Clippy macOS ARM
+        run: cargo clippy -p meld-sandbox --all-targets --target aarch64-apple-darwin -- -D warnings
+      - name: Clippy macOS x86
+        run: cargo clippy -p meld-sandbox --all-targets --target x86_64-apple-darwin -- -D warnings
+      - name: Clippy Windows x86
+        run: cargo clippy -p meld-sandbox --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+
   supply-chain:
     name: supply-chain audit
     runs-on: ubuntu-latest
