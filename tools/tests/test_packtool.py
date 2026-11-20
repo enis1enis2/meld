@@ -49,6 +49,13 @@ def cli(*args: object) -> subprocess.CompletedProcess[str]:
     )
 
 
+def write_canonical_json(path: Path, doc: object) -> None:
+    # JUDGMENT CALL 57: registry files are verified byte-for-byte. Python's
+    # text mode emits CRLF on Windows, so tests must write the same canonical
+    # bytes that packtool writes instead of relying on universal-newline reads.
+    path.write_bytes(packtool.canonical_json_bytes(doc))
+
+
 def key_pair(base: Path, name: str = "signer") -> tuple[Path, Path]:
     private = base / f"{name}.private.pem"
     public = base / f"{name}.public.pem"
@@ -343,7 +350,7 @@ class PackToolTests(unittest.TestCase):
             index_path = registry / "index.json"
             doc = json.loads(index_path.read_text(encoding="utf-8"))
             doc["packs"][0]["checksums_sha256"] = "0" * 64
-            index_path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            write_canonical_json(index_path, doc)
             result = cli("install", "plain", "--registry", registry,
                          "--into", base / "tampered")
             self.assertEqual(result.returncode, 1)
@@ -379,10 +386,9 @@ class PackToolTests(unittest.TestCase):
             revoked = revocations(base)
             registry = base / "registry"
             registry.mkdir()
-            (registry / "index.json").write_text(
-                json.dumps({"schema": "meld-pack-registry/1", "packs": []},
-                           indent=2, sort_keys=True) + "\n",
-                encoding="utf-8",
+            write_canonical_json(
+                registry / "index.json",
+                {"schema": "meld-pack-registry/1", "packs": []},
             )
             (registry / "trust-roots.toml").write_bytes(roots.read_bytes())
             (registry / "revocations.json").write_bytes(revoked.read_bytes())
@@ -412,7 +418,7 @@ class PackToolTests(unittest.TestCase):
                 "checksums_sha256": "0" * 64,
                 "signature": None,
             })
-            index_path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            write_canonical_json(index_path, doc)
             result = cli("verify-registry", registry, "--trust-roots", roots,
                          "--revocations", revoked)
             self.assertEqual(result.returncode, 1)
@@ -420,7 +426,7 @@ class PackToolTests(unittest.TestCase):
 
             # Restoring the index and revoking the attestation key also fails.
             doc["packs"] = []
-            index_path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            write_canonical_json(index_path, doc)
             key_id = packtool._key_id(packtool._read_public_bytes(public))
             result = cli("revocations", "revoke", "--revocations", revoked,
                          "--key-id", key_id, "--revoked", "2026-11-20")

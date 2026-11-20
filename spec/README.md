@@ -345,6 +345,12 @@ Additional judgment calls (also inline in the affected specs/code):
     rewrote every payload file to CRLF and made the fixture pack fail with all
     digests mismatched. A repository attribute travels with the code and applies
     to contributors as well as CI; relying on runner-local Git config did not.
+57. Python tests write registry JSON through `packtool.canonical_json_bytes`.
+    `Path.write_text` emitted CRLF on Windows, so registry canonicality checks
+    rejected test fixtures before the intended checksum/attestation assertions
+    could run. Writing the same canonical bytes as the production tool keeps the
+    test about verification behavior, not host newline policy.
+
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
 `rust-version 1.85` and are not yanked; Python `cryptography 50.0.2` supports
