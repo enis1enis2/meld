@@ -42,7 +42,11 @@ impl VirtualDocument {
             extension
         };
         Self {
-            uri: format!("meld-virtual:///{}.{}", region.id, ext),
+            uri: format!(
+                "meld-virtual:///{}.{}",
+                crate::external::uri_component(&region.id),
+                crate::external::uri_component(ext)
+            ),
             language_id: language_id.to_string(),
             text,
             region_id: region.id.clone(),
@@ -192,5 +196,46 @@ mod tests {
             vd.global_position(&doc.source, vd.local_position(&doc.source, p)),
             p
         );
+    }
+
+    #[test]
+    fn utf16_byte_offsets_round_trip_across_a_surrogate_pair() {
+        // 😀 is 4 UTF-8 bytes but 2 UTF-16 code units. A cursor after the emoji
+        // must land on the byte after it, not two bytes later.
+        let source = "a😀b";
+        let position = Position {
+            line: 0,
+            character: 3, // a=1 + 😀=2
+        };
+        let byte = byte_offset(source, position);
+        assert_eq!(&source[..byte], "a😀");
+        assert_eq!(position_at_byte(source, byte), position);
+    }
+
+    #[test]
+    fn virtual_region_round_trips_utf16_columns_after_an_emoji() {
+        let src = "#meld python\n⟦python: x = '😀'; y = 1⟧\n";
+        let doc = split(src, &ScannerRegistry::default_registry()).unwrap();
+        let r = doc
+            .regions
+            .iter()
+            .find(|r| r.kind == meld_core::splitter::RegionKind::Inline)
+            .unwrap();
+        let vd = VirtualDocument::new(&doc, r, "python", "py");
+
+        // Byte just after the closing quote following the surrogate pair.
+        let byte = src.find("'; y").unwrap() + 1;
+        let global = position_at_byte(src, byte);
+        assert_eq!(global.character, 17, "UTF-16 column should count 😀 as two");
+
+        let local = vd.local_position(&doc.source, global);
+        assert_eq!(vd.global_position(&doc.source, local), global);
+    }
+
+    #[test]
+    fn virtual_uri_percent_encodes_extension() {
+        let (doc, r) = region();
+        let vd = VirtualDocument::new(&doc, &r, "javascript", "j s#1");
+        assert_eq!(vd.uri, "meld-virtual:///js.j%20s%231");
     }
 }

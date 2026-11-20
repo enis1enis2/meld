@@ -326,10 +326,21 @@ impl LanguageServer for Backend {
             client.completion(&completion_uri, local_json, context)
         })
         .await
-        .map_err(|e| Self::rpc_error(e.to_string()))?
-        .map_err(Self::rpc_error)?;
+        .map_err(|e| Self::rpc_error(e.to_string()))?;
 
-        let mut result = result;
+        let mut result = match result {
+            Ok(value) => value,
+            Err(e) => {
+                // A timed-out server is killed by ExternalLsp; drop it here so
+                // the next completion starts a fresh process instead of reusing
+                // a permanently broken client.
+                self.external.write().unwrap().remove(&lang);
+                self.opened.write().unwrap().remove(&lang);
+                return Err(Self::rpc_error(format!(
+                    "external language server for {lang} failed: {e}; it will be restarted on the next request"
+                )));
+            }
+        };
         map_response_ranges(&mut result, &vd, &state.text);
         serde_json::from_value(result).map(Some).map_err(|e| {
             Self::rpc_error(format!(

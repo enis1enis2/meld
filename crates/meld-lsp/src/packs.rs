@@ -39,6 +39,21 @@ pub fn discover_with(root: &Path, extra: &[PathBuf]) -> HashMap<String, LspSpec>
     let mut out = HashMap::new();
     let mut roots = vec![root.join("packs")];
     roots.extend(extra.iter().cloned());
+
+    // Match the CLI: libraries pinned by meld.lock are inserted last so they
+    // override same-named built-ins. A malformed lock is reported, not fatal.
+    match meld_lib::discover_imported(root, extra) {
+        Ok(imported) => {
+            for (_, dir) in imported {
+                roots.push(dir);
+            }
+        }
+        Err(e) => eprintln!(
+            "meld-lsp: warning: cannot read {} ({e}); run 'meld-pack list' for lock details",
+            meld_lib::LOCK_FILE
+        ),
+    }
+
     for scan_root in roots {
         let mut dirs = Vec::new();
         if scan_root.join("pack.toml").is_file() {
@@ -145,15 +160,76 @@ pub fn rebase_arg(arg: &str, root: &Path, pack_dir: &Path) -> String {
     if p.is_absolute() {
         return arg.to_string();
     }
+    // JUDGMENT CALL: same order as meld-cli so an installed/imported pack's
+    // own worker wins over a same-named file at the project root.
+    let local = pack_dir.join(p);
+    if local.exists() {
+        return local.to_string_lossy().into_owned();
+    }
+    if let Some(name) = p.file_name() {
+        let local_name = pack_dir.join(name);
+        if local_name.exists() {
+            return local_name.to_string_lossy().into_owned();
+        }
+    }
     let rooted = root.join(p);
     if rooted.exists() {
         return rooted.to_string_lossy().into_owned();
     }
-    if let Some(name) = p.file_name() {
-        let local = pack_dir.join(name);
-        if local.exists() {
-            return local.to_string_lossy().into_owned();
-        }
-    }
     arg.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    static LIB_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn write_pack(dir: &Path, id: &str, keyword: &str) {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(
+            dir.join("pack.toml"),
+            format!("id = \"{id}\"\naliases = []\ntier = \"L0\"\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("lsp.toml"),
+            format!("[lsp]\nkeywords = [\"{keyword}\"]\n"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn imported_library_from_meld_lock_overrides_builtin() {
+        let _guard = LIB_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("meld-lsp-packs-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let project = dir.join("project");
+        let libs = dir.join("libs");
+
+        write_pack(&project.join("packs/demo"), "demo", "builtin");
+        write_pack(&libs.join("demo/0.1.0"), "demo", "imported");
+        std::fs::write(
+            project.join(meld_lib::LOCK_FILE),
+            format!(
+                "{{\"libraries\": {{\"demo\": \"0.1.0\"}}, \"schema\": \"{}\"}}\n",
+                meld_lib::LOCK_SCHEMA
+            ),
+        )
+        .unwrap();
+
+        let previous = std::env::var_os("MELD_LIB_ROOT");
+        std::env::set_var("MELD_LIB_ROOT", &libs);
+        let specs = discover_with(&project, &[]);
+        match previous {
+            Some(value) => std::env::set_var("MELD_LIB_ROOT", value),
+            None => std::env::remove_var("MELD_LIB_ROOT"),
+        }
+
+        let keywords = &specs.get("demo").expect("demo spec exists").keywords;
+        assert!(keywords.contains(&"imported".to_string()), "{keywords:?}");
+        assert!(!keywords.contains(&"builtin".to_string()), "{keywords:?}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
