@@ -230,6 +230,13 @@ Additional judgment calls (also inline in the affected specs/code):
     comment is consumed by line-end handling instead of panicking. This came
     from fuzz artifact `crash-151c648844c8db74133fee74eaee420d9c8aabee`
     (Fuzz run 44774908545).
+38. cargo-audit policy is single-sourced in `.cargo/audit.toml`, the only config
+    path cargo-audit 0.23.0 actually loads from a checkout. CI keeps
+    `--deny warnings`; `RUSTSEC-2025-0057` is explicitly ignored until
+    2027-02-20 because `fxhash` is reachable only through the deliberately
+    pinned `wasmtime 36.0.23 -> fxprof-processed-profile 0.6.0` path. The ignore
+    is removed when that pin changes or a runtime-validated dependency update
+    eliminates the crate.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

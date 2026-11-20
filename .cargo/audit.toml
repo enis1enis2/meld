@@ -1,0 +1,18 @@
+# Configuration for cargo-audit 0.23.0, which reads ./.cargo/audit.toml
+# (or $CARGO_HOME/audit.toml). A repository-root audit.toml is NOT loaded.
+# Advisories are never ignored by default; exceptions include rationale + expiry.
+[advisories]
+# RUSTSEC-2025-0057: fxhash 0.2.1 is unmaintained and has no patched release.
+# `cargo tree -i fxhash` shows the only path is
+# fxhash -> fxprof-processed-profile 0.6.0 -> wasmtime 36.0.23 -> meld-t3 -> meld-cli,
+# pulled in by wasmtime's default "profiling" feature. wasmtime is deliberately
+# pinned to =36.0.23 in crates/meld-t3/Cargo.toml for Component Model/trap and
+# MSRV stability. Removing fxhash requires either a wasmtime >=38 bump or
+# disabling wasmtime default features; both require separate runtime validation.
+# Review/expiry: remove this ignore by 2027-02-20 or when the wasmtime pin changes.
+ignore = ["RUSTSEC-2025-0057"]
+
+[output]
+deny = ["warnings"]
+show_tree = true
+quiet = false
