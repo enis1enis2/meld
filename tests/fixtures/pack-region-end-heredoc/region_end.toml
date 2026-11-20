@@ -1,0 +1,6 @@
+schema = "meld-region-end/1"
+kind = "heredoc"
+fallback = "brace"
+hint = "raw hash delimiters remain available"
+[options]
+dialect = "ruby"

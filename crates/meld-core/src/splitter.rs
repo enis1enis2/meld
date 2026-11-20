@@ -4,6 +4,7 @@
 //! The pack-provided end scanner is used for plain `{ ... }` blocks; raw hash
 //! delimiters are always accepted as the collision-free fallback.
 use crate::error::{MeldError, Result};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RegionKind {
@@ -44,90 +45,42 @@ pub struct SplitDocument {
     pub regions: Vec<Region>,
 }
 
-/// End scanner contract from project.md §3.2. Packs may provide a Wasm or
-/// built-in implementation; the generic balanced scanner is the fallback.
-pub trait EndScanner: Send + Sync {
-    /// Returns the byte offset of the closing `}` for a block beginning at
-    /// `body_start`, or `None` if unbalanced.
-    fn find_end(&self, text: &str, body_start: usize) -> Option<usize>;
+/// The end of one plain `{ ... }` region, as discovered by an end scanner.
+///
+/// `body_end` is the byte offset of the closing marker, `full_end` is the
+/// exclusive end of that marker, and `close_marker` is the exact source text
+/// substituted back by [`render`]. All three fields must describe a span in
+/// the original source so rendering is byte-for-byte idempotent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RegionEnd {
+    pub body_end: usize,
+    pub full_end: usize,
+    pub close_marker: String,
 }
 
-/// Generic C-like scanner: skips quoted strings, escapes, line comments and
-/// block comments while balancing braces. Sufficient for fuzz determinism.
-pub struct BalancedBraceScanner;
+/// End scanner contract from project.md §3.2. Packs select a built-in scanner
+/// by data; no pack code is ever loaded or executed.
+pub trait EndScanner: Send + Sync {
+    /// Return the closing marker span for a block beginning at `body_start`,
+    /// or `None` if the region is unterminated.
+    fn find_region_end(&self, text: &str, body_start: usize) -> Option<RegionEnd>;
 
-impl EndScanner for BalancedBraceScanner {
+    /// Compatibility shim for the Phase 1 contract: only the body-end offset.
     fn find_end(&self, text: &str, body_start: usize) -> Option<usize> {
-        let b = text.as_bytes();
-        let mut i = body_start;
-        let mut depth = 1usize;
-        let mut quote: Option<u8> = None;
-        let mut line_comment = false;
-        let mut block_comment = false;
-        while i < b.len() {
-            let c = b[i];
-            if line_comment {
-                if c == b'\n' {
-                    line_comment = false;
-                }
-                i += 1;
-                continue;
-            }
-            if block_comment {
-                if c == b'*' && i + 1 < b.len() && b[i + 1] == b'/' {
-                    block_comment = false;
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-                continue;
-            }
-            if let Some(q) = quote {
-                if c == b'\\' {
-                    i += 2;
-                    continue;
-                }
-                if c == q {
-                    quote = None;
-                }
-                i += 1;
-                continue;
-            }
-            match c {
-                b'"' | b'\'' | b'`' => quote = Some(c),
-                b'/' if i + 1 < b.len() && b[i + 1] == b'/' => {
-                    line_comment = true;
-                    i += 2;
-                    continue;
-                }
-                b'/' if i + 1 < b.len() && b[i + 1] == b'*' => {
-                    block_comment = true;
-                    i += 2;
-                    continue;
-                }
-                b'#' => {
-                    // Python/Ruby-style line comment (only when at line start
-                    // or preceded by whitespace; otherwise it is an operator).
-                    if i == 0 || b[i - 1].is_ascii_whitespace() {
-                        line_comment = true;
-                    }
-                    i += 1;
-                    continue;
-                }
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(i);
-                    }
-                }
-                _ => {}
-            }
-            i += 1;
-        }
-        None
+        self.find_region_end(text, body_start)
+            .map(|end| end.body_end)
     }
 }
+
+/// Allow registered scanners (held as `Arc<dyn EndScanner>`) to be used
+/// wherever an `EndScanner` value is expected.
+impl<T: EndScanner + ?Sized> EndScanner for std::sync::Arc<T> {
+    fn find_region_end(&self, text: &str, body_start: usize) -> Option<RegionEnd> {
+        self.as_ref().find_region_end(text, body_start)
+    }
+}
+
+pub use crate::scanners::brace::BalancedBraceScanner;
 
 fn take_id(b: &[u8], mut i: usize) -> (String, usize) {
     let start = i;
@@ -214,52 +167,89 @@ fn block_head(source: &str, at: usize) -> Option<BlockHead> {
     None
 }
 
-/// JUDGMENT CALL: the built-in delimiter scanner is the universal fallback
-/// for any language. Packs may override it with a language-aware scanner; the
-/// core still ships this list so CLI/LSP/formatters agree on region boundaries
-/// for the bundled languages. Unknown packs can always use raw hash delimiters.
-pub fn default_scanners() -> std::collections::HashMap<String, Box<dyn EndScanner>> {
-    let mut m = std::collections::HashMap::new();
-    for lang in [
-        "python",
-        "javascript",
-        "lua",
-        "rust",
-        "go",
-        "c",
-        "cpp",
-        "java",
-        "json",
-        "sql",
-        "html",
-        "css",
-        "markdown",
-        // JUDGMENT CALL (language expansion): every bundled L0 grammar shares
-        // the generic brace fallback for plain `@lang { ... }` blocks. Languages
-        // with indentation or template delimiters should still use raw hash
-        // delimiters; registering them here only makes the fallback explicit.
-        "typescript",
-        "tsx",
-        "bash",
-        "ruby",
-        "php",
-        "yaml",
-        "toml",
-        "csharp",
-        "haskell",
-        "ocaml",
-        "scala",
-        "zig",
-        "r",
-        "dart",
-        "solidity",
-    ] {
-        m.insert(
-            lang.to_string(),
-            Box::new(BalancedBraceScanner) as Box<dyn EndScanner>,
-        );
+/// Deterministic language → built-in scanner map. Built-ins are shared via
+/// `Arc`; pack metadata can override any entry (CLI/LSP build the map from the
+/// discovered packs, then register their declared profiles).
+#[derive(Clone, Default)]
+pub struct ScannerRegistry {
+    scanners: std::collections::HashMap<String, std::sync::Arc<dyn EndScanner>>,
+}
+
+impl ScannerRegistry {
+    /// No language-specific scanners; every plain block uses the fallback.
+    pub fn empty() -> Self {
+        Self::default()
     }
-    m
+
+    /// Core built-ins for the bundled languages. A language not listed here
+    /// falls back to [`BalancedBraceScanner`] in [`split`].
+    pub fn default_registry() -> Self {
+        let mut registry = Self::empty();
+        let brace: std::sync::Arc<dyn EndScanner> = std::sync::Arc::new(BalancedBraceScanner);
+        registry.register(
+            [
+                "go", "c", "java", "json", "html", "css", "markdown", "toml", "csharp", "scala",
+                "zig", "dart", "solidity",
+            ],
+            brace,
+        );
+        use crate::scanners::{
+            counted::CountedScanner, delimited::DelimitedScanner, heredoc::HeredocScanner,
+            indent::IndentScanner, template::TemplateScanner,
+        };
+        let scan = |s: std::sync::Arc<dyn EndScanner>| s;
+        registry.register(["ruby"], scan(Arc::new(HeredocScanner::ruby())));
+        registry.register(
+            ["bash", "sh", "shell"],
+            scan(Arc::new(HeredocScanner::bash())),
+        );
+        registry.register(["php"], scan(Arc::new(HeredocScanner::php())));
+        registry.register(["python"], scan(Arc::new(IndentScanner::python())));
+        registry.register(["yaml"], scan(Arc::new(IndentScanner::yaml())));
+        registry.register(["lua"], scan(Arc::new(DelimitedScanner::lua())));
+        registry.register(["sql"], scan(Arc::new(DelimitedScanner::sql())));
+        registry.register(["rust"], scan(Arc::new(CountedScanner::rust())));
+        registry.register(["cpp"], scan(Arc::new(CountedScanner::cpp())));
+        registry.register(["r"], scan(Arc::new(CountedScanner::r())));
+        registry.register(["ocaml"], scan(Arc::new(CountedScanner::ocaml())));
+        registry.register(["haskell"], scan(Arc::new(CountedScanner::haskell())));
+        registry.register(
+            ["javascript", "typescript", "tsx"],
+            scan(Arc::new(TemplateScanner)),
+        );
+        registry
+    }
+
+    /// Register one built-in scanner under every pack id/alias. Repeated
+    /// registrations overwrite earlier ones, so callers control precedence.
+    pub fn register<I, S>(&mut self, names: I, scanner: std::sync::Arc<dyn EndScanner>)
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        for name in names {
+            let name = name.as_ref();
+            if !name.is_empty() {
+                self.scanners.insert(name.to_string(), scanner.clone());
+            }
+        }
+    }
+
+    /// Look up a language's scanner. Returns `None` for unknown languages;
+    /// [`split`] applies the balanced-brace fallback in that case.
+    pub fn get(&self, lang: &str) -> Option<std::sync::Arc<dyn EndScanner>> {
+        self.scanners.get(lang).cloned()
+    }
+}
+
+/// Compatibility helper for callers still holding a plain Phase 1 map.
+/// In-tree callers use [`ScannerRegistry`] directly.
+pub fn default_scanners() -> std::collections::HashMap<String, Box<dyn EndScanner>> {
+    ScannerRegistry::default_registry()
+        .scanners
+        .into_iter()
+        .map(|(lang, scanner)| (lang, Box::new(scanner) as Box<dyn EndScanner>))
+        .collect()
 }
 
 fn line_start(b: &[u8], i: usize) -> bool {
@@ -304,16 +294,13 @@ fn detect_confidence(body: &str, has_header: bool) -> (String, f32) {
 }
 
 /// Split a `.meld` source into language-tagged regions.
-pub fn split(
-    source: &str,
-    scanners: &std::collections::HashMap<String, Box<dyn EndScanner>>,
-) -> Result<SplitDocument> {
+pub fn split(source: &str, scanners: &ScannerRegistry) -> Result<SplitDocument> {
     let b = source.as_bytes();
     let mut regions = Vec::new();
     let mut i = 0usize;
     let mut default_lang = String::new();
     let mut counter = 0usize;
-    let default_scanner = BalancedBraceScanner;
+    let default_scanner: std::sync::Arc<dyn EndScanner> = std::sync::Arc::new(BalancedBraceScanner);
 
     // Header.
     if source.starts_with("#meld ") {
@@ -401,7 +388,7 @@ pub fn split(
 
         // Block.
         if let Some(head) = block_head(source, i) {
-            let (body_end, full_end) = if head.hash > 0 {
+            let (body_end, full_end, close_marker) = if head.hash > 0 {
                 let rel = source[head.body_start..].find(&head.close).ok_or_else(|| {
                     MeldError::Split {
                         byte_start: i,
@@ -409,21 +396,20 @@ pub fn split(
                     }
                 })?;
                 let end = head.body_start + rel;
-                (end, end + head.close.len())
+                (end, end + head.close.len(), head.close.clone())
             } else {
                 let scanner = scanners
                     .get(&head.lang)
-                    .map(|s| s.as_ref())
-                    .unwrap_or(&default_scanner);
-                let end =
-                    scanner
-                        .find_end(source, head.body_start)
-                        .ok_or_else(|| MeldError::Split {
-                            byte_start: i,
-                            message: "unterminated block".to_string(),
-                        })?;
-                (end, end + 1)
+                    .unwrap_or_else(|| default_scanner.clone());
+                let end = scanner
+                    .find_region_end(source, head.body_start)
+                    .ok_or_else(|| MeldError::Split {
+                        byte_start: i,
+                        message: "unterminated block".to_string(),
+                    })?;
+                (end.body_end, end.full_end, end.close_marker)
             };
+            debug_assert_eq!(close_marker, source[body_end..full_end]);
             let open_marker = source[i..head.body_start].to_string();
             regions.push(Region {
                 id: head.id.unwrap_or_else(|| format!("r{}", counter)),
@@ -434,7 +420,7 @@ pub fn split(
                 full_start: i,
                 full_end,
                 open_marker,
-                close_marker: source[body_end..full_end].to_string(),
+                close_marker,
                 confidence: 1.0,
             });
             counter += 1;

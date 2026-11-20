@@ -10,7 +10,7 @@ packs/<lang-id>/
   library.toml       # install/import manifest (spec/libraries.md)
   grammar/           # tree-sitter grammar source or pinned reference
   queries/           # copied highlight/injection queries (tools/sync_grammars.py)
-  region_end.*       # end scanner (Wasm or built-in)
+  region_end.toml    # data-only end-scanner profile (built-in kind + options)
   runner.toml        # tier, command, protocol, sandbox profile (T2 runtime)
   marshal.*          # Meld Value <-> native converters
   toolchain.toml     # detect hints; NEVER install hints executed automatically
@@ -142,11 +142,37 @@ the core never parses a language to format it; pack commands are argv vectors
 with placeholders, never shell strings, and paths follow the `runner.toml`
 rebasing rule.
 
+## 4.5 `region_end.toml` (region boundary profile)
+
+```toml
+schema = "meld-region-end/1"
+kind = "heredoc"        # built-in Rust algorithm; "wasm" is reserved
+fallback = "brace"      # used when metadata is unknown or invalid
+hint = "raw hash delimiters remain available"
+[options]
+dialect = "ruby"
+```
+
+`meld check` and `meld-lsp` build a `ScannerRegistry` deterministically: core
+built-ins first, then discovered packs sorted by id with sorted aliases. The
+file names a built-in algorithm (`brace`, `heredoc`, `indent`, `delimited`,
+`counted`, `template`) and its options; the returned `RegionEnd` carries
+`body_end`, `full_end`, and `close_marker` so glue and diagnostics keep exact
+offsets. The raw hash delimiter form never consults this registry.
+
+**JUDGMENT CALL:** pack end-scanner metadata is data-only. No `region_end.py`,
+`region_end.js`, `region_end.lua`, `region_end.sh`, or `region_end.wat` path is
+loaded, spawned, or compiled. `kind = "wasm"`, an unknown kind/schema, or invalid
+TOML prints `meld: warning: ... using brace fallback`. Adding this payload file
+to an already signed strict pack changes its checksum set; the registry owner
+re-sums and re-signs it, and this implementation never edits signatures or
+`checksums.sha256`.
+
 ## 5. Generator contract (Phase 1)
 
 `tools/gen_pack.py <lang-id> --grammar <pinned-ref>` creates a minimal L0 pack:
-manifest, `library.toml`, grammar reference, empty end scanner stub, highlight
-query, and a feeder test. This is the "cheap route to a long tail" from
+manifest, `library.toml`, grammar reference, a `region_end.toml` selecting the
+`brace` profile, highlight query, and a feeder test. This is the "cheap route to a long tail" from
 project.md §4, and generated packs are libraries from birth
 (`spec/libraries.md` §2). The generator never downloads or executes grammar
 code; it writes references only.
@@ -159,8 +185,9 @@ emits `generated-placeholder` and `strict = false`.
 
 ## 6. Security
 
-- Packs are data + small sandboxed plugins; Wasm preferred for `region_end` and
-  `marshal` (project.md §4).
+- Packs are data + small sandboxed plugins. `region_end.toml` is data-only in
+  Phase 6 (§4.5); `kind = "wasm"` is reserved and warns instead of executing a
+  module. Wasm remains the intended model for `marshal` (project.md §4).
 - No implicit network/filesystem. `sandbox` in manifest is deny-by-default.
 - Signing and registry are Phase 7 (`spec/registry.md`): `checksums.sha256`
   covers every payload file and `signature.ed25519` authenticates it against a

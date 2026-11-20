@@ -1,4 +1,6 @@
 //! Pack-owned LSP metadata. No language id is hardcoded in the core.
+use meld_core::region_end_spec::RegionEndSpec;
+use meld_core::splitter::ScannerRegistry;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -6,11 +8,14 @@ use std::path::{Path, PathBuf};
 pub struct LspSpec {
     pub language_id: String,
     pub extension: String,
+    /// Pack id plus aliases; used to register the data-only scanner profile.
+    pub names: Vec<String>,
     /// External language server command, if the pack ships one.
     pub command: Option<String>,
     pub args: Vec<String>,
     /// Deterministic fallback completions when no external server is configured.
     pub keywords: Vec<String>,
+    pub region_end: RegionEndSpec,
 }
 
 /// JUDGMENT CALL: `lsp.toml` is optional. A pack may provide only static
@@ -51,6 +56,26 @@ pub fn discover_with(root: &Path, extra: &[PathBuf]) -> HashMap<String, LspSpec>
         }
     }
     out
+}
+
+/// Built-ins plus pack-declared profiles, in deterministic pack-id order.
+pub fn scanner_registry(specs: &HashMap<String, LspSpec>) -> ScannerRegistry {
+    let mut registry = ScannerRegistry::default_registry();
+    let mut values: Vec<&LspSpec> = specs.values().collect();
+    values.sort_by(|a, b| a.names.cmp(&b.names));
+    let mut seen: Vec<String> = Vec::new();
+    for spec in values {
+        let Some(id) = spec.names.first() else {
+            continue;
+        };
+        if seen.contains(id) {
+            continue;
+        }
+        seen.push(id.clone());
+        spec.region_end
+            .register(&mut registry, spec.names.iter().cloned());
+    }
+    registry
 }
 
 fn load(root: &Path, dir: &Path) -> Option<(LspSpec, Vec<String>)> {
@@ -102,11 +127,14 @@ fn load(root: &Path, dir: &Path) -> Option<(LspSpec, Vec<String>)> {
         })
         .unwrap_or_default();
     let spec = LspSpec {
-        language_id: str_field("language_id").unwrap_or(id),
+        language_id: str_field("language_id")
+            .unwrap_or_else(|| names.first().cloned().unwrap_or_default()),
         extension: str_field("extension").unwrap_or_default(),
+        names: names.clone(),
         command,
         args,
         keywords,
+        region_end: RegionEndSpec::from_dir(dir).unwrap_or_default(),
     };
     Some((spec, names))
 }

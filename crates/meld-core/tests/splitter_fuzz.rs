@@ -1,7 +1,7 @@
 //! Splitter fuzz suite (project.md §8). Deterministic LCG so failures are
 //! reproducible without an external property-testing dependency.
-use meld_core::splitter::{self, BalancedBraceScanner};
-use std::collections::HashMap;
+use meld_core::splitter::{self, BalancedBraceScanner, EndScanner, RegionKind, ScannerRegistry};
+use std::sync::Arc;
 
 fn next(seed: &mut u64) -> u64 {
     *seed = seed
@@ -10,11 +10,13 @@ fn next(seed: &mut u64) -> u64 {
     *seed >> 33
 }
 
-fn scanners() -> HashMap<String, Box<dyn splitter::EndScanner>> {
-    let mut m: HashMap<String, Box<dyn splitter::EndScanner>> = HashMap::new();
-    m.insert("python".to_string(), Box::new(BalancedBraceScanner));
-    m.insert("javascript".to_string(), Box::new(BalancedBraceScanner));
-    m
+fn scanners() -> ScannerRegistry {
+    // Built-ins carry the Phase 6 profiles; the explicit registrations prove
+    // the registry API is used by in-tree callers rather than a language map.
+    let mut registry = ScannerRegistry::default_registry();
+    let brace: Arc<dyn splitter::EndScanner> = Arc::new(BalancedBraceScanner);
+    registry.register(["plain"], brace);
+    registry
 }
 
 fn generate(seed: u64) -> String {
@@ -28,6 +30,9 @@ fn generate(seed: u64) -> String {
         "```python\nvalue = '``` inside a string'\n```\n",
         "plain text with an email a@b.com\n",
         "print('default tail')\n",
+        "@ruby { html = <<~SQL\n  SELECT } FROM t\nSQL\nputs html }\n",
+        "@python { s = \"\"\"a \" } b\"\"\"; print(s) }\n",
+        "@javascript { const t = `a ${ `inner }` } b`; }\n",
     ];
     let mut out = String::new();
     let n = 4 + (next(&mut s) as usize % 6);
@@ -35,6 +40,53 @@ fn generate(seed: u64) -> String {
         out.push_str(parts[next(&mut s) as usize % parts.len()]);
     }
     out
+}
+
+#[test]
+fn deterministic_scanner_cases_keep_offsets_and_render() {
+    let cases = [
+        (
+            "@ruby { html = <<~SQL\n  SELECT } FROM t\nSQL\nputs html }\n",
+            "SELECT } FROM t",
+        ),
+        (
+            "@ruby { a = <<A + <<B\n  } first\nA\n  } second\nB\nputs a }\n",
+            "} second",
+        ),
+        (
+            "@python { s = \"\"\"a \" } b\"\"\"; print(s) }\n",
+            "a \" } b",
+        ),
+        (
+            "@javascript { const t = `a ${ `inner }` } b`; }\n",
+            "inner }",
+        ),
+        (
+            "@rust { let s = r##\"a \"#} b\"##; /* /* } */ */ x }\n",
+            "a \"#} b",
+        ),
+        ("@sql { SELECT $tag$ } $tag$ AS x; }\n", "$tag$ } $tag$"),
+    ];
+    for (src, needle) in cases {
+        let doc = splitter::split(src, &scanners()).unwrap_or_else(|e| panic!("{e}: {src:?}"));
+        assert_eq!(splitter::render(&doc), src, "render changed {src:?}");
+        let block = doc
+            .regions
+            .iter()
+            .find(|r| r.kind == RegionKind::Block)
+            .unwrap();
+        assert_eq!(block.end, src.rfind('}').unwrap(), "wrong end: {src:?}");
+        assert!(block.body(src).contains(needle), "missing data: {src:?}");
+        let start = src.find('{').unwrap() + 1;
+        let generic = BalancedBraceScanner.find_end(src, start);
+        assert_ne!(generic, Some(block.end), "negative control passed: {src:?}");
+    }
+
+    // Raw hash delimiter bypass: no scanner registration is needed.
+    let raw = "@ruby#\" } literal \"#\n";
+    let doc = splitter::split(raw, &ScannerRegistry::empty()).unwrap();
+    assert_eq!(splitter::render(&doc), raw);
+    assert!(doc.regions[0].body(raw).contains("} literal"));
 }
 
 #[test]

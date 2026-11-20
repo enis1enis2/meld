@@ -1,0 +1,8 @@
+# Pack-owned, data-only region-end profile. The host runs a built-in Rust
+# algorithm; this file never names a command or module to execute.
+schema = "meld-region-end/1"
+kind = "counted"
+fallback = "brace"
+hint = "Use raw hash delimiters for bodies with other lexical rules"
+[options]
+dialect = "r"

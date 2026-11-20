@@ -25,6 +25,7 @@ pub struct Backend {
     client: Client,
     root: PathBuf,
     specs: HashMap<String, LspSpec>,
+    scanners: splitter::ScannerRegistry,
     documents: Arc<RwLock<HashMap<String, DocumentState>>>,
     external: Arc<RwLock<HashMap<String, Arc<Mutex<ExternalLsp>>>>>,
     opened: Arc<RwLock<HashMap<String, HashSet<String>>>>,
@@ -49,10 +50,12 @@ impl Backend {
     }
 
     fn with_specs(client: Client, root: PathBuf, specs: HashMap<String, LspSpec>) -> Self {
+        let scanners = packs::scanner_registry(&specs);
         Self {
             client,
             root,
             specs,
+            scanners,
             documents: Arc::new(RwLock::new(HashMap::new())),
             external: Arc::new(RwLock::new(HashMap::new())),
             opened: Arc::new(RwLock::new(HashMap::new())),
@@ -68,13 +71,12 @@ impl Backend {
     }
 
     fn parse(&self, text: String, version: i32) -> DocumentState {
-        let split = splitter::split(&text, &splitter::default_scanners()).unwrap_or_else(|_| {
-            splitter::SplitDocument {
+        let split =
+            splitter::split(&text, &self.scanners).unwrap_or_else(|_| splitter::SplitDocument {
                 source: text.clone(),
                 default_lang: String::new(),
                 regions: Vec::new(),
-            }
-        });
+            });
         DocumentState {
             text,
             version,

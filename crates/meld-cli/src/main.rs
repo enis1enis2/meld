@@ -2,6 +2,7 @@
 use meld_core::binding::{self, Import};
 use meld_core::compose::{self, Unit};
 use meld_core::error::MeldError;
+use meld_core::region_end_spec::RegionEndSpec;
 use meld_core::scheduler::{Backend, Bridge, Job};
 use meld_core::splitter;
 use meld_core::syntax::SyntaxLayer;
@@ -59,6 +60,8 @@ struct PackInfo {
     dir: PathBuf,
     runner: Option<RunnerSpec>,
     inline_style: Option<SourceStyle>,
+    /// Data-only scanner profile; never a command or Wasm module to execute.
+    region_end: RegionEndSpec,
 }
 
 impl PackInfo {
@@ -175,6 +178,7 @@ fn load_pack_dir(root: &Path, pack_dir: &Path) -> Option<PackInfo> {
         dir: pack_dir.to_path_buf(),
         runner,
         inline_style,
+        region_end: RegionEndSpec::from_dir(pack_dir).unwrap_or_default(),
     })
 }
 
@@ -230,6 +234,29 @@ fn discover_packs(root: &Path) -> HashMap<String, PackInfo> {
     out
 }
 
+/// Build one deterministic scanner registry from built-ins plus every
+/// discovered pack's `region_end.toml`. Packs are visited in id order and
+/// aliases are sorted, so MELD_PACKS/import discovery cannot make boundaries
+/// depend on directory iteration order.
+fn scanner_registry(packs: &HashMap<String, PackInfo>) -> splitter::ScannerRegistry {
+    let mut registry = splitter::ScannerRegistry::default_registry();
+    let mut infos: Vec<&PackInfo> = packs.values().collect();
+    infos.sort_by(|a, b| a.id.cmp(&b.id));
+    let mut seen: Vec<String> = Vec::new();
+    for info in infos {
+        if seen.contains(&info.id) {
+            continue;
+        }
+        seen.push(info.id.clone());
+        let mut names = vec![info.id.clone()];
+        names.extend(info.aliases.iter().cloned());
+        names.sort();
+        names.dedup();
+        info.region_end.register(&mut registry, names);
+    }
+    registry
+}
+
 fn read_file(path: Option<&str>) -> Result<(PathBuf, String), i32> {
     let path = match path {
         Some(p) => PathBuf::from(p),
@@ -253,7 +280,9 @@ fn cmd_check(path: Option<&str>) -> i32 {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let doc = match splitter::split(&src, &splitter::default_scanners()) {
+    let packs = discover_packs(&project_root());
+    let registry = scanner_registry(&packs);
+    let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{}", e);
@@ -416,7 +445,9 @@ fn cmd_run(path: Option<&str>) -> i32 {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let doc = match splitter::split(&src, &splitter::default_scanners()) {
+    let packs = discover_packs(&project_root());
+    let registry = scanner_registry(&packs);
+    let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");
@@ -444,7 +475,6 @@ fn cmd_run(path: Option<&str>) -> i32 {
             return 1;
         }
     };
-    let packs = discover_packs(&project_root());
     // JUDGMENT CALL: one T3 component is loaded for the whole run and shared
     // with every T2 worker through a host callback. This is what lets a Python
     // region call a typed Rust/WIT function without embedding Wasmtime itself.
@@ -639,14 +669,15 @@ fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let doc = match splitter::split(&src, &splitter::default_scanners()) {
+    let packs = discover_packs(&project_root());
+    let registry = scanner_registry(&packs);
+    let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");
             return 1;
         }
     };
-    let packs = discover_packs(&project_root());
     let mut out = String::new();
     for region in &doc.regions {
         out.push_str(&region.open_marker);
