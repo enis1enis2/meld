@@ -319,6 +319,13 @@ Additional judgment calls (also inline in the affected specs/code):
     commit changed CRLF fixtures to LF in the object store, so a byte-preserving
     clone produced checksum and signature mismatches. Both sides now preserve
     exactly the bytes that were signed.
+53. `checksums.sha256` parsing accepts uniformly LF or uniformly CRLF line
+    endings and validates the normalized canonical text. Python writes CRLF in
+    text mode on Windows and signs those exact bytes; the Rust verifier split
+    only on `\n`, so paths became `README.md\r` and were reported missing.
+    Mixed line endings and bare carriage returns are rejected rather than
+    silently normalized. The signed checksum bytes are still verified byte for
+    byte, so this does not weaken signature enforcement.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

@@ -674,8 +674,28 @@ fn public_as_array(bytes: &[u8]) -> [u8; 32] {
 
 fn parse_checksums(bytes: &[u8]) -> Result<BTreeMap<String, String>, String> {
     let text = std::str::from_utf8(bytes).map_err(|e| format!("checksums are not UTF-8: {e}"))?;
+    // JUDGMENT CALL 53: `packtool` signs the exact bytes of checksums.sha256.
+    // On Windows, Python's text-mode write emits CRLF; Git for Windows preserves
+    // those signed bytes when `core.autocrlf=false`. Parsing with `split('\n')`
+    // left a trailing `\r` on every path (`README.md\r`), so verification
+    // reported signed files as missing. Accept uniformly LF or uniformly CRLF
+    // line endings and validate the normalized canonical text; reject mixed
+    // endings and bare carriage returns instead of guessing at their meaning.
+    let lf_count = text.matches('\n').count();
+    let crlf_count = text.matches("\r\n").count();
+    if crlf_count > 0 && crlf_count != lf_count {
+        return Err("checksums.sha256 has mixed line endings".to_string());
+    }
+    let normalized = if crlf_count > 0 {
+        text.replace("\r\n", "\n")
+    } else {
+        text.to_string()
+    };
+    if normalized.contains('\r') {
+        return Err("checksums.sha256 has a bare carriage return".to_string());
+    }
     let mut entries = BTreeMap::new();
-    for (line_no, line) in text.split('\n').enumerate() {
+    for (line_no, line) in normalized.split('\n').enumerate() {
         if line.is_empty() {
             continue;
         }
@@ -704,8 +724,10 @@ fn parse_checksums(bytes: &[u8]) -> Result<BTreeMap<String, String>, String> {
             return Err(format!("duplicate path in checksums.sha256: {rel}"));
         }
     }
-    if text != canonical_checksums(&entries) {
-        return Err("checksums.sha256 is not canonical (sorted paths, LF, two spaces)".to_string());
+    if normalized != canonical_checksums(&entries) {
+        return Err(
+            "checksums.sha256 is not canonical (sorted paths, LF or CRLF, two spaces)".to_string(),
+        );
     }
     Ok(entries)
 }
@@ -938,5 +960,29 @@ mod tests {
         lock.save(&project).unwrap();
         assert!(discover_imported(&project, &[]).unwrap().is_empty());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn checksums_accept_uniform_lf_or_crlf_and_reject_mixed_endings() {
+        let digest = "a".repeat(64);
+        let expected = BTreeMap::from([("README.md".to_string(), digest.clone())]);
+        assert_eq!(
+            parse_checksums(format!("{digest}  README.md\n").as_bytes()).unwrap(),
+            expected
+        );
+        assert_eq!(
+            parse_checksums(format!("{digest}  README.md\r\n").as_bytes()).unwrap(),
+            expected
+        );
+        let mixed = format!("{digest}  README.md\r\n{digest}  worker.sh\n");
+        assert_eq!(
+            parse_checksums(mixed.as_bytes()).unwrap_err(),
+            "checksums.sha256 has mixed line endings"
+        );
+        let bare = format!("{digest}  README.md\r");
+        assert_eq!(
+            parse_checksums(bare.as_bytes()).unwrap_err(),
+            "checksums.sha256 has a bare carriage return"
+        );
     }
 }
