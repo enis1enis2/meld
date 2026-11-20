@@ -1,6 +1,7 @@
 //! Host-side abuse tests for the T2 stdio protocol. These use tiny Python
 //! workers because the point is the host's parsing/limits, not any language
 //! pack. They skip when python3 is unavailable.
+use meld_core::binding::{Export, Import};
 use meld_core::error::MeldError;
 use meld_core::scheduler::{Backend, Bridge, Job};
 use meld_core::splitter::{Region, RegionKind};
@@ -54,17 +55,49 @@ def emit(obj):
     sys.stdout.flush()
 "#;
 
+/// Minimal stdout-only L1 worker. It answers value-shaped methods so tests can
+/// prove the host rejects them before they reach the worker.
+fn l1_script() -> String {
+    format!(
+        "{HANDSHAKE}\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L1', 'caps': ['stdout']}}}})\n\
+         while True:\n\
+         \x20   req = json.loads(sys.stdin.readline())\n\
+         \x20   method = req['method']\n\
+         \x20   if method == 'execute':\n\
+         \x20       emit({{'id': req['id'], 'result': {{'stdout': ['ok'], 'exports': []}}}})\n\
+         \x20   elif method in ('eval', 'fetch', 'import'):\n\
+         \x20       emit({{'id': req['id'], 'result': {{'value': 1}}}})\n\
+         \x20   else:\n\
+         \x20       emit({{'id': req['id'], 'error': {{'code': 'TypeMismatch', 'message': 'unexpected method', 'source': None}}}})\n"
+    )
+}
+
+fn job_with_exports(code: &str) -> Job {
+    let mut job = job(code);
+    job.exports.push(Export {
+        region_id: "r0".to_string(),
+        name: "native".to_string(),
+        bridge_name: "value".to_string(),
+    });
+    job
+}
+
 #[test]
 fn oversized_stdout_line_is_rejected() {
     if !python3_available() {
         eprintln!("skipping: python3 is unavailable");
         return;
     }
-    let mut backend =
-        spawn("import sys\nsys.stdout.write('x' * (2 * 1024 * 1024) + '\\n')\nsys.stdout.flush()\n");
+    // Stay alive after flushing so the host detects the oversized line while
+    // the worker is still killable, instead of racing its normal exit.
+    let mut backend = spawn(
+        "import sys\nsys.stdout.write('x' * (2 * 1024 * 1024) + '\\n')\nsys.stdout.flush()\nsys.stdin.readline()\n",
+    );
     let error = backend.ensure_initialized("python").unwrap_err();
     assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
-    assert!(error.to_string().contains("stdout line exceeds"));
+    assert!(error.to_string().contains("line exceeds"));
 }
 
 #[test]
@@ -89,12 +122,14 @@ fn missing_required_capability_is_a_hard_error() {
         return;
     }
     let script = format!(
-        "{HANDSHAKE}\nreq = json.loads(sys.stdin.readline())\nemit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L2', 'caps': ['eval']}}}})\n"
+        "{HANDSHAKE}\nreq = json.loads(sys.stdin.readline())\nemit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L2', 'caps': ['stdout', 'eval']}}}})\n"
     );
     let mut backend = spawn(&script);
     let error = backend.ensure_initialized("python").unwrap_err();
     assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
-    assert!(error.to_string().contains("values and stdout"));
+    assert!(error
+        .to_string()
+        .contains("L2 worker must advertise values"));
 }
 
 #[test]
@@ -134,9 +169,8 @@ fn stderr_tail_is_included_in_crash_report() {
         return;
     }
     let mut backend = spawn(
-        "import sys\nsys.stderr.write('SENTINEL-42\\n')\nsys.stderr.flush()\nsys.exit(3)\n",
+        "import sys\nsys.stderr.write('SENTINEL-42\\n')\nsys.stderr.flush()\nsys.stdin.readline()\nsys.exit(3)\n",
     );
-    std::thread::sleep(Duration::from_millis(50));
     let error = backend.ensure_initialized("python").unwrap_err();
     assert!(matches!(error, MeldError::WorkerCrashed(_)), "{error:?}");
     assert!(error.to_string().contains("SENTINEL-42"));
@@ -234,4 +268,99 @@ fn host_call_limit_is_enforced() {
     assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
     assert!(error.to_string().contains("host call limit"));
     assert_eq!(calls.load(Ordering::SeqCst), 64);
+}
+
+#[test]
+fn l1_worker_runs_stdout_only_jobs() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let mut backend = spawn(&l1_script());
+    let stdout = backend
+        .run(&job("pass"), &mut Bridge::default())
+        .expect("L1 stdout-only run");
+    assert_eq!(stdout, vec!["ok"]);
+}
+
+#[test]
+fn l1_worker_cannot_eval_or_fetch_values() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let mut backend = spawn(&l1_script());
+    backend.ensure_initialized("python").expect("initialize");
+    let error = backend.eval("r0", "1").unwrap_err();
+    assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
+    assert!(error
+        .to_string()
+        .contains("inline eval requires an L2 worker"));
+    let error = backend.fetch("native").unwrap_err();
+    assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
+    assert!(error
+        .to_string()
+        .contains("value exports requires an L2 worker"));
+}
+
+#[test]
+fn l1_worker_cannot_import_or_export_values() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let import = Import {
+        region_id: "r0".to_string(),
+        name: "x".to_string(),
+        source_region: "r1".to_string(),
+        bridge_name: "x".to_string(),
+    };
+    let mut backend = spawn(&l1_script());
+    backend.ensure_initialized("python").expect("initialize");
+    let error = backend
+        .apply_imports(&[import], &Bridge::default())
+        .unwrap_err();
+    assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
+    assert!(error
+        .to_string()
+        .contains("value imports requires an L2 worker"));
+
+    let mut backend = spawn(&l1_script());
+    let error = backend
+        .run(&job_with_exports("pass"), &mut Bridge::default())
+        .unwrap_err();
+    assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
+    assert!(error
+        .to_string()
+        .contains("value exports requires an L2 worker"));
+}
+
+#[test]
+fn l1_worker_cannot_issue_host_calls() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let script = format!(
+        "{HANDSHAKE}\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L1', 'caps': ['stdout']}}}})\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': -7, 'method': '__host_call', 'params': {{'fn': 'meld:t3/add', 'args': []}}}})\n\
+         response = json.loads(sys.stdin.readline())\n\
+         code = response.get('error', {{}}).get('code')\n\
+         emit({{'id': req['id'], 'result': {{'stdout': [code], 'exports': []}}}})\n"
+    );
+    let mut backend = spawn(&script);
+    let called = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&called);
+    backend.set_host_call(move |_, _| {
+        observed.store(true, Ordering::SeqCst);
+        Ok(Value::int(1))
+    });
+    let stdout = backend
+        .run(&job("call"), &mut Bridge::default())
+        .expect("execute");
+    assert!(!called.load(Ordering::SeqCst), "L1 host call must not run");
+    assert_eq!(stdout, vec!["SandboxDenied"]);
 }

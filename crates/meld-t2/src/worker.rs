@@ -9,28 +9,28 @@ use crate::protocol::{encode, ErrorObject, Request, Response, PROTOCOL};
 use meld_core::binding::Import;
 use meld_core::error::{MeldError, Result};
 use meld_core::scheduler::{Backend, Bridge, Job};
+use meld_sandbox::{
+    CommandSpec, IoPolicy, ResourceLimits, SandboxBackend, SandboxError, SandboxPolicy,
+    SpawnedProcess,
+};
 use meld_value::Value;
 use serde_json::{json, Value as Json};
 use std::collections::HashSet;
-use std::io::{self, BufRead, BufReader, Read, Write};
-use std::process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio};
-use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle};
+use std::process::{Command, Stdio};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 /// Worker-initiated host call (Phase 4). The worker stays language-agnostic:
 /// it asks the host to resolve a reserved `meld:*` function name.
 pub type HostCall = dyn Fn(&str, &[Value]) -> Result<Value> + Send + Sync + 'static;
 
-/// One protocol line, with EOF represented by `None`.
-type Line = io::Result<Option<String>>;
-
 const T2_MAX_LINE_BYTES: usize = 1024 * 1024;
-const T2_MAX_PENDING_LINES: usize = 64;
-const T2_MAX_PENDING_REQUESTS: usize = 64;
-const T2_STDERR_CAP_BYTES: usize = 64 * 1024;
+const T2_STDERR_CAP_BYTES: u64 = 64 * 1024;
 const T2_ERROR_STDERR_BYTES: usize = 4 * 1024;
+const T2_IDLE_TIMEOUT_MS: u64 = 10_000;
+const T2_OVERALL_TIMEOUT_MS: u64 = 60_000;
 const T2_CALL_TIMEOUT: Duration = Duration::from_secs(10);
 const T2_HOST_CALL_TIMEOUT: Duration = Duration::from_secs(2);
 const T2_MAX_HOST_CALLS_PER_REQUEST: usize = 64;
@@ -40,19 +40,10 @@ const RESERVED_T3_PREFIX: &str = "meld:t3/";
 /// Names a worker may ask the host to resolve. The reserved `meld:t3/*` slice
 /// is enabled by [`T2Backend::set_host_call`]; other names require an explicit
 /// [`T2Backend::allow_host_call`].
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 struct HostCallPolicy {
     allow_reserved_t3: bool,
     exact: HashSet<String>,
-}
-
-impl Default for HostCallPolicy {
-    fn default() -> Self {
-        Self {
-            allow_reserved_t3: false,
-            exact: HashSet::new(),
-        }
-    }
 }
 
 impl HostCallPolicy {
@@ -74,110 +65,57 @@ enum HostCallFailure {
 }
 
 pub struct T2Backend {
-    child: Child,
-    requests: Option<SyncSender<Vec<u8>>>,
-    lines: Receiver<Line>,
-    writer_thread: Option<JoinHandle<()>>,
-    reader_thread: Option<JoinHandle<()>>,
-    stderr_thread: Option<JoinHandle<()>>,
-    stderr_log: Arc<Mutex<Vec<u8>>>,
+    /// Every worker, sandboxed or not, is wrapped in the same bounded I/O and
+    /// process-tree guard. The launcher decides whether the child is confined.
+    process: Option<SpawnedProcess>,
     next_id: u64,
     initialized: bool,
+    level: String,
     caps: Vec<String>,
     host_call: Option<Arc<HostCall>>,
     host_call_policy: HostCallPolicy,
     reaped: bool,
 }
 
-fn read_bounded_line<R: BufRead>(reader: &mut R, limit: usize) -> io::Result<Option<String>> {
-    let mut out = Vec::new();
-    loop {
-        let available = reader.fill_buf()?;
-        if available.is_empty() {
-            if out.is_empty() {
-                return Ok(None);
-            }
-            break;
-        }
-        let newline = available.iter().position(|&b| b == b'\n');
-        let take = newline.map_or(available.len(), |i| i + 1);
-        if out.len().saturating_add(take) > limit {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("T2 stdout line exceeds {limit} bytes"),
-            ));
-        }
-        out.extend_from_slice(&available[..take]);
-        reader.consume(take);
-        if newline.is_some() {
-            break;
-        }
-    }
-    if out.last() == Some(&b'\n') {
-        out.pop();
-    }
-    if out.last() == Some(&b'\r') {
-        out.pop();
-    }
-    String::from_utf8(out)
-        .map(Some)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("T2 stdout is not UTF-8: {e}")))
-}
-
-fn stdout_reader(stdout: ChildStdout, tx: SyncSender<Line>) {
-    let mut stdout = BufReader::new(stdout);
-    loop {
-        let line = read_bounded_line(&mut stdout, T2_MAX_LINE_BYTES);
-        let channel_open = match tx.try_send(line) {
-            Ok(()) => true,
-            Err(TrySendError::Full(line)) => {
-                // JUDGMENT CALL: never grow an unbounded queue for a worker that
-                // floods stdout. Report the violation and stop reading; the
-                // host's deadline terminates the child.
-                let overflow = io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "T2 stdout queue full".to_string(),
-                );
-                drop(line);
-                let _ = tx.try_send(Err(overflow));
-                false
-            }
-            Err(TrySendError::Disconnected(_)) => false,
-        };
-        if !channel_open {
-            break;
-        }
+fn sandbox_error(error: SandboxError) -> MeldError {
+    match error {
+        SandboxError::Denied(message) => MeldError::SandboxDenied(message),
+        other => MeldError::WorkerCrashed(other.to_string()),
     }
 }
 
-fn stderr_drainer(mut stderr: ChildStderr, log: Arc<Mutex<Vec<u8>>>) {
-    let mut buf = [0u8; 4096];
-    loop {
-        match stderr.read(&mut buf) {
-            Ok(0) | Err(_) => break,
-            Ok(n) => {
-                let mut log = log.lock().unwrap_or_else(|e| e.into_inner());
-                let overflow = log.len().saturating_add(n).saturating_sub(T2_STDERR_CAP_BYTES);
-                if overflow > 0 {
-                    log.drain(..overflow);
-                }
-                log.extend_from_slice(&buf[..n]);
-            }
-        }
-    }
-}
-
-fn stdin_writer(mut stdin: ChildStdin, rx: mpsc::Receiver<Vec<u8>>) {
-    while let Ok(mut line) = rx.recv() {
-        line.push(b'\n');
-        if stdin.write_all(&line).is_err() || stdin.flush().is_err() {
-            break;
-        }
-    }
+fn bounded_limits(mut limits: ResourceLimits) -> ResourceLimits {
+    limits.max_line_bytes = Some(
+        limits
+            .effective_max_line_bytes()
+            .min(T2_MAX_LINE_BYTES as u64),
+    );
+    limits.max_stderr_bytes = Some(limits.effective_max_stderr_bytes().min(T2_STDERR_CAP_BYTES));
+    limits.idle_timeout_ms = Some(limits.effective_idle_timeout_ms().min(T2_IDLE_TIMEOUT_MS));
+    limits.overall_timeout_ms = Some(
+        limits
+            .effective_overall_timeout_ms()
+            .min(T2_OVERALL_TIMEOUT_MS),
+    );
+    limits
 }
 
 impl T2Backend {
-    /// Spawn a worker. Sandbox enforcement is the launcher's job (spec/t2-protocol.md §6).
+    fn from_spawned(process: SpawnedProcess) -> Self {
+        Self {
+            process: Some(process),
+            next_id: 1,
+            initialized: false,
+            level: "L2".to_string(),
+            caps: Vec::new(),
+            host_call: None,
+            host_call_policy: HostCallPolicy::default(),
+            reaped: false,
+        }
+    }
+
+    /// Spawn a worker without OS confinement. Only used by trusted fixtures and
+    /// legacy callers; the CLI always uses [`Self::spawn_sandboxed`].
     pub fn spawn(program: &str, args: &[&str]) -> Result<Self> {
         let mut child = Command::new(program)
             .args(args)
@@ -185,78 +123,57 @@ impl T2Backend {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
-
-        if child.stdin.is_none() || child.stdout.is_none() || child.stderr.is_none() {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(MeldError::WorkerCrashed(
-                "worker did not expose all protocol pipes".to_string(),
-            ));
-        }
-        let stdin = child.stdin.take().expect("piped stdin checked");
-        let stdout = child.stdout.take().expect("piped stdout checked");
-        let stderr = child.stderr.take().expect("piped stderr checked");
-
-        let stderr_log = Arc::new(Mutex::new(Vec::new()));
-        let stderr_thread = match thread::Builder::new()
-            .name("meld-t2-stderr".to_string())
-            .spawn({
-                let log = Arc::clone(&stderr_log);
-                move || stderr_drainer(stderr, log)
-            }) {
-            Ok(handle) => handle,
-            Err(e) => {
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let (stdout, stderr) = match (stdout, stderr) {
+            (Some(stdout), Some(stderr)) => (stdout, stderr),
+            _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(MeldError::WorkerCrashed(format!(
-                    "T2 stderr drain spawn: {e}"
-                )));
+                return Err(MeldError::WorkerCrashed(
+                    "worker did not expose all protocol pipes".to_string(),
+                ));
             }
         };
+        let io = IoPolicy::from_limits(&bounded_limits(ResourceLimits::default()));
+        let process = SpawnedProcess::new(child, stdout, stderr, io).map_err(sandbox_error)?;
+        Ok(Self::from_spawned(process))
+    }
 
-        let (line_tx, line_rx) = mpsc::sync_channel(T2_MAX_PENDING_LINES);
-        let reader_thread = match thread::Builder::new()
-            .name("meld-t2-stdout".to_string())
-            .spawn(move || stdout_reader(stdout, line_tx)) {
-            Ok(handle) => handle,
-            Err(e) => {
+    /// Spawn a worker from an explicit argv spec without OS confinement. The
+    /// CLI uses this only for debug-build fixture runs when the test-only opt-in
+    /// is set; production launches go through [`Self::spawn_sandboxed`].
+    pub fn spawn_with_spec(spec: &CommandSpec) -> Result<Self> {
+        let mut child = spec.to_command().spawn()?;
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let (stdout, stderr) = match (stdout, stderr) {
+            (Some(stdout), Some(stderr)) => (stdout, stderr),
+            _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(MeldError::WorkerCrashed(format!(
-                    "T2 stdout reader spawn: {e}"
-                )));
+                return Err(MeldError::WorkerCrashed(
+                    "worker did not expose all protocol pipes".to_string(),
+                ));
             }
         };
+        let io = IoPolicy::from_limits(&bounded_limits(ResourceLimits::default()));
+        let process = SpawnedProcess::new(child, stdout, stderr, io).map_err(sandbox_error)?;
+        Ok(Self::from_spawned(process))
+    }
 
-        let (request_tx, request_rx) = mpsc::sync_channel(T2_MAX_PENDING_REQUESTS);
-        let writer_thread = match thread::Builder::new()
-            .name("meld-t2-stdin".to_string())
-            .spawn(move || stdin_writer(stdin, request_rx)) {
-            Ok(handle) => handle,
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(MeldError::WorkerCrashed(format!(
-                    "T2 stdin writer spawn: {e}"
-                )));
-            }
-        };
-
-        Ok(Self {
-            child,
-            requests: Some(request_tx),
-            lines: line_rx,
-            writer_thread: Some(writer_thread),
-            reader_thread: Some(reader_thread),
-            stderr_thread: Some(stderr_thread),
-            stderr_log,
-            next_id: 1,
-            initialized: false,
-            caps: Vec::new(),
-            host_call: None,
-            host_call_policy: HostCallPolicy::default(),
-            reaped: false,
-        })
+    /// Spawn a worker through an OS sandbox backend. The backend has already
+    /// been asked to enforce the effective four-layer policy; it must fail
+    /// closed instead of returning an unconfined child.
+    pub fn spawn_sandboxed(
+        backend: &dyn SandboxBackend,
+        spec: &CommandSpec,
+        policy: &SandboxPolicy,
+    ) -> Result<Self> {
+        let mut effective = policy.clone();
+        effective.limits = bounded_limits(effective.limits);
+        let process = backend.spawn(spec, &effective).map_err(sandbox_error)?;
+        Ok(Self::from_spawned(process))
     }
 
     /// Register the host-side resolver for worker-initiated calls. **JUDGMENT
@@ -288,11 +205,17 @@ impl T2Backend {
         Ok(())
     }
 
-    fn with_stderr(&self, message: String) -> String {
-        let log = self.stderr_log.lock().unwrap_or_else(|e| e.into_inner());
+    fn with_stderr(&mut self, message: String) -> String {
+        if let Some(process) = self.process.as_mut() {
+            let _ = process.drain_stderr();
+        }
+        let log = self
+            .process
+            .as_ref()
+            .map(SpawnedProcess::stderr_snapshot)
+            .unwrap_or("");
         let start = log.len().saturating_sub(T2_ERROR_STDERR_BYTES);
-        let tail = String::from_utf8_lossy(&log[start..]);
-        let tail = tail.trim_end();
+        let tail = log[start..].trim_end();
         if tail.is_empty() {
             message
         } else {
@@ -302,8 +225,10 @@ impl T2Backend {
 
     fn terminate(&mut self) {
         if !self.reaped {
-            let _ = self.child.kill();
-            let _ = self.child.wait();
+            if let Some(process) = self.process.as_mut() {
+                let _ = process.kill_tree();
+                let _ = process.wait();
+            }
             self.reaped = true;
         }
     }
@@ -331,15 +256,19 @@ impl T2Backend {
                 bytes.len()
             )));
         }
-        let requests = self.requests.as_ref().cloned().ok_or_else(|| {
-            MeldError::WorkerCrashed("T2 request channel already closed".to_string())
-        })?;
-        match requests.try_send(bytes) {
+        let mut line = bytes;
+        line.push(b'\n');
+        let result = match self.process.as_mut() {
+            Some(process) => process.write_stdin(&line),
+            None => Err(SandboxError::Denied(
+                "T2 worker process already reaped".to_string(),
+            )),
+        };
+        match result {
             Ok(()) => Ok(()),
-            Err(TrySendError::Full(_)) => Err(self.deny("T2 request queue full")),
-            Err(TrySendError::Disconnected(_)) => {
-                let message = self.with_stderr("T2 stdin writer exited".to_string());
-                Err(MeldError::WorkerCrashed(message))
+            Err(error) => {
+                let message = format!("T2 stdin write failed: {error}");
+                Err(self.deny(message))
             }
         }
     }
@@ -360,24 +289,33 @@ impl T2Backend {
         if remaining.is_zero() {
             return Err(self.timeout(what));
         }
-        let received = self.lines.recv_timeout(remaining);
+        let received = match self.process.as_mut() {
+            Some(process) => process.read_line(),
+            None => return Err(self.crash(format!("worker process gone while waiting for {what}"))),
+        };
         match received {
-            Ok(Ok(Some(line))) => Ok(line),
-            Ok(Ok(None)) => Err(self.crash(format!("worker closed stdout while waiting for {what}"))),
-            Ok(Err(e)) if e.kind() == io::ErrorKind::InvalidData => {
-                Err(self.deny(format!("worker stdout violates protocol: {e}")))
+            Ok(Some(line)) => {
+                if Instant::now() > deadline {
+                    Err(self.timeout(what))
+                } else {
+                    Ok(line)
+                }
             }
-            Ok(Err(e)) => Err(self.crash(format!(
-                "worker stdout read failed while waiting for {what}: {e}"
-            ))),
-            Err(mpsc::RecvTimeoutError::Timeout) => Err(self.timeout(what)),
-            Err(mpsc::RecvTimeoutError::Disconnected) => Err(self.crash(format!(
-                "worker stdout channel closed while waiting for {what}"
+            Ok(None) => Err(self.crash(format!("worker closed stdout while waiting for {what}"))),
+            Err(SandboxError::Denied(message)) => {
+                Err(self.deny(format!("worker stdout violates protocol: {message}")))
+            }
+            Err(error) => Err(self.crash(format!(
+                "worker stdout read failed while waiting for {what}: {error}"
             ))),
         }
     }
 
-    fn send_host_call_response(&mut self, id: &Json, result: std::result::Result<Value, MeldError>) -> Result<()> {
+    fn send_host_call_response(
+        &mut self,
+        id: &Json,
+        result: std::result::Result<Value, MeldError>,
+    ) -> Result<()> {
         let response = match result {
             Ok(value) => json!({ "id": id, "result": { "value": value.to_json() } }),
             Err(error) => {
@@ -418,6 +356,9 @@ impl T2Backend {
                 "host call {name:?} is not allowlisted"
             ))));
         }
+        if let Err(error) = self.require_l2("worker-initiated host calls") {
+            return Err(HostCallFailure::Respond(error));
+        }
 
         let budget = deadline
             .saturating_duration_since(Instant::now())
@@ -456,9 +397,10 @@ impl T2Backend {
 
     fn call(&mut self, method: &str, params: Json) -> Result<Json> {
         let id = self.next_id;
-        self.next_id = self.next_id.checked_add(1).ok_or_else(|| {
-            MeldError::WorkerCrashed("T2 request id space exhausted".to_string())
-        })?;
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .ok_or_else(|| MeldError::WorkerCrashed("T2 request id space exhausted".to_string()))?;
         self.send(&Request {
             id,
             method: method.to_string(),
@@ -493,12 +435,22 @@ impl T2Backend {
                     .as_i64()
                     .ok_or_else(|| self.deny("host call id must be a negative integer"))?;
                 if callback_num >= 0 {
-                    return Err(self.deny(format!(
-                        "host call id {callback_num} must be negative"
-                    )));
+                    return Err(self.deny(format!("host call id {callback_num} must be negative")));
                 }
                 if !host_call_ids.insert(callback_num) {
                     return Err(self.deny(format!("duplicate host call id {callback_num}")));
+                }
+                // Worker-initiated callbacks are a privilege of fully capable
+                // workers. The handshake has not assigned a level yet, so any
+                // call during initialization is denied unconditionally.
+                if !self.initialized {
+                    let _ = self.send_host_call_response(
+                        &callback_id,
+                        Err(MeldError::SandboxDenied(
+                            "host calls before worker initialization are denied".to_string(),
+                        )),
+                    );
+                    continue;
                 }
                 if host_calls >= T2_MAX_HOST_CALLS_PER_REQUEST {
                     let _ = self.send_host_call_response(
@@ -564,16 +516,11 @@ impl T2Backend {
                         "TypeMismatch" => MeldError::TypeMismatch(error.message),
                         "HandleExpired" => MeldError::HandleExpired(error.message),
                         "SandboxDenied" => MeldError::SandboxDenied(error.message),
-                        _ => MeldError::WorkerCrashed(format!(
-                            "{}: {}",
-                            error.code, error.message
-                        )),
+                        _ => MeldError::WorkerCrashed(format!("{}: {}", error.code, error.message)),
                     });
                 }
                 _ => {
-                    return Err(self.deny(
-                        "T2 response must contain exactly one of result or error",
-                    ))
+                    return Err(self.deny("T2 response must contain exactly one of result or error"))
                 }
             }
         }
@@ -596,13 +543,19 @@ impl T2Backend {
         if got != PROTOCOL {
             return Err(self.deny(format!("unsupported worker protocol {got:?}")));
         }
-        if let Some(level) = result.get("level") {
-            let level = level
+        // JUDGMENT CALL: L1 is a stdout-only compatibility level used by the
+        // installed shell pack. It is accepted for `run`, but value imports,
+        // exports, inline eval and host calls remain L2-only so the level is a
+        // real capability boundary rather than an ignored label.
+        let level = match result.get("level") {
+            Some(value) => value
                 .as_str()
-                .ok_or_else(|| self.deny("worker level must be a string"))?;
-            if level != "L2" {
-                return Err(self.deny(format!("unsupported worker level {level:?}")));
-            }
+                .ok_or_else(|| self.deny("worker level must be a string"))?
+                .to_string(),
+            None => "L2".to_string(),
+        };
+        if level != "L1" && level != "L2" {
+            return Err(self.deny(format!("unsupported worker level {level:?}")));
         }
 
         let advertised = result
@@ -621,17 +574,37 @@ impl T2Backend {
                 caps.push(cap.to_string());
             }
         }
-        if !caps.iter().any(|cap| cap == "values") || !caps.iter().any(|cap| cap == "stdout") {
-            return Err(self.deny("worker must advertise values and stdout"));
+        if !caps.iter().any(|cap| cap == "stdout") {
+            return Err(self.deny("worker must advertise stdout"));
         }
+        if level == "L2" && !caps.iter().any(|cap| cap == "values") {
+            return Err(self.deny("L2 worker must advertise values"));
+        }
+        if level == "L1" && caps.iter().any(|cap| cap == "eval" || cap == "values") {
+            return Err(self.deny("L1 worker must not advertise values or eval"));
+        }
+        self.level = level;
         self.caps = caps;
         self.initialized = true;
         Ok(())
     }
 
+    fn require_l2(&self, operation: &str) -> Result<()> {
+        if self.level == "L1" {
+            Err(MeldError::SandboxDenied(format!(
+                "{operation} requires an L2 worker; this worker is L1"
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
     /// Push imported bridge values into this worker before a job or inline
     /// expression runs (spec/value-model.md §4).
     pub fn apply_imports(&mut self, imports: &[Import], bridge: &Bridge) -> Result<()> {
+        if !imports.is_empty() {
+            self.require_l2("value imports")?;
+        }
         for imp in imports {
             if let Some(v) = bridge.values.get(&imp.bridge_name) {
                 self.call("import", json!({ "name": imp.name, "value": v.to_json() }))?;
@@ -645,6 +618,7 @@ impl T2Backend {
     /// is better than sending expression text to a worker that only supports
     /// statements.
     pub fn eval(&mut self, region_id: &str, code: &str) -> Result<Value> {
+        self.require_l2("inline eval")?;
         if self.initialized && !self.caps.iter().any(|c| c == "eval") {
             return Err(MeldError::TypeMismatch(format!(
                 "worker for {region_id} does not advertise eval"
@@ -659,6 +633,7 @@ impl T2Backend {
 
     /// Read a native binding produced by a prior `execute` (spec/t2-protocol.md).
     pub fn fetch(&mut self, name: &str) -> Result<Value> {
+        self.require_l2("value exports")?;
         let result = self.call("fetch", json!({ "name": name }))?;
         let value = result
             .get("value")
@@ -709,6 +684,9 @@ impl Backend for T2Backend {
                 .ok_or_else(|| self.deny("execute exports must be an array"))?,
             None => &[],
         };
+        if !exports.is_empty() || !job.exports.is_empty() {
+            self.require_l2("value exports")?;
+        }
         for e in exports {
             let name = e
                 .get("name")
@@ -735,27 +713,18 @@ impl Backend for T2Backend {
 
 impl Drop for T2Backend {
     fn drop(&mut self) {
-        if let Some(requests) = self.requests.take() {
-            if let Ok(shutdown) = encode(&Request {
-                id: u64::MAX,
-                method: "shutdown".to_string(),
-                params: json!({}),
-            }) {
-                let _ = requests.try_send(shutdown.into_bytes());
+        if let Ok(shutdown) = encode(&Request {
+            id: u64::MAX,
+            method: "shutdown".to_string(),
+            params: json!({}),
+        }) {
+            let mut bytes = shutdown.into_bytes();
+            bytes.push(b'\n');
+            if let Some(process) = self.process.as_mut() {
+                let _ = process.write_stdin(&bytes);
+                process.close_stdin();
             }
-            // Closing the last sender lets the writer thread exit even when
-            // the child ignores shutdown and has to be killed.
-            drop(requests);
         }
         self.terminate();
-        if let Some(thread) = self.writer_thread.take() {
-            let _ = thread.join();
-        }
-        if let Some(thread) = self.reader_thread.take() {
-            let _ = thread.join();
-        }
-        if let Some(thread) = self.stderr_thread.take() {
-            let _ = thread.join();
-        }
     }
 }
