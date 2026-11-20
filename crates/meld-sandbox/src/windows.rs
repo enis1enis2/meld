@@ -1,10 +1,12 @@
 //! Windows backend (cfg-gated; COMPILE-ONLY on Linux).
 //!
-//! Job Object with `KILL_ON_JOB_CLOSE` for process-tree teardown, AppContainer
-//! profile creation/deletion and DACL edits for the declared safe roots. A
+//! Job Object with `KILL_ON_JOB_CLOSE` for process-tree teardown and limits. A
 //! child is assigned to the job immediately after spawn; if assignment fails
-//! the child is killed and the spawn call fails closed. There is no Windows
-//! runtime verification on the Linux development host.
+//! the child is killed and the spawn call fails closed. AppContainer profile
+//! and DACL helpers remain for future use, but this backend cannot apply an
+//! AppContainer token to a `std::process::Command`, so it does not claim
+//! AppContainer enforcement and policies requiring it fail closed. There is no
+//! Windows runtime verification on the Linux development host.
 
 use crate::backend::{
     require_enforcement, BackendFeatures, BackendKind, BackendProbe, SandboxBackend,
@@ -229,7 +231,12 @@ impl WindowsBackend {
             features: BackendFeatures {
                 seatbelt: false,
                 job_object: cfg!(target_os = "windows"),
-                appcontainer: cfg!(target_os = "windows"),
+                // JUDGMENT CALL 40: creating a profile and editing DACLs does
+                // not put the child in an AppContainer. Claiming this feature
+                // let an ordinary `Command::spawn` satisfy policies that need
+                // network denial, fs isolation or syscall filtering. Report
+                // the truth so `require_enforcement` fails closed instead.
+                appcontainer: false,
                 rlimits: false,
                 process_group_kill: false,
                 ..Default::default()
@@ -250,38 +257,28 @@ impl SandboxBackend for WindowsBackend {
 
     fn spawn(&self, spec: &CommandSpec, policy: &SandboxPolicy) -> Result<SpawnedProcess> {
         require_enforcement(self, policy)?;
-        let profile_name = format!("meld-sandbox-{:016x}", policy.fingerprint().0);
-        let container = AppContainer::create(&profile_name)?;
-        let result = (|| -> Result<SpawnedProcess> {
-            for root in policy.fs.roots() {
-                container.allow_path(root.path())?;
-            }
-            let job = Arc::new(JobObject::create(policy)?);
-            let mut command: Command = spec.to_command();
-            let mut child = command.spawn()?;
-            if let Err(e) = job.assign(&child) {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(e);
-            }
-            let stdout = child
-                .stdout
-                .take()
-                .ok_or_else(|| SandboxError::Denied("stdout pipe missing".to_string()))?;
-            let stderr = child
-                .stderr
-                .take()
-                .ok_or_else(|| SandboxError::Denied("stderr pipe missing".to_string()))?;
-            let hook_job = Arc::clone(&job);
-            Ok(
-                SpawnedProcess::new(child, stdout, stderr, IoPolicy::from_limits(&policy.limits))?
-                    .with_kill_hook(move || hook_job.terminate())
-                    .with_keep_alive(job)
-                    .with_keep_alive(container),
-            )
-        })();
-        // On error, AppContainer's Drop removes the profile.
-        result
+        let job = Arc::new(JobObject::create(policy)?);
+        let mut command: Command = spec.to_command();
+        let mut child = command.spawn()?;
+        if let Err(e) = job.assign(&child) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(e);
+        }
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| SandboxError::Denied("stdout pipe missing".to_string()))?;
+        let stderr = child
+            .stderr
+            .take()
+            .ok_or_else(|| SandboxError::Denied("stderr pipe missing".to_string()))?;
+        let hook_job = Arc::clone(&job);
+        Ok(
+            SpawnedProcess::new(child, stdout, stderr, IoPolicy::from_limits(&policy.limits))?
+                .with_kill_hook(move || hook_job.terminate())
+                .with_keep_alive(job),
+        )
     }
 }
 
@@ -303,11 +300,15 @@ mod tests {
 
     #[test]
     #[ignore = "runtime test only on Windows"]
-    fn windows_runtime_spawn() {
+    fn windows_runtime_spawn_fails_closed_without_appcontainer() {
         let spec = CommandSpec::new("cmd.exe", ["/c", "echo ok"]);
-        let mut child = WindowsBackend
-            .spawn(&spec, &SandboxPolicy::deny_all("runtime"))
-            .unwrap();
-        assert!(child.read_line().unwrap().is_some());
+        let error = match WindowsBackend.spawn(&spec, &SandboxPolicy::deny_all("runtime")) {
+            Ok(_) => panic!("deny-all policy spawned without AppContainer enforcement"),
+            Err(error) => error,
+        };
+        assert!(
+            matches!(error, SandboxError::Unsupported(_)),
+            "unexpected error: {error}"
+        );
     }
 }

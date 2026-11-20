@@ -244,6 +244,13 @@ Additional judgment calls (also inline in the affected specs/code):
     directory component for junctions/symlinks; all other I/O errors remain
     hard errors. This was confirmed from Windows diagnostic job
     136448518092 (workflow run 44782478274).
+40. The Windows backend no longer claims AppContainer enforcement. It created
+    a profile and DACL entries but launched the child with an ordinary
+    `Command::spawn`, so the token was never restricted. Policies needing
+    network denial, filesystem isolation or syscall filtering now fail closed
+    on Windows instead of running unsandboxed. Job Objects still provide real
+    resource limits and process-tree teardown, and the debug-only unsandboxed
+    test switch is unchanged.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
