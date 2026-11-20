@@ -89,8 +89,9 @@ fn rust_raw(b: &[u8], i: usize) -> Option<usize> {
         return None;
     }
     let hashes = j - hashes_at;
-    let needle: Vec<u8> = [b'"']
-        .into_iter()
+    let needle: Vec<u8> = b"\""
+        .iter()
+        .copied()
         .chain(std::iter::repeat_n(b'#', hashes))
         .collect();
     j += 1;

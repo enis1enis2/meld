@@ -56,7 +56,7 @@ pub fn strict_config() -> Config {
     config.wasm_multi_memory(false);
     config.wasm_tail_call(false);
     config.wasm_gc(false);
-    config.max_wasm_stack(1 * 1024 * 1024);
+    config.max_wasm_stack(1024 * 1024);
 
     let mut pooling = PoolingAllocationConfig::new();
     pooling.total_component_instances(1);
@@ -82,7 +82,9 @@ pub fn strict_engine() -> Engine {
 fn map_wasm_error(context: &str, error: wasmtime::Error) -> MeldError {
     if let Some(trap) = error.downcast_ref::<Trap>() {
         return match trap {
-            Trap::OutOfFuel => MeldError::SandboxDenied(format!("{context}: fuel budget exhausted")),
+            Trap::OutOfFuel => {
+                MeldError::SandboxDenied(format!("{context}: fuel budget exhausted"))
+            }
             Trap::Interrupt => {
                 MeldError::WorkerCrashed(format!("{context}: wall-clock deadline exceeded"))
             }

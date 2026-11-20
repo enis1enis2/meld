@@ -498,9 +498,12 @@ pub fn verify_pack(pack_dir: &Path, policy: &VerificationPolicy) -> Result<Verif
                 .map_err(|e| format!("invalid trust root public key for {key_id}: {e}"))?;
             let signature = Signature::from_bytes(&signature_bytes);
             let message = pack_message(&pack_id, &version, &checksum_bytes);
-            verifying_key.verify_strict(&message, &signature).map_err(|_| {
-                "signature mismatch: checksums, pack id, version or signer were modified".to_string()
-            })?;
+            verifying_key
+                .verify_strict(&message, &signature)
+                .map_err(|_| {
+                    "signature mismatch: checksums, pack id, version or signer were modified"
+                        .to_string()
+                })?;
             signature_state = "verified".to_string();
         }
     }
@@ -551,8 +554,8 @@ struct TrustRoot {
 /// Load `meld-trust-roots/1` as key-id -> 32-byte Ed25519 public key.
 pub fn load_trust_roots(path: &Path) -> Result<BTreeMap<String, [u8; 32]>, String> {
     let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let file: TrustRootsFile =
-        toml::from_str(&text).map_err(|e| format!("invalid trust roots {}: {e}", path.display()))?;
+    let file: TrustRootsFile = toml::from_str(&text)
+        .map_err(|e| format!("invalid trust roots {}: {e}", path.display()))?;
     if file.schema != TRUST_ROOTS_SCHEMA {
         return Err(format!(
             "unsupported trust-root schema in {} (expected {TRUST_ROOTS_SCHEMA})",
@@ -573,7 +576,10 @@ pub fn load_trust_roots(path: &Path) -> Result<BTreeMap<String, [u8; 32]>, Strin
                 }
             })
         {
-            return Err(format!("invalid trust root created date {:?}", entry.created));
+            return Err(format!(
+                "invalid trust root created date {:?}",
+                entry.created
+            ));
         }
         let public = decode_hex(&entry.public_key, 32, "public_key")?;
         let expected_id = hex(&sha256(&public)[..8]);
@@ -645,17 +651,19 @@ pub fn load_revocations(path: &Path) -> Result<BTreeSet<String>, String> {
 
 fn decode_hex(text: &str, bytes: usize, field: &str) -> Result<Vec<u8>, String> {
     if text.len() != bytes * 2 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(format!("invalid {field}: expected {bytes} bytes of lowercase hex"));
+        return Err(format!(
+            "invalid {field}: expected {bytes} bytes of lowercase hex"
+        ));
     }
     if text.to_ascii_lowercase() != text {
         return Err(format!("invalid {field}: hex must be lowercase"));
     }
-    Ok((0..bytes)
+    (0..bytes)
         .map(|i| {
             u8::from_str_radix(&text[i * 2..i * 2 + 2], 16)
                 .map_err(|e| format!("invalid {field}: {e}"))
         })
-        .collect::<Result<Vec<_>, _>>()?)
+        .collect::<Result<Vec<_>, _>>()
 }
 
 fn public_as_array(bytes: &[u8]) -> [u8; 32] {
@@ -865,7 +873,13 @@ mod tests {
         // rejected outright instead of being silently accepted as a MAC.
         let old = format!("hmac-sha256 {} {}\n", "a".repeat(16), "b".repeat(64));
         assert!(parse_signature(&old).is_err());
-        assert!(parse_signature(&format!("{} {} {}\n", SIGNATURE_SCHEME, "a".repeat(16), "b".repeat(128))).is_ok());
+        assert!(parse_signature(&format!(
+            "{} {} {}\n",
+            SIGNATURE_SCHEME,
+            "a".repeat(16),
+            "b".repeat(128)
+        ))
+        .is_ok());
     }
 
     #[test]
