@@ -11,6 +11,29 @@ use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+/// JUDGMENT CALL 48: `std::fs::canonicalize` on Windows returns `\\?\`
+/// extended-length paths. Node resolves its main module with `realpathSync` on
+/// each component and treats the bare drive prefix as a directory, failing with
+/// `EISDIR ... lstat 'D:'` before the T2 initialize handshake. Strip the prefix
+/// only at the OS spawn boundary; the policy engine keeps the canonical form
+/// for symlink validation. `\\?\UNC\` maps back to a normal `\\server\share`.
+#[cfg(windows)]
+fn spawn_path(path: &Path) -> PathBuf {
+    let text = path.as_os_str().to_string_lossy();
+    if let Some(rest) = text.strip_prefix(r"\\?\UNC\") {
+        PathBuf::from(format!(r"\\{rest}"))
+    } else if let Some(rest) = text.strip_prefix(r"\\?\") {
+        PathBuf::from(rest)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+#[cfg(not(windows))]
+fn spawn_path(path: &Path) -> PathBuf {
+    path.to_path_buf()
+}
+
 /// argv-only command description. There is no `shell` field: a Meld program
 /// cannot turn a grant into shell text.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,8 +70,9 @@ impl CommandSpec {
     /// Build a `Command` from the argv vector. `program` is never parsed by a
     /// shell; each argument stays a separate OS argument.
     pub fn to_command(&self) -> Command {
-        let mut cmd = Command::new(&self.program);
-        cmd.args(&self.args).current_dir(&self.cwd);
+        let mut cmd = Command::new(spawn_path(&self.program));
+        cmd.args(self.args.iter().map(|arg| spawn_path(Path::new(arg))))
+            .current_dir(spawn_path(&self.cwd));
         cmd.env_clear();
         for (key, value) in &self.env {
             cmd.env(key, value);
@@ -430,21 +454,6 @@ impl SpawnedProcess {
         self.guard.child_mut().try_wait().map_err(Into::into)
     }
 
-    /// TEMPORARY DIAGNOSTIC (removed before merge): worker state at timeout.
-    #[cfg(debug_assertions)]
-    pub fn debug_state(&mut self) -> String {
-        let status = self.guard.child_mut().try_wait().ok();
-        format!(
-            "pid={} elapsed={:?} try_wait={:?} stderr={:?} stdout_buf={} lines={}",
-            self.guard.pid(),
-            self.started.elapsed(),
-            status,
-            self.stderr_text,
-            self.stdout_buf.len(),
-            self.lines_seen,
-        )
-    }
-
     pub fn wait(&mut self) -> Result<ExitStatus> {
         self.guard.wait()
     }
@@ -470,6 +479,20 @@ mod tests {
         assert_eq!(spec.argv(), vec!["/bin/echo", "hello world", "$(id)"]);
         let cmd = spec.to_command();
         assert_eq!(cmd.get_args().collect::<Vec<_>>().len(), 2);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn spawn_path_strips_windows_verbatim_prefix() {
+        assert_eq!(
+            spawn_path(Path::new(r"\\?\D:\a\meld\meld\packs\javascript\worker.js")),
+            PathBuf::from(r"D:\a\meld\meld\packs\javascript\worker.js")
+        );
+        assert_eq!(
+            spawn_path(Path::new(r"\\?\UNC\server\share\worker.js")),
+            PathBuf::from(r"\\server\share\worker.js")
+        );
+        assert_eq!(spawn_path(Path::new("node")), PathBuf::from("node"));
     }
 
     #[test]

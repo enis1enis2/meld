@@ -293,6 +293,17 @@ Additional judgment calls (also inline in the affected specs/code):
     no `/bin`; because CI aborts at the first failing test binary, this test had
     never actually run on Windows. Using `current_exe()` makes it portable and
     still exercises fail-closed teardown.
+48. Windows child argv and cwd are stripped of the `\\?\` extended-length prefix
+    that `std::fs::canonicalize` adds, at the OS spawn boundary only. Node 22
+    called `realpathSync` on the bare drive component and aborted with
+    `EISDIR: illegal operation on a directory, lstat 'D:'` before it could answer
+    `initialize`; the T2 10 s deadline was never the cause. Policy checks still
+    use the canonical `\\?\` paths for symlink validation. Diagnostic commit
+    `ae3527f` captured the worker stderr; `\\?\UNC\` is mapped back to
+    `\\server\share`.
+49. The 10 s T2 idle/call deadline is deliberately unchanged. The Windows
+    worker exited in under 5 s with a deterministic `EISDIR`, so a longer
+    timeout would only delay the same failure.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
