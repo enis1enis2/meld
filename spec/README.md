@@ -70,6 +70,8 @@ Phase 0's stated criteria are met; B1/B2 affect Phases 1–3 verification only.
   completion forwarding, formatter delegation, and the scriptable REPL.
 - `registry.md` — pack checksums, local HMAC signing, registry format, and the
   publish/list/install workflow that lets a third party add a language.
+- `libraries.md` — installable Lang Packs: `library.toml`, git-backed
+  `meld-pack`, installed index, and project `meld.lock`.
 - `lang-pack.md` now documents `runner.toml`, `inline.toml`, `lsp.toml`,
   `formatter.toml`, copied queries, and the two accepted spellings of a pinned
   grammar rev.
@@ -122,3 +124,37 @@ Additional judgment calls (also inline in the affected files):
     languages never rely on the generic brace scanner.
 
 Evidence and verification results are in `../status/language-expansion.md`.
+
+## Lang Libraries (2026-11-20)
+
+`libraries.md` is normative for installable/importable Lang Packs. Every
+checked-in pack and the third-party fixture now carries `library.toml`;
+`tools/gen_pack.py` emits it for all future packs, and
+`tools/make_libraries.py` refreshed existing packs and their checksums. The
+terminal installer is `crates/meld-installer` (`meld-pack`), the shared format
+and verification live in `crates/meld-lib`, and `meld` reads `meld.lock` for
+project imports. No `project.md` decision was replaced.
+
+Additional judgment calls (also inline in `libraries.md` and the code):
+
+20. A Lang Library is a Lang Pack plus a manifest, package-manager style, not a
+    compiled `cdylib`; downloading arbitrary grammar code stays outside the
+    §9 trust model.
+21. `exports` is a stable relative data surface; traversal and missing paths
+    fail validation, but the whole verified pack is copied.
+22. Installed libraries live under a shared root with canonical `index.json`,
+    while `meld.lock` records each project's exact imported versions.
+23. `meld-pack` uses the `git` CLI with a shallow fetch of a git tree, accepting
+    GitHub slugs/URLs and local git repos through the same code path.
+24. Missing imports are skipped at runtime, and imported libraries are
+    discovered last so a project lock overrides a same-named built-in pack.
+
+Dependency versions were re-checked against crates.io on 2026-11-20 before
+implementation: `serde 1.0.229`, `serde_json 1.0.154`, and
+`toml 1.2.1+spec-1.1.0` were current stable. `sha2 0.11.1` had become current
+stable (the earlier workspace pin was `0.10.9`), so `meld-lib` was moved to the
+new exact pin; it declares `rust-version 1.88`, compatible with this workspace's
+`1.90`, and the RFC 4231 HMAC vector still passes. The checked-in
+`Cargo.lock` records the resolved graph.
+
+Evidence and verification results are in `../status/language-libraries.md`.

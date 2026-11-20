@@ -11,6 +11,12 @@ existing language pack. The registry has no server, no network and no package
 manager semantics; it is a checked-in directory that can be mirrored like any
 other source tree.
 
+This spec governs pack integrity and the checked-in registry format. Installable
+Lang Libraries are the next layer: `spec/libraries.md` adds `library.toml`, a
+git-backed terminal installer, a shared installed index and a per-project
+`meld.lock`. `meld-pack` reuses the verification rules below verbatim rather
+than defining a second integrity format.
+
 ## 1. Integrity files in a pack
 
 Each pack carries two extra files next to `pack.toml`:
@@ -213,17 +219,21 @@ This is the Phase 7 done-when criterion (project.md §11). No file under
    `toolchain.toml`, a worker (if `level >= L1`), `region_end.*`, and `tests/`
    as specified by `lang-pack.md`. A language with no runnable CLI stays L0;
    say so in its README (project.md §5 honesty note).
-2. Run `packtool sign <pack-dir> --key <private-key>` (after generating
+2. Add `library.toml` with `api = "meld-lang-library/1"`, `kind = "lang"`,
+   matching `id`/`version`/`aliases`, and relative `exports`
+   (`spec/libraries.md` §2). `tools/gen_pack.py` does this for new packs;
+   `tools/make_libraries.py` does it for existing ones.
+3. Run `packtool sign <pack-dir> --key <private-key>` (after generating
    `checksums.sha256`; `packtool` also exposes this step to tooling). Set
    `strict = true` when both integrity files are present.
-3. Run `packtool publish <pack-dir> --registry <registry>`. This copies data
+4. Run `packtool publish <pack-dir> --registry <registry>`. This copies data
    only; the pack is not executed.
-4. Consumers run `packtool list --registry <registry>` and
-   `packtool install <lang> --registry <registry> --into <dir> [--key ...]`.
-5. Runtime discovery of `runner.toml` is the integration point for the Rust
-   runner; it reads the manifest and launches the declared worker. That work
-   is intentionally outside this phase's tooling scope.
-6. `tests/fixtures/pack-third-party/` is a complete worked example for a
+5. Consumers can use either `packtool list/install` against a local registry
+   or `meld-pack remote-list/install` against a git source; the latter is the
+   installable Lang Library workflow in `spec/libraries.md`.
+6. Runtime discovery of `runner.toml` is the integration point for the Rust
+   runner; it reads the manifest and launches the declared worker.
+7. `tests/fixtures/pack-third-party/` is a complete worked example for a
    `shell` pack (a language absent from the existing packs). It is data-driven:
    its conformance cases live in `tests/conformance.json`, not in code.
 

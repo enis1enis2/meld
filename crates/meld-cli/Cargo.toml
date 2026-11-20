@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 meld-core = { path = "../meld-core" }
+meld-lib = { path = "../meld-lib" }
 meld-grammars = { path = "../meld-grammars" }
 meld-t2 = { path = "../meld-t2" }
 meld-t3 = { path = "../meld-t3" }

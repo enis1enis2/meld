@@ -3,8 +3,8 @@ use meld_core::binding::{self, Import};
 use meld_core::compose::{self, Unit};
 use meld_core::error::MeldError;
 use meld_core::scheduler::{Backend, Bridge, Job};
-use meld_core::syntax::SyntaxLayer;
 use meld_core::splitter;
+use meld_core::syntax::SyntaxLayer;
 use meld_value::SourceStyle;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
@@ -18,6 +18,7 @@ fn main() {
         Some("check") => cmd_check(args.get(1).map(String::as_str)),
         Some("run") => cmd_run(args.get(1).map(String::as_str)),
         Some("doctor") => cmd_doctor(),
+        Some("lib") | Some("library") => cmd_library(),
         Some("fmt") => {
             let check = args.iter().any(|a| a == "--check");
             let path = args
@@ -32,7 +33,7 @@ fn main() {
             cmd_pack_new(args.get(2).map(String::as_str))
         }
         _ => {
-            eprintln!("usage: meld <check|run|fmt [--check]|repl|doctor|pack> [file|lang]");
+            eprintln!("usage: meld <check|run|fmt [--check]|repl|doctor|lib|pack> [file|lang]");
             2
         }
     };
@@ -85,19 +86,23 @@ fn rebase_arg(arg: &str, root: &Path, pack_dir: &Path) -> String {
     if p.is_absolute() {
         return arg.to_string();
     }
-    // JUDGMENT CALL: existing packs use project-root-relative paths. Honor
-    // those first, then fall back to the pack directory so an installed pack
-    // whose runner.toml still names the original path can find its worker by
-    // basename (spec/registry.md §6).
+    // JUDGMENT CALL: prefer paths inside the discovered pack, then the
+    // pack directory by basename, and only then the project root. The old
+    // order could silently run a built-in worker when `meld.lock` pinned an
+    // updated installed library with the same id (spec/libraries.md §5).
+    let local = pack_dir.join(p);
+    if local.exists() {
+        return local.to_string_lossy().into_owned();
+    }
+    if let Some(name) = p.file_name() {
+        let local_name = pack_dir.join(name);
+        if local_name.exists() {
+            return local_name.to_string_lossy().into_owned();
+        }
+    }
     let rooted = root.join(p);
     if rooted.exists() {
         return rooted.to_string_lossy().into_owned();
-    }
-    if let Some(name) = p.file_name() {
-        let local = pack_dir.join(name);
-        if local.exists() {
-            return local.to_string_lossy().into_owned();
-        }
     }
     arg.to_string()
 }
@@ -110,7 +115,11 @@ fn load_pack_dir(root: &Path, pack_dir: &Path) -> Option<PackInfo> {
     let aliases = manifest
         .get("aliases")
         .and_then(toml::Value::as_array)
-        .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+        .map(|xs| {
+            xs.iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let tier = manifest
         .get("tier")
@@ -136,7 +145,11 @@ fn load_pack_dir(root: &Path, pack_dir: &Path) -> Option<PackInfo> {
             let args: Vec<String> = runner
                 .get("args")
                 .and_then(toml::Value::as_array)
-                .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                .map(|xs| {
+                    xs.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
                 .unwrap_or_default();
             Some(RunnerSpec {
                 program: rebase_arg(&program, root, pack_dir),
@@ -165,16 +178,30 @@ fn load_pack_dir(root: &Path, pack_dir: &Path) -> Option<PackInfo> {
     })
 }
 
+fn insert_pack(out: &mut HashMap<String, PackInfo>, root: &Path, pack_dir: &Path) {
+    let Some(info) = load_pack_dir(root, pack_dir) else {
+        return;
+    };
+    let mut names = vec![info.id.clone()];
+    names.extend(info.aliases.clone());
+    for name in names.into_iter().filter(|n| !n.is_empty()) {
+        out.insert(name, info.clone());
+    }
+}
+
 fn discover_packs(root: &Path) -> HashMap<String, PackInfo> {
     let mut out = HashMap::new();
     let mut scan_roots = vec![root.join("packs")];
+    let mut extra_roots = Vec::new();
     // JUDGMENT CALL: MELD_PACKS is a colon-separated list of directories that
     // each contain pack subdirectories (or are a pack themselves). It lets a
     // third-party pack be used from tests/fixtures without copying it into the
     // checked-in packs/ tree; no core edit is needed.
     if let Ok(extra) = std::env::var("MELD_PACKS") {
         for part in extra.split(':').filter(|p| !p.is_empty()) {
-            scan_roots.push(PathBuf::from(part));
+            let path = PathBuf::from(part);
+            extra_roots.push(path.clone());
+            scan_roots.push(path);
         }
     }
     for scan_root in scan_roots {
@@ -186,15 +213,19 @@ fn discover_packs(root: &Path) -> HashMap<String, PackInfo> {
             dirs.extend(entries.flatten().map(|e| e.path()));
         }
         for pack_dir in dirs {
-            let Some(info) = load_pack_dir(root, &pack_dir) else {
-                continue;
-            };
-            let mut names = vec![info.id.clone()];
-            names.extend(info.aliases.clone());
-            for name in names.into_iter().filter(|n| !n.is_empty()) {
-                out.insert(name, info.clone());
+            insert_pack(&mut out, root, &pack_dir);
+        }
+    }
+    // JUDGMENT CALL: imported libraries are inserted last so a project lock
+    // wins over a same-named built-in pack. A malformed lock is reported as a
+    // warning instead of breaking check/run; `meld-pack list` gives details.
+    match meld_lib::discover_imported(root, &extra_roots) {
+        Ok(imported) => {
+            for (_, dir) in imported {
+                insert_pack(&mut out, root, &dir);
             }
         }
+        Err(e) => eprintln!("meld: warning: cannot read {}: {e}", meld_lib::LOCK_FILE),
     }
     out
 }
@@ -297,16 +328,21 @@ fn cmd_check(path: Option<&str>) -> i32 {
             problems += 1;
         }
     }
-    if problems == 0 { 0 } else { 1 }
+    if problems == 0 {
+        0
+    } else {
+        1
+    }
 }
 
 fn spawn_worker(
     pack: &PackInfo,
     t3: &Arc<meld_t3::T3Backend>,
 ) -> meld_core::error::Result<meld_t2::T2Backend> {
-    let runner = pack.runner.as_ref().ok_or_else(|| {
-        MeldError::UnknownLang(format!("{} has no T2 runner.toml", pack.id))
-    })?;
+    let runner = pack
+        .runner
+        .as_ref()
+        .ok_or_else(|| MeldError::UnknownLang(format!("{} has no T2 runner.toml", pack.id)))?;
     let args: Vec<&str> = runner.args.iter().map(String::as_str).collect();
     let mut backend = meld_t2::T2Backend::spawn(&runner.program, &args)?;
     let t3 = Arc::clone(t3);
@@ -452,7 +488,15 @@ fn cmd_run(path: Option<&str>) -> i32 {
                         .filter(|i| i.region_id == expr.id)
                         .cloned()
                         .collect::<Vec<_>>();
-                    render_inline(expr, style, &packs, &inline_imports, &mut cache, &bridge, &t3)
+                    render_inline(
+                        expr,
+                        style,
+                        &packs,
+                        &inline_imports,
+                        &mut cache,
+                        &bridge,
+                        &t3,
+                    )
                 });
                 let code = match code {
                     Ok(v) => v,
@@ -549,7 +593,11 @@ fn format_region_body(pack: Option<&PackInfo>, body: &str) -> String {
         Ok(v) => v,
         Err(_) => return format_glue(body),
     };
-    let Some(command) = doc.get("formatter").and_then(|v| v.get("command")).and_then(toml::Value::as_str) else {
+    let Some(command) = doc
+        .get("formatter")
+        .and_then(|v| v.get("command"))
+        .and_then(toml::Value::as_str)
+    else {
         return format_glue(body);
     };
     let args = doc
@@ -753,6 +801,74 @@ fn cmd_doctor() -> i32 {
     ids.dedup();
     for (id, tier) in ids {
         println!("pack {id}: {tier}");
+    }
+    let root = meld_lib::library_root();
+    match meld_lib::InstalledIndex::load(&root) {
+        Ok(index) => {
+            for entry in index.libraries.values() {
+                let status = if root.join(&entry.path).is_dir() {
+                    "ok"
+                } else {
+                    "MISSING"
+                };
+                println!(
+                    "library {}: {} (tier={} level={} status={})",
+                    entry.id, entry.version, entry.tier, entry.level, status
+                );
+            }
+        }
+        Err(e) => eprintln!("meld: warning: invalid library index: {e}"),
+    }
+    match meld_lib::ProjectLock::load(&project_root()) {
+        Ok(lock) => {
+            for (id, version) in &lock.libraries {
+                println!("import {id}: {version}");
+            }
+        }
+        Err(e) => eprintln!("meld: warning: invalid {}: {e}", meld_lib::LOCK_FILE),
+    }
+    0
+}
+
+/// Show the installed/imported split. This is intentionally a read-only view;
+/// installs and removals live in the `meld-pack` terminal app.
+fn cmd_library() -> i32 {
+    let root = meld_lib::library_root();
+    let project = project_root();
+    let index = match meld_lib::InstalledIndex::load(&root) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("meld: {e}");
+            return 1;
+        }
+    };
+    let lock = match meld_lib::ProjectLock::load(&project) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("meld: {e}");
+            return 1;
+        }
+    };
+    println!("library root: {}", root.display());
+    if index.libraries.is_empty() {
+        println!("installed: (none; use meld-pack install <lang>)");
+    }
+    for entry in index.libraries.values() {
+        let status = if root.join(&entry.path).is_dir() {
+            "ok"
+        } else {
+            "MISSING"
+        };
+        println!(
+            "installed {} {} tier={} level={} status={} source={}",
+            entry.id, entry.version, entry.tier, entry.level, status, entry.source
+        );
+    }
+    if lock.libraries.is_empty() {
+        println!("imported: (none; use meld-pack import <lang>)");
+    }
+    for (id, version) in &lock.libraries {
+        println!("imported {id}: {version}");
     }
     0
 }

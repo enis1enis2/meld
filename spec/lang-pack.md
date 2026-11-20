@@ -7,6 +7,7 @@ Status: normative. Derived from `project.md` §4, §5, §9.
 ```
 packs/<lang-id>/
   pack.toml          # required manifest
+  library.toml       # install/import manifest (spec/libraries.md)
   grammar/           # tree-sitter grammar source or pinned reference
   queries/           # copied highlight/injection queries (tools/sync_grammars.py)
   region_end.*       # end scanner (Wasm or built-in)
@@ -21,15 +22,19 @@ packs/<lang-id>/
   tests/             # conformance cases
 ```
 
-Only `pack.toml` is mandatory. The remaining files are required by the features
-a pack declares: `runner.toml` for auto-launched T2, `inline.toml` when the pack
-can contain inline islands, `lsp.toml`/`formatter.toml` for editor tooling, and
-the integrity files for strict publication (`spec/registry.md` §1).
+Only `pack.toml` is mandatory for a pack used directly from a directory.
+`library.toml` is mandatory for an installable Lang Library
+(`spec/libraries.md`); every checked-in and generated pack ships one. The
+remaining files are required by the features a pack declares: `runner.toml` for
+auto-launched T2, `inline.toml` when the pack can contain inline islands,
+`lsp.toml`/`formatter.toml` for editor tooling, and the integrity files for
+strict publication (`spec/registry.md` §1).
 
 ## 2. `pack.toml` fields (v1)
 
 ```toml
 id = "python"                  # required, unique
+version = "0.1.0"              # required for Lang Libraries; exact version
 aliases = ["py", "python3"]    # optional
 extensions = ["py"]            # optional, used by auto-detect
 tree_sitter = { crate = "tree-sitter-python", rev = "pinned" }
@@ -44,10 +49,13 @@ low-confidence detection; it does not validate pack manifests. `packtool verify`
 validates `pack.toml` tiers/levels, integrity files, and (for strict packs) the
 grammar pin. Launching a T2 pack at `level >= L1` additionally requires a usable
 `runner.toml` (§4.1), which is a runtime discovery rule rather than a checksum
-rule. **JUDGMENT CALL:** a grammar rev is pinned when it is either an opaque
-`pinned:<ref>` or an exact crate version (`0.25.0` / `=0.25.0`). The checked-in
-packs use exact versions so `tools/sync_grammars.py` can consume the same field;
-floating refs such as `main` are not pins (project.md §9).
+rule. `meld_lib::validate_library_dir` additionally checks that a `library.toml`
+agrees with `pack.toml` id, version and aliases, and that every declared export
+exists (`spec/libraries.md` §2). **JUDGMENT CALL:** a grammar rev is pinned when
+it is either an opaque `pinned:<ref>` or an exact crate version (`0.25.0` /
+`=0.25.0`). The checked-in packs use exact versions so `tools/sync_grammars.py`
+can consume the same field; floating refs such as `main` are not pins
+(project.md §9).
 
 ## 3. Conformance levels
 
@@ -82,9 +90,11 @@ idle_timeout_ms = 30000
 ```
 
 `meld run` discovers this file at runtime; no language is hardcoded in the CLI.
-Command and argument paths are rebased project-root first, then pack-directory
-by basename, so an installed pack keeps working without a core edit. Set
-`MELD_ROOT` to override that project root and `MELD_PACKS` to add pack roots.
+Command and argument paths are rebased pack-directory first, then
+pack-directory by basename, and only then project-root, so an imported library
+cannot be shadowed by a same-named built-in worker. Set `MELD_ROOT` to override
+the project root, `MELD_PACKS` to add pack roots, and `MELD_LIB_ROOT` to move the
+installed library root (`spec/libraries.md` §3–§5).
 **JUDGMENT CALL:** only `tier = "T2"` with `protocol = "meld-t2/1"` is
 auto-launched. Other tiers use explicit host APIs and are never guessed from a
 manifest.
@@ -135,9 +145,11 @@ rebasing rule.
 ## 5. Generator contract (Phase 1)
 
 `tools/gen_pack.py <lang-id> --grammar <pinned-ref>` creates a minimal L0 pack:
-manifest, grammar reference, empty end scanner stub, highlight query, and a
-feeder test. This is the "cheap route to a long tail" from project.md §4. The
-generator never downloads or executes grammar code; it writes references only.
+manifest, `library.toml`, grammar reference, empty end scanner stub, highlight
+query, and a feeder test. This is the "cheap route to a long tail" from
+project.md §4, and generated packs are libraries from birth
+(`spec/libraries.md` §2). The generator never downloads or executes grammar
+code; it writes references only.
 
 **JUDGMENT CALL:** `--strict` adds an exact crate pin, aliases/extensions,
 version, LSP fallback keywords, and a raw-delimiter feeder fixture so a
@@ -153,9 +165,15 @@ emits `generated-placeholder` and `strict = false`.
 - Signing and registry are Phase 7 (`spec/registry.md`): `checksums.sha256`
   covers every payload file and `signature.hmac` authenticates it. A strict
   pack refuses to publish or install without both files.
-- `meld doctor` reports toolchain state; it never installs (project.md §9).
+- Installation and import are the Lang Library layer (`spec/libraries.md`):
+  `meld-pack` verifies data in the git checkout and at the destination, copies
+  no symlinks, executes no pack code, and records exact versions in
+  `meld.lock`.
+- `meld doctor` reports toolchain state and library drift; it never installs
+  (project.md §9).
 
 ## 7. Example minimal pack
 
-See `packs/python/` and `packs/javascript/` for L1/L2 examples and
-`packs/syntax/` for generated L0 packs.
+See `packs/python/` and `packs/javascript/` for L1/L2 examples,
+`packs/bash/` for an executable L1 Lang Library, and any generated pack for the
+`library.toml` shape.

@@ -7,6 +7,8 @@ members = [
     "crates/meld-grammars",
     "crates/meld-t3",
     "crates/meld-lsp",
+    "crates/meld-lib",
+    "crates/meld-installer",
 ]
 resolver = "2"
 

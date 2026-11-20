@@ -1,6 +1,7 @@
 # JUDGMENT CALL: grammar version is pinned here and in crates/meld-grammars/Cargo.toml.
 # Queries are copied from the published crate by tools/sync_grammars.py.
 id = "go"
+version = "0.1.0"
 aliases = []
 extensions = []
 tier = "L0"

@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_MANIFEST = '''id = "{lang}"
 aliases = []
 extensions = []
+version = "{version}"
 tier = "L0"
 level = "L0"
 capabilities = ["syntax"]
@@ -40,7 +41,7 @@ STRICT_MANIFEST = '''# JUDGMENT CALL: exact crate version pinned here and in
 id = "{lang}"
 aliases = [{aliases}]
 extensions = [{extensions}]
-version = "0.1.0"
+version = "{version}"
 tier = "L0"
 level = "L0"
 capabilities = ["syntax"]
@@ -79,6 +80,18 @@ extension = "{extension}"
 keywords = [{keywords}]
 '''
 
+TEMPLATE_LIBRARY = '''# JUDGMENT CALL: every generated pack is immediately an installable Lang
+# Library (spec/libraries.md). `exports` lists the relative files a consumer
+# may rely on; it is data, not executable code.
+api = "meld-lang-library/1"
+kind = "lang"
+id = "{lang}"
+name = "{name}"
+version = "{version}"
+aliases = [{aliases}]
+exports = [{exports}]
+'''
+
 
 def _toml_strings(items: list[str]) -> str:
     return ", ".join(f'"{item}"' for item in items)
@@ -93,6 +106,8 @@ def main() -> int:
     ap.add_argument("--extensions", default="", help="comma-separated file extensions")
     ap.add_argument("--keywords", default="", help="comma-separated LSP fallback keywords")
     ap.add_argument("--language-id", default=None, help="LSP language id (default: pack id)")
+    ap.add_argument("--name", default=None, help="human-readable library name")
+    ap.add_argument("--version", default="0.1.0", help="library version (default: 0.1.0)")
     ap.add_argument("--strict", action="store_true", help="emit an integrity-ready pinned L0 pack")
     args = ap.parse_args()
     lang = args.lang
@@ -119,11 +134,14 @@ def main() -> int:
             lang=lang,
             aliases=_toml_strings(aliases),
             extensions=_toml_strings(extensions),
+            version=args.version,
             crate=crate,
             rev=rev,
         )
     else:
-        manifest = TEMPLATE_MANIFEST.format(lang=lang).replace("generated-placeholder", rev)
+        manifest = TEMPLATE_MANIFEST.format(lang=lang, version=args.version).replace(
+            "generated-placeholder", rev
+        )
     (pack / "pack.toml").write_text(manifest, encoding="utf-8")
 
     (pack / "grammar" / "REFERENCE.md").write_text(
@@ -153,7 +171,27 @@ def main() -> int:
         f"@{lang}##\"\n  # generated feeder fixture\n\"##\n",
         encoding="utf-8",
     )
-    print(f"generated {'strict L0' if args.strict else 'L0'} pack: {pack}")
+    # JUDGMENT CALL: generated L0 packs are libraries from birth. A later T2
+    # upgrade adds runner.toml and the update tool extends `exports`.
+    exports = [
+        "pack.toml",
+        "grammar/REFERENCE.md",
+        "queries/highlights.scm",
+        "queries/injections.scm",
+        "region_end.wat",
+        "tests/feed.meld",
+    ]
+    (pack / "library.toml").write_text(
+        TEMPLATE_LIBRARY.format(
+            lang=lang,
+            name=args.name or lang.title(),
+            version=args.version,
+            aliases=_toml_strings(aliases),
+            exports=_toml_strings(exports),
+        ),
+        encoding="utf-8",
+    )
+    print(f"generated {'strict L0' if args.strict else 'L0'} library: {pack}")
     return 0
 
 
