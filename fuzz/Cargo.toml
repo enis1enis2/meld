@@ -1,0 +1,30 @@
+[package]
+name = "meld-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+serde_json = "=1.0.154"
+meld-core = { path = "../crates/meld-core" }
+meld-value = { path = "../crates/meld-value" }
+
+[[bin]]
+name = "splitter"
+path = "fuzz_targets/splitter.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "value_decode"
+path = "fuzz_targets/value_decode.rs"
+test = false
+doc = false
+
+# Deliberately a separate workspace: the main Cargo.lock and normal workspace
+# builds are unaffected. Run with `cargo fuzz run <target>` from this directory.
+[workspace]
