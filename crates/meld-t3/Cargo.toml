@@ -8,9 +8,17 @@ license.workspace = true
 [dependencies]
 meld-core = { path = "../meld-core" }
 meld-value = { path = "../meld-value" }
-# JUDGMENT CALL: wasmtime 50.0.3 is the verified Component Model runtime.
-# The compiled demo component is committed, so tests need no wasm toolchain.
-wasmtime = { version = "=50.0.3", features = ["component-model"] }
+# JUDGMENT CALL: wasmtime 36.0.23 is the last Component Model runtime line that
+# supports the workspace MSRV (Rust 1.90). Pin it exactly so a dependency bump
+# cannot silently raise the MSRV or change trap semantics. The compiled demo
+# component is committed, so tests need no wasm toolchain.
+wasmtime = { version = "=36.0.23", features = [
+    "component-model",
+    "cranelift",
+    "runtime",
+    "std",
+    "pooling-allocator",
+] }
 serde_json = "1.0.154"
 
 [dev-dependencies]

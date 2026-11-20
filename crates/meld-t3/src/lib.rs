@@ -13,8 +13,87 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use wasmtime::component::{Component, Linker};
-use wasmtime::{Engine, Store};
+use wasmtime::{
+    Config, Engine, PoolingAllocationConfig, Store, StoreLimits, StoreLimitsBuilder, Trap,
+};
+
+/// Deterministic instruction budget per T3 call. Exhaustion is a sandbox
+/// denial, not a generic Wasmtime error.
+const T3_FUEL_LIMIT: u64 = 2_000_000;
+/// Coarse wall-clock backstop. A watchdog increments the engine epoch once
+/// after this duration; stores use a one-tick deadline, so the guest is trapped
+/// on its next epoch check.
+const T3_EPOCH_TIMEOUT: Duration = Duration::from_millis(500);
+/// 8 MiB is ample for the committed demo components and small enough to keep a
+/// hostile guest from pinning host memory.
+const T3_MAX_MEMORY_BYTES: usize = 8 * 1024 * 1024;
+/// Host-side allocation budget for one guest-to-host component call.
+const T3_HOSTCALL_FUEL: usize = 64 * 1024;
+/// Cap on simultaneously live component handles (resources are a cheap DoS).
+const T3_MAX_COMPONENT_HANDLES: usize = 256;
+/// Refuse oversized binaries before JIT compilation, which is itself costly.
+const T3_MAX_COMPONENT_BYTES: usize = 16 * 1024 * 1024;
+
+/// Build the single hardened Wasmtime configuration used by every T3 call.
+///
+/// JUDGMENT CALL: the pooling allocator plus store limits give deterministic
+/// caps on instances, memories and tables; fuel and epochs bound execution even
+/// when a guest never returns. Debug info, backtraces and concurrency-heavy
+/// proposals are off so a hostile component cannot turn diagnostics or threads
+/// into an escape or resource-amplification channel.
+pub fn strict_config() -> Config {
+    let mut config = Config::new();
+    config.wasm_component_model(true);
+    config.consume_fuel(true);
+    config.epoch_interruption(true);
+    config.debug_info(false);
+    config.wasm_backtrace(false);
+    config.wasm_threads(false);
+    config.wasm_multi_memory(false);
+    config.wasm_tail_call(false);
+    config.wasm_gc(false);
+    config.max_wasm_stack(1 * 1024 * 1024);
+
+    let mut pooling = PoolingAllocationConfig::new();
+    pooling.total_component_instances(1);
+    pooling.total_core_instances(4);
+    pooling.total_memories(4);
+    pooling.total_tables(4);
+    pooling.table_elements(1024);
+    pooling.max_memory_size(T3_MAX_MEMORY_BYTES);
+    pooling.max_component_instance_size(1024 * 1024);
+    config.allocation_strategy(pooling);
+    config
+}
+
+/// Engine built from [`strict_config`]. Exposed for hosts that need to create
+/// related Wasmtime values against exactly the same hardening posture.
+pub fn strict_engine() -> Engine {
+    Engine::new(&strict_config()).expect("strict T3 config must be valid")
+}
+
+/// Convert Wasmtime failures into Meld errors without leaking a raw backtrace.
+/// Resource-limit traps are sandbox denials; epoch interruption is a worker
+/// timeout; ordinary traps are reported by code only.
+fn map_wasm_error(context: &str, error: wasmtime::Error) -> MeldError {
+    if let Some(trap) = error.downcast_ref::<Trap>() {
+        return match trap {
+            Trap::OutOfFuel => MeldError::SandboxDenied(format!("{context}: fuel budget exhausted")),
+            Trap::Interrupt => {
+                MeldError::WorkerCrashed(format!("{context}: wall-clock deadline exceeded"))
+            }
+            Trap::StackOverflow => {
+                MeldError::SandboxDenied(format!("{context}: wasm stack limit exceeded"))
+            }
+            other => MeldError::Wasm(format!("{context}: wasm trap {other:?}")),
+        };
+    }
+    MeldError::Wasm(format!("{context}: {error:#}"))
+}
 
 /// The demo component's canonical export, derived from `wit/meld.wit`.
 pub const ADD_EXPORT: &str = "meld:demo/ops@0.1.0#add";
@@ -29,9 +108,23 @@ pub struct T3Backend {
 
 impl T3Backend {
     pub fn from_bytes(wasm: &[u8]) -> Result<Self> {
-        let engine = Engine::default();
+        if wasm.is_empty() || wasm.len() > T3_MAX_COMPONENT_BYTES {
+            return Err(MeldError::SandboxDenied(format!(
+                "T3 component size {} outside 1..={T3_MAX_COMPONENT_BYTES} bytes",
+                wasm.len()
+            )));
+        }
+        let engine = strict_engine();
         let component = Component::new(&engine, wasm)
             .map_err(|e| MeldError::Wasm(format!("component decode: {e}")))?;
+        // No host functions are registered anywhere in T3. A component that
+        // imports anything is therefore rejected up front rather than allowed
+        // to fail late with an ambiguous linker error.
+        if component.component_type().imports(&engine).next().is_some() {
+            return Err(MeldError::SandboxDenied(
+                "T3 component declares imports; host imports are disabled".to_string(),
+            ));
+        }
         Ok(Self { engine, component })
     }
 
@@ -40,13 +133,25 @@ impl T3Backend {
         Self::from_bytes(include_bytes!("../component/demo.component.wasm"))
     }
 
+    /// Start a per-call watchdog. The channel lets a fast call cancel the
+    /// thread immediately; only a genuine timeout increments the engine epoch.
+    fn start_watchdog(&self) -> Result<(mpsc::Sender<()>, thread::JoinHandle<()>)> {
+        let (cancel_tx, cancel_rx) = mpsc::channel();
+        let engine = self.engine.clone();
+        let handle = thread::Builder::new()
+            .name("meld-t3-epoch".to_string())
+            .spawn(move || {
+                if cancel_rx.recv_timeout(T3_EPOCH_TIMEOUT).is_err() {
+                    engine.increment_epoch();
+                }
+            })
+            .map_err(|e| MeldError::WorkerCrashed(format!("T3 watchdog spawn: {e}")))?;
+        Ok((cancel_tx, handle))
+    }
+
     /// Call a WIT `func(a: s64, b: s64) -> s64` export with typed arguments.
+    /// Every call gets a fresh bounded store; no state leaks between calls.
     pub fn call_i64_pair(&self, export: &str, a: i64, b: i64) -> Result<i64> {
-        let mut store = Store::new(&self.engine, ());
-        let linker = Linker::new(&self.engine);
-        let instance = linker
-            .instantiate(&mut store, &self.component)
-            .map_err(|e| MeldError::Wasm(format!("instantiate: {e}")))?;
         // JUDGMENT CALL: componentizing a WIT interface nests functions under
         // an interface instance. Resolve the two-level export index instead of
         // assuming a flat core-Wasm export name.
@@ -61,14 +166,36 @@ impl T3Backend {
             .component
             .get_export_index(Some(&iface_index), func_name)
             .ok_or_else(|| MeldError::Wasm(format!("no function export {export}")))?;
-        // JUDGMENT CALL: Wasmtime models component results as a named list;
-        // a single s64 result is therefore the unary tuple `(i64,)`, not `i64`.
-        let func = instance
-            .get_typed_func::<(i64, i64), (i64,)>(&mut store, &func_index)
-            .map_err(|e| MeldError::Wasm(format!("typed export {export}: {e}")))?;
-        func.call(&mut store, (a, b))
-            .map(|(result,)| result)
-            .map_err(|e| MeldError::Wasm(format!("call {export}: {e}")))
+
+        let (cancel, watchdog) = self.start_watchdog()?;
+        let result = (|| -> wasmtime::Result<i64> {
+            let limits = StoreLimitsBuilder::new()
+                .memory_size(T3_MAX_MEMORY_BYTES)
+                .table_elements(1024)
+                .instances(1)
+                .tables(4)
+                .memories(4)
+                .trap_on_grow_failure(true)
+                .build();
+            let mut store: Store<StoreLimits> = Store::new(&self.engine, limits);
+            store.limiter(|data| data);
+            store.set_fuel(T3_FUEL_LIMIT)?;
+            store.set_epoch_deadline(1);
+            store.epoch_deadline_trap();
+            store.set_hostcall_fuel(T3_HOSTCALL_FUEL);
+            store.set_max_component_handles(T3_MAX_COMPONENT_HANDLES);
+
+            let linker = Linker::new(&self.engine);
+            let instance = linker.instantiate(&mut store, &self.component)?;
+            // JUDGMENT CALL: Wasmtime models component results as a named list;
+            // a single s64 result is therefore the unary tuple `(i64,)`, not `i64`.
+            let func = instance.get_typed_func::<(i64, i64), (i64,)>(&mut store, &func_index)?;
+            let (result,) = func.call(&mut store, (a, b))?;
+            Ok(result)
+        })();
+        let _ = cancel.send(());
+        let _ = watchdog.join();
+        result.map_err(|e| map_wasm_error(&format!("T3 {export}"), e))
     }
 
     /// Host-callback entry point used by the T2 bridge. Resolves reserved
