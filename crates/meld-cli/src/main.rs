@@ -248,13 +248,12 @@ fn discover_packs(root: &Path) -> HashMap<String, PackInfo> {
     let mut out = HashMap::new();
     let mut scan_roots = vec![root.join("packs")];
     let mut extra_roots = Vec::new();
-    // JUDGMENT CALL: MELD_PACKS is a colon-separated list of directories that
-    // each contain pack subdirectories (or are a pack themselves). It lets a
-    // third-party pack be used from tests/fixtures without copying it into the
-    // checked-in packs/ tree; no core edit is needed.
+    // JUDGMENT CALL 43: MELD_PACKS uses the host path-list separator via
+    // `std::env::split_paths`. A literal ':' split loses a Windows drive letter
+    // and turns `D:\...` into a drive-relative path, so a pack in %TEMP% on C:
+    // was silently ignored and its scanner metadata never registered.
     if let Ok(extra) = std::env::var("MELD_PACKS") {
-        for part in extra.split(':').filter(|p| !p.is_empty()) {
-            let path = PathBuf::from(part);
+        for path in std::env::split_paths(&extra).filter(|p| !p.as_os_str().is_empty()) {
             extra_roots.push(path.clone());
             scan_roots.push(path);
         }

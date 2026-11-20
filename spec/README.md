@@ -270,6 +270,11 @@ Additional judgment calls (also inline in the affected specs/code):
     now rewrites only those exact first components before symlink validation,
     so system temp roots work while pack-controlled symlinks in later components
     still fail closed (CI job 136453004367).
+43. `MELD_PACKS` is parsed with `std::env::split_paths`, the host path-list
+    separator. Splitting on a literal ':' dropped Windows drive letters, so a
+    fixture pack in `%TEMP%` on `C:` was searched on `D:` and its scanner
+    metadata was silently ignored (CI job 136453004332). The LSP discovery path
+    uses the same parser.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

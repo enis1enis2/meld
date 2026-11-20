@@ -23,11 +23,12 @@ pub struct LspSpec {
 /// The server command is rebased like runner commands so an installed pack
 /// keeps working without a core edit (project.md §7, spec/registry.md §6).
 pub fn discover(root: &Path) -> HashMap<String, LspSpec> {
+    // JUDGMENT CALL 43: use the platform path-list separator so a Windows drive
+    // letter is preserved; see meld-cli's `discover_packs` for the failure mode.
     let extra: Vec<PathBuf> = std::env::var("MELD_PACKS")
         .map(|v| {
-            v.split(':')
-                .filter(|p| !p.is_empty())
-                .map(PathBuf::from)
+            std::env::split_paths(&v)
+                .filter(|p| !p.as_os_str().is_empty())
                 .collect()
         })
         .unwrap_or_default();
