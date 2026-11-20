@@ -131,6 +131,11 @@ impl T3Backend {
     }
 
     /// Load the committed Rust demo component (see tools/build_t3_guest.sh).
+    ///
+    /// PROVENANCE NOTE: `component/demo.component.wasm` is a committed binary
+    /// artifact. CI/release automation must verify its provenance (for example,
+    /// by rebuilding from `guest/` and `wit/meld.wit` and comparing a recorded
+    /// digest). This code intentionally asserts no checksum it did not verify.
     pub fn demo() -> Result<Self> {
         Self::from_bytes(include_bytes!("../component/demo.component.wasm"))
     }

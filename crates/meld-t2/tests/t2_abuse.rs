@@ -101,6 +101,27 @@ fn oversized_stdout_line_is_rejected() {
 }
 
 #[test]
+fn oversized_stdout_lines_are_rejected_across_nearby_sizes() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    // Property-style coverage around the 1 MiB line ceiling. The worker stays
+    // alive after flushing so the host observes the cap while it can still kill
+    // the process tree.
+    for extra in [1usize, 4096, 64 * 1024] {
+        let size = 1024 * 1024 + extra;
+        let script = format!(
+            "import sys\nsys.stdout.write('x' * {size} + '\\n')\nsys.stdout.flush()\nsys.stdin.readline()\n"
+        );
+        let mut backend = spawn(&script);
+        let error = backend.ensure_initialized("python").unwrap_err();
+        assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
+        assert!(error.to_string().contains("line exceeds"));
+    }
+}
+
+#[test]
 fn unknown_capability_is_a_hard_error() {
     if !python3_available() {
         eprintln!("skipping: python3 is unavailable");
@@ -177,6 +198,24 @@ fn stderr_tail_is_included_in_crash_report() {
 }
 
 #[test]
+fn stderr_cap_keeps_only_the_tail() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    // The host must drain a large stderr stream without deadlocking, retain at
+    // most the bounded snapshot, and report the most recent diagnostic.
+    let mut backend = spawn(
+        "import sys\nhead = 'HEAD-SENTINEL\\n'\ntail = 'TAIL-SENTINEL\\n'\nsys.stderr.write(head + 'A' * (64 * 1024 - len(head) - len(tail)) + tail)\nsys.stderr.flush()\nsys.stdin.readline()\nsys.exit(3)\n",
+    );
+    let error = backend.ensure_initialized("python").unwrap_err();
+    assert!(matches!(error, MeldError::WorkerCrashed(_)), "{error:?}");
+    let message = error.to_string();
+    assert!(message.contains("TAIL-SENTINEL"), "{message}");
+    assert!(!message.contains("HEAD-SENTINEL"), "{message}");
+}
+
+#[test]
 fn host_call_allowlist_denies_unknown_name() {
     if !python3_available() {
         eprintln!("skipping: python3 is unavailable");
@@ -207,6 +246,53 @@ fn host_call_allowlist_denies_unknown_name() {
         bridge.values.get("code"),
         Some(&Value::String("SandboxDenied".to_string()))
     );
+}
+
+#[test]
+fn allowlisted_host_calls_are_resolved_and_unknown_names_are_denied() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let script = format!(
+        "{HANDSHAKE}\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L2', 'caps': ['values', 'stdout']}}}})\n\
+         req = json.loads(sys.stdin.readline())\n\
+         names = ['meld:t3/add', 'meld:custom/echo', 'meld:evil/run']\n\
+         observed = []\n\
+         for index, name in enumerate(names):\n\
+         \x20   emit({{'id': -(index + 1), 'method': '__host_call', 'params': {{'fn': name, 'args': []}}}})\n\
+         \x20   response = json.loads(sys.stdin.readline())\n\
+         \x20   if 'error' in response:\n\
+         \x20       observed.append(response['error']['code'])\n\
+         \x20   else:\n\
+         \x20       observed.append(response['result']['value'])\n\
+         emit({{'id': req['id'], 'result': {{'stdout': observed, 'exports': []}}}})\n"
+    );
+    let mut backend = spawn(&script);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    backend.set_host_call(move |name, _| {
+        observed.fetch_add(1, Ordering::SeqCst);
+        Ok(Value::String(format!("ok:{name}")))
+    });
+    backend
+        .allow_host_call("meld:custom/echo")
+        .expect("exact allowlist entry");
+
+    let stdout = backend
+        .run(&job("allowlist"), &mut Bridge::default())
+        .expect("execute");
+    assert_eq!(
+        stdout,
+        vec![
+            "ok:meld:t3/add".to_string(),
+            "ok:meld:custom/echo".to_string(),
+            "SandboxDenied".to_string(),
+        ]
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
 }
 
 #[test]
@@ -362,5 +448,39 @@ fn l1_worker_cannot_issue_host_calls() {
         .run(&job("call"), &mut Bridge::default())
         .expect("execute");
     assert!(!called.load(Ordering::SeqCst), "L1 host call must not run");
+    assert_eq!(stdout, vec!["SandboxDenied"]);
+}
+
+#[test]
+fn host_calls_during_initialization_are_denied() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let script = format!(
+        "{HANDSHAKE}\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': -1, 'method': '__host_call', 'params': {{'fn': 'meld:t3/add', 'args': []}}}})\n\
+         response = json.loads(sys.stdin.readline())\n\
+         code = response.get('error', {{}}).get('code')\n\
+         emit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L2', 'caps': ['values', 'stdout']}}}})\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': req['id'], 'result': {{'stdout': [code], 'exports': []}}}})\n"
+    );
+    let mut backend = spawn(&script);
+    let called = Arc::new(AtomicBool::new(false));
+    let observed = Arc::clone(&called);
+    backend.set_host_call(move |_, _| {
+        observed.store(true, Ordering::SeqCst);
+        Ok(Value::int(42))
+    });
+
+    let stdout = backend
+        .run(&job("pre-init"), &mut Bridge::default())
+        .expect("execute after denied pre-init call");
+    assert!(
+        !called.load(Ordering::SeqCst),
+        "pre-init host call must not run"
+    );
     assert_eq!(stdout, vec!["SandboxDenied"]);
 }

@@ -728,3 +728,51 @@ impl Drop for T2Backend {
         self.terminate();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Property-style check for the host-side caps that keep T2 bounded before
+    /// a worker is spawned: every requested value is clamped to the T2 ceiling,
+    /// while already-stricter values survive unchanged.
+    #[test]
+    fn bounded_limits_always_tighten_to_t2_caps() {
+        let capped = bounded_limits(ResourceLimits {
+            max_line_bytes: Some(T2_MAX_LINE_BYTES as u64 * 4),
+            max_stderr_bytes: Some(T2_STDERR_CAP_BYTES * 4),
+            idle_timeout_ms: Some(T2_IDLE_TIMEOUT_MS * 6),
+            overall_timeout_ms: Some(T2_OVERALL_TIMEOUT_MS * 2),
+            ..Default::default()
+        });
+        assert_eq!(capped.max_line_bytes, Some(T2_MAX_LINE_BYTES as u64));
+        assert_eq!(capped.max_stderr_bytes, Some(T2_STDERR_CAP_BYTES));
+        assert_eq!(capped.idle_timeout_ms, Some(T2_IDLE_TIMEOUT_MS));
+        assert_eq!(capped.overall_timeout_ms, Some(T2_OVERALL_TIMEOUT_MS));
+
+        let stricter = bounded_limits(ResourceLimits {
+            max_line_bytes: Some(1024),
+            max_stderr_bytes: Some(2048),
+            idle_timeout_ms: Some(250),
+            overall_timeout_ms: Some(500),
+            ..Default::default()
+        });
+        assert_eq!(stricter.max_line_bytes, Some(1024));
+        assert_eq!(stricter.max_stderr_bytes, Some(2048));
+        assert_eq!(stricter.idle_timeout_ms, Some(250));
+        assert_eq!(stricter.overall_timeout_ms, Some(500));
+    }
+
+    /// The deadlines are enforced at read time, but the configuration must also
+    /// reject an inverted idle/overall pair before a worker starts.
+    #[test]
+    fn bounded_limits_do_not_relax_inverted_deadlines() {
+        let capped = bounded_limits(ResourceLimits {
+            idle_timeout_ms: Some(T2_OVERALL_TIMEOUT_MS * 4),
+            overall_timeout_ms: Some(T2_IDLE_TIMEOUT_MS),
+            ..Default::default()
+        });
+        assert_eq!(capped.idle_timeout_ms, Some(T2_IDLE_TIMEOUT_MS));
+        assert_eq!(capped.overall_timeout_ms, Some(T2_IDLE_TIMEOUT_MS));
+    }
+}
