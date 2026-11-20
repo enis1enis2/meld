@@ -1,6 +1,12 @@
 # Phase 6 — Composition research: go/no-go decision
 
-**Decision: NO-GO on adopting SGLR/SDF3 (or a full Raku-slang-style composed
+> **FROZEN RESEARCH ARTIFACT — DECISION RECORD, NOT PRODUCTION SOURCE.**
+> This directory records the Phase 6 experiment and its outcome. `prototype.py`
+> behaviour and `benchmark-results.json` are frozen. Production evolution belongs
+> in `crates/`, `packs/*/region_end.toml`, and the fuzz suites; see §10 for the
+> shipped design. Do not edit files here to change runtime behaviour.
+
+**Decision: NO-GO on adopting SGLR/SDF3 (or a full Raku "slang"-style composed
 grammar stack) for Meld at this time. GO on targeted scanner upgrades inside
 the existing island strategy.**
 
@@ -29,7 +35,18 @@ heredoc's end is grammar-dependent: it is the line matching the identifier
 named by the `<<~SQL` opener, with indentation rules that differ between
 `<<ID`, `<<-ID`, `<<~ID`, `<<"ID"` and `<<'ID'`. The Ruby heredoc grammar knows
 this. The host Meld splitter does not, and `BalancedBraceScanner`
-(`crates/meld-core/src/splitter.rs:55-130`) has no heredoc concept at all.
+(`crates/meld-core/src/splitter.rs:55-130`, **Phase 1 snapshot**) has no heredoc
+concept at all.
+
+> **Current-code pointer (review hardening, not Phase 1 evidence):** the shipped
+> `EndScanner` contract is `crates/meld-core/src/splitter.rs:63-72`, and the
+> registry lookup is `crates/meld-core/src/splitter.rs:404-413`. Pack profiles
+> are parsed and resolved in `crates/meld-core/src/region_end_spec.rs:77-128`
+> (`RegionEndSpec::parse`), `:142-183` (`scanner`) and `:186-192` (`register`).
+> The deterministic registries are built in `crates/meld-cli/src/main.rs:287-308`
+> (`scanner_registry`) and `crates/meld-lsp/src/packs.rs:63-80`
+> (`scanner_registry`). All other bare `file:line` references in this record
+> identify the Phase 1 tree and are retained for historical traceability only.
 
 Measured on the demo in `prototype.py`:
 
@@ -45,13 +62,15 @@ grammar switches:
   exit   SQL   @ byte 43
 ```
 
-The composed parser holds a stack of active grammars. It queues the heredoc at
-the `<<~SQL` opener, **switches mid-parse** to the heredoc slang at the
-following newline, ignores braces while inside it, pops back to the host slang
-on the `SQL` terminator line, and then finds the real closing `}`. It is
-"scannerless" only in the narrow SGLR sense — no token stream, rules applied
-directly to the character stream. It is deterministic and hand-written; it is
-not GLR, not SDF3, and does not preserve ambiguity.
+Prototype B is a **deterministic scannerless-style state machine**. It holds a
+stack of active grammars, queues the heredoc "slang" at the `<<~SQL` opener,
+**switches mid-parse** to that heredoc "slang" at the following newline, ignores
+braces while inside it, pops back to the host "slang" on the `SQL` terminator
+line, and then finds the real closing `}`. It is "scannerless" only in the
+narrow sense that there is no token stream: rules consume bytes directly. It is
+hand-written and deterministic; it is not GLR, not SGLR, not SDF3, and does not
+preserve ambiguity. Raku "slang" is an analogy for the mid-parse state switch,
+not an implementation dependency.
 
 ---
 
@@ -63,6 +82,14 @@ Reproduce with:
 cd /mnt/data/supervisor/share/project
 python3 research/composition/benchmark.py
 ```
+
+> **Stale reproduction path (review hardening note):** the absolute `cd` above
+> is the pre-relocation Phase 1 worktree. In the current worktree
+> (`/mnt/data/supervisor/media/backup_hdd/meld-production-relocation-20261120/share/project`),
+> run from the repository root instead. `benchmark-results.json::meta.results_path`
+> deliberately retains the stale path because the raw results file is frozen.
+> Re-running `benchmark.py` would rewrite that JSON, so it was not run during
+> review.
 
 Command actually run for this report: `python3 research/composition/benchmark.py`
 (Python 3.12.15, 240 cases, `--reps 200`, 48,000 parses per parser). Raw output
@@ -92,6 +119,13 @@ heredoc cases and passed **130/130 (100%)** of the benign cases.
 | Generic scanner (transliteration of `splitter.rs`) | 720.010 ms | 15.0002 µs |
 | Composed parser (Prototype B) | 1465.100 ms | 30.5229 µs |
 | **Slowdown** | | **2.04x** |
+
+> **2.03 vs 2.04 rounding note:** `benchmark-results.json` stores
+> `slowdown = 2.035`, derived from `1465.1 / 720.01 = 2.03479...`. Rounded
+> directly to two decimals, the exact ratio is **2.03x**; the historical
+> **2.04x** shown in this table and in §5 is a double-rounding artifact from
+> rounding the already-rounded `2.035` upward. Both labels describe the same
+> frozen measurement. The table and JSON were intentionally left unchanged.
 
 **Honest reading of these numbers:**
 
@@ -143,6 +177,15 @@ heredoc cases and passed **130/130 (100%)** of the benign cases.
   silently resolved by scanner heuristics. Real value, but not needed for the
   measured failure.
 
+**Terminology note — Rascal is not SDF3.** Rascal has its own syntax notation
+and parser generation; SDF/SDF3 specifications can be converted for use in
+Rascal, but that does not make Rascal syntax definitions SDF3 files or make a
+Rascal parser an SGLR runtime. No Rascal runtime or Rascal grammar was used in
+this experiment. Likewise, the Raku "slang" language in this record is an
+analogy for mid-parse grammar switching, not a claim that a Rascal or SDF3
+"slang" was adopted. See the
+[Rascal/ASF+SDF comparison](https://www.rascal-mpl.org/docs/WhyRascal/CompareWithOtherParadigms/ASFPlusSDF).
+
 ## 5. Cost and limitations
 
 - **2.04x on this microbenchmark** (~15 µs extra per region). In absolute terms
@@ -163,12 +206,15 @@ heredoc cases and passed **130/130 (100%)** of the benign cases.
   conflicts with the Lang Pack goal ("adding a language costs a manifest +
   grammar + runner, not a core change") unless "grammar" is redefined to mean
   SDF3 grammar.
-- **The actual root cause is wiring.** `crates/meld-cli/src/main.rs:30-36`
-  registers `BalancedBraceScanner` for every language, and `packs/python/
-  region_end.py` states the pack scanner is only a contract stub. The
-  `EndScanner` trait and the lookup in `splitter.rs:371-375` already support a
-  language-specific scanner; it is simply never supplied. `ruby` is not even
-  in the CLI's scanner map.
+- **The actual root cause was wiring in the Phase 1 snapshot.**
+  `crates/meld-cli/src/main.rs:30-36` (**Phase 1 snapshot**; current registry:
+  `crates/meld-cli/src/main.rs:287-308`) registered `BalancedBraceScanner` for
+  every language, and `packs/python/region_end.py` (**Phase 1 snapshot**) stated
+  that the pack scanner was only a contract stub. The `EndScanner` trait and the
+  lookup in `splitter.rs:371-375` (**Phase 1 snapshot**; current contract
+  `splitter.rs:63-72`, lookup `splitter.rs:404-413`, profiles
+  `region_end_spec.rs:77-192`) already supported a language-specific scanner; it
+  was simply never supplied. `ruby` was not even in the Phase 1 CLI scanner map.
 
 ## 6. Why the decision rule is not triggered
 
@@ -192,9 +238,12 @@ Therefore Strategy B is not justified now.
 ## 7. Recommended actions (ordered, all inside Strategy A)
 
 1. **Wire pack scanners into the Rust host** — replace the loop in
-   `meld-cli/src/main.rs:30-36` with real registered `EndScanner` implementations
-   (or the Wasm-loaded scanners planned for Phase 4), keeping
-   `BalancedBraceScanner` strictly as the fallback.
+   `meld-cli/src/main.rs:30-36` (**Phase 1 snapshot**; shipped as the
+   deterministic registry in `meld-cli/src/main.rs:287-308` and
+   `meld-lsp/src/packs.rs:63-80`) with real registered `EndScanner`
+   implementations (or the Wasm-loaded scanners planned for Phase 4), keeping
+   `BalancedBraceScanner` strictly as the fallback. See §10 for what actually
+   landed.
 2. **Add a Ruby pack with a heredoc-aware `find_region_end`** ported from
    `prototype.py` (`_match_heredoc_opener` + `HeredocGrammar`). Add `ruby` to the
    scanner map.
@@ -226,16 +275,25 @@ observed:
 
 | File | Purpose |
 |---|---|
-| `research/composition/prototype.py` | Prototype B: scannerless grammar-stack parser, the failure demo, and the transliterated Phase 1 scanner. Run directly for the demo. |
+| `research/composition/prototype.py` | Prototype B: deterministic scannerless-style state-machine grammar stack, the failure demo, and the transliterated Phase 1 scanner. Run directly for the demo. |
 | `research/composition/benchmark.py` | 240-case deterministic corpus, correctness + timing, drift check, JSON writer. |
-| `research/composition/benchmark-results.json` | Generated raw results (regenerated by running the benchmark). |
-| `research/composition/README.md` | This decision. |
+| `research/composition/benchmark-results.json` | Frozen generated raw results; `meta.results_path` is a stale Phase 1 path (see §2). |
+| `research/composition/README.md` | This decision and review-hardening notes. |
 
-At the time of the NO-GO research, no files outside `research/composition/`
-were modified and no packages were installed. The later Phase 6 implementation
-is recorded in §10.
+All bare `file:line` references in this directory, including
+`benchmark-results.json::meta.scanner_source`, are **Phase 1 snapshots**; current
+production locations are listed in §1 and §10. At the time of the NO-GO research,
+no files outside `research/composition/` were modified and no packages were
+installed. The later Phase 6 implementation is recorded in §10.
 
 ## 10. Phase 6 resolution (post-decision addendum)
+
+**Current production map (review hardening, not frozen research):** further work
+belongs in `crates/meld-core/src/region_end_spec.rs`
+(`RegionEndSpec::parse`/`scanner`/`register`), `crates/meld-core/src/splitter.rs`
+(`EndScanner` and registry lookup), the CLI/LSP `scanner_registry` builders,
+`packs/*/region_end.toml`, and the fuzz suites. The line references below remain
+historical Phase 1 snapshots.
 
 The GO decision was implemented without Strategy B. Actions 1–3 of §7 landed as:
 

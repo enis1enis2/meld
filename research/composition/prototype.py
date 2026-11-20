@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Prototype B — scannerless, Raku-slang-style grammar switching for Meld.
+"""Prototype B — deterministic scannerless-style state machine for Meld.
 
 WHAT THIS IS
 ------------
 A deliberately small, working demonstration of "Strategy B" from project.md
 §3.3: instead of asking a *single* generic brace scanner to find the end of a
-`@ruby { ... }` region, we run a parser that holds a *stack of active grammars*
-and switches the active grammar mid-parse, exactly as a Raku slang/braid does.
+`@ruby { ... }` region, we run a deterministic state machine that holds a
+*stack of active grammars* and switches the active grammar mid-parse,
+analogous to a Raku "slang"/braid.
 
 The one real embedding case researched here is a Ruby heredoc inside a Meld
 host block:
@@ -17,8 +18,9 @@ host block:
     puts html }
 
 The `}` on the `SELECT } FROM t` line is *literal heredoc data*, not a brace.
-The Phase 1 generic scanner (crates/meld-core/src/splitter.rs,
-`BalancedBraceScanner`) has no idea what `<<~SQL` means, so it closes the Meld
+The Phase 1 generic scanner (crates/meld-core/src/splitter.rs:55-130,
+**Phase 1 snapshot**; current contract `splitter.rs:63-72` and registry lookup
+`splitter.rs:404-413`) has no idea what `<<~SQL` means, so it closes the Meld
 region at that inner `}`. The heredoc terminator is *grammar-dependent*: it is
 the identifier named by the `<<` opener, and its indentation rules depend on
 the modifier (`<<ID`, `<<-ID`, `<<~ID`, `<<"ID"`, `<<'ID'`). Only a parser that
@@ -28,10 +30,13 @@ HONESTY ABOUT THE NAME "SCANNERLESS"
 ------------------------------------
 In the SGLR sense, "scannerless" means there is no separate token stream:
 grammar rules are applied directly to the character stream. This prototype is
-scannerless in *that* narrow sense (we consume UTF-8 bytes directly, no lexer
-and no token list). It is NOT SGLR: it is deterministic, hand-written, has no
-GLR ambiguity handling, and is not expressed in SDF3. See README.md for why
-that distinction matters to the go/no-go decision.
+scannerless-style in *that* narrow sense (we consume UTF-8 bytes directly, no
+lexer and no token list). It is NOT SGLR: it is deterministic, hand-written, has
+no GLR ambiguity handling, and is not expressed in SDF3. "Slang" is a Raku
+analogy, not an SDF3 or Rascal claim: Rascal has its own syntax notation and
+parser generation, while SDF/SDF3 specs are a separate formalism that can be
+converted for Rascal use. See README.md for why this distinction matters to the
+go/no-go decision.
 
 JUDGMENT CALL: implement the prototype in Python, not Rust or SDF3. This is a
 research spike whose job is to measure a failure mode and the shape of a fix,
@@ -111,9 +116,10 @@ def _skip_quoted(b: bytes, i: int, q: int) -> int:
 def generic_brace_end(source: bytes, body_start: int) -> Optional[int]:
     """Faithful Python transliteration of `BalancedBraceScanner::find_end`.
 
-    Source: crates/meld-core/src/splitter.rs lines 55-130. Kept here so the
-    prototype demo can show the failure side-by-side. benchmark.py carries its
-    own copy and cross-checks the two, so this is not a hidden dependency.
+    Source: crates/meld-core/src/splitter.rs lines 55-130 (Phase 1 snapshot).
+    Kept here so the prototype demo can show the failure side-by-side.
+    benchmark.py carries its own copy and cross-checks the two, so this is not
+    a hidden dependency.
     """
     b = source
     i = body_start
@@ -200,12 +206,13 @@ class State:
 
 
 class Grammar:
-    """A slang: one active grammar rule set in the Raku sense.
+    """A "slang" state: one active grammar rule set in the Raku sense.
 
     JUDGMENT CALL: grammars are objects with a single `consume(state)` method
     rather than a lexical token type. This mirrors Raku's "slang" contract —
-    each slang owns how to advance over its own syntax and may push/pop other
-    slangs — while staying small enough to audit in one file.
+    each "slang" owns how to advance over its own syntax and may push/pop other
+    "slangs" — while staying small enough to audit in one file. This is an
+    analogy for a state-machine transition, not SDF3 or Rascal syntax.
     """
 
     name = "?"
@@ -274,7 +281,7 @@ def _match_heredoc_opener(b: bytes, i: int) -> Optional[HeredocSpec]:
 
 
 # ---------------------------------------------------------------------------
-# 4. The two slangs
+# 4. The two "slangs"
 # ---------------------------------------------------------------------------
 class HostGrammar(Grammar):
     """Ruby-like host grammar. Balances braces and dispatches heredocs."""
@@ -378,7 +385,7 @@ class HeredocGrammar(Grammar):
 
         if candidate == self.spec.terminator:
             # JUDGMENT CALL: consume the terminator line *including* its
-            # newline, then pop back to the host slang. The newline itself is
+            # newline, then pop back to the host "slang". The newline itself is
             # not a host activation point (no pending heredoc is queued on a
             # terminator line), so this is safe.
             st.i = line_end + (1 if line_end < len(b) else 0)

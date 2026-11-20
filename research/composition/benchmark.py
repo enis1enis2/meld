@@ -12,9 +12,10 @@ closing `}` of the `@ruby { ... }` block. We ask two parsers for that offset:
 
   1. `reference_generic_end` — a literal Python transliteration of
      `crates/meld-core/src/splitter.rs::BalancedBraceScanner::find_end`
-     (lines 55-130). This is the Phase 1 default fallback.
-  2. `composed_end` — Prototype B from prototype.py, a scannerless grammar
-     stack that switches between a Ruby host slang and a heredoc slang.
+     (lines 55-130, Phase 1 snapshot). This is the Phase 1 default fallback.
+  2. `composed_end` — Prototype B from prototype.py, a deterministic
+     scannerless-style state machine that switches between a Ruby host "slang"
+     and a heredoc "slang".
 
 We measure correctness (returned offset == intended offset) and wall-clock
 time over the whole corpus, repeated `--reps` times.
@@ -55,7 +56,7 @@ BS = 0x5C
 # 1. Independent copy of the Rust generic scanner (drift-checked in main)
 # ---------------------------------------------------------------------------
 def reference_generic_end(source: bytes, body_start: int):
-    """Verbatim transliteration of splitter.rs lines 55-130.
+    """Verbatim transliteration of splitter.rs lines 55-130 (Phase 1 snapshot).
 
     JUDGMENT CALL: this copy lives in benchmark.py rather than being imported
     from prototype.py so that the benchmark file is self-contained and so that
