@@ -1,0 +1,17 @@
+target/release/meld usr/bin
+target/release/meld-lsp usr/bin
+target/release/meld-pack usr/bin
+packs usr/share/meld-lang/packs
+examples usr/share/meld-lang/examples
+debian/meld-lang.sh etc/profile.d
+README.md usr/share/doc/meld-lang
+CHANGELOG.md usr/share/doc/meld-lang
+RELEASE.md usr/share/doc/meld-lang
+SBOM.md usr/share/doc/meld-lang
+SECURITY.md usr/share/doc/meld-lang
+THIRD-PARTY-NOTICES.md usr/share/doc/meld-lang
+docs/schema-stability.md usr/share/doc/meld-lang/docs
+docs/release-artifacts.md usr/share/doc/meld-lang/docs
+LICENSE-APACHE usr/share/doc/meld-lang
+LICENSE-MIT usr/share/doc/meld-lang
+NOTICE usr/share/doc/meld-lang
