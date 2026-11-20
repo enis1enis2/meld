@@ -2,6 +2,7 @@
 pub mod binding;
 pub mod compose;
 pub mod error;
+pub mod region_end_spec;
 pub mod scheduler;
 pub mod scanners;
 pub mod source_map;

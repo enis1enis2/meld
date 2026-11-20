@@ -5,6 +5,11 @@
 //! files are inert data and are never loaded or executed. Raw hash delimiters
 //! remain the normative escape hatch for bodies these scanners cannot cover.
 pub mod brace;
+pub mod counted;
+pub mod delimited;
+pub mod heredoc;
+pub mod indent;
+pub mod template;
 
 use crate::splitter::RegionEnd;
 

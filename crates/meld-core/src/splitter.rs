@@ -4,6 +4,7 @@
 //! The pack-provided end scanner is used for plain `{ ... }` blocks; raw hash
 //! delimiters are always accepted as the collision-free fallback.
 use crate::error::{MeldError, Result};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RegionKind {
@@ -191,6 +192,30 @@ impl ScannerRegistry {
                 "csharp", "scala", "zig", "dart", "solidity",
             ],
             brace,
+        );
+        use crate::scanners::{
+            counted::CountedScanner,
+            delimited::DelimitedScanner,
+            heredoc::HeredocScanner,
+            indent::IndentScanner,
+            template::TemplateScanner,
+        };
+        let scan = |s: std::sync::Arc<dyn EndScanner>| s;
+        registry.register(["ruby"], scan(Arc::new(HeredocScanner::ruby())));
+        registry.register(["bash", "sh", "shell"], scan(Arc::new(HeredocScanner::bash())));
+        registry.register(["php"], scan(Arc::new(HeredocScanner::php())));
+        registry.register(["python"], scan(Arc::new(IndentScanner::python())));
+        registry.register(["yaml"], scan(Arc::new(IndentScanner::yaml())));
+        registry.register(["lua"], scan(Arc::new(DelimitedScanner::lua())));
+        registry.register(["sql"], scan(Arc::new(DelimitedScanner::sql())));
+        registry.register(["rust"], scan(Arc::new(CountedScanner::rust())));
+        registry.register(["cpp"], scan(Arc::new(CountedScanner::cpp())));
+        registry.register(["r"], scan(Arc::new(CountedScanner::r())));
+        registry.register(["ocaml"], scan(Arc::new(CountedScanner::ocaml())));
+        registry.register(["haskell"], scan(Arc::new(CountedScanner::haskell())));
+        registry.register(
+            ["javascript", "typescript", "tsx"],
+            scan(Arc::new(TemplateScanner)),
         );
         registry
     }
