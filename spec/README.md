@@ -265,6 +265,11 @@ Additional judgment calls (also inline in the affected specs/code):
     of an ungranted host file. Linux CI gates the `oci` feature with Clippy and
     tests. These checks remain ignored in ordinary CI because they need a
     privileged host.
+42. macOS exposes `/var` and `/tmp` as OS-managed symlinks into `/private`;
+    `std::env::temp_dir()` returns a `/var/folders/...` path. `SafeRoot::new`
+    now rewrites only those exact first components before symlink validation,
+    so system temp roots work while pack-controlled symlinks in later components
+    still fail closed (CI job 136453004367).
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

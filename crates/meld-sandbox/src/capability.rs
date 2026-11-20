@@ -7,6 +7,7 @@
 //! are hard errors.
 
 use crate::error::{check_text, Result, SandboxError};
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::path::{Component, Path, PathBuf};
@@ -302,7 +303,8 @@ impl SafeRoot {
                 "root name must be a single segment: {name}"
             )));
         }
-        let declared = host_path.as_ref();
+        let declared = normalize_system_path_aliases(host_path.as_ref());
+        let declared = declared.as_ref();
         reject_parent_components(declared)?;
         // Reject symlinks in the declaration itself before canonicalization:
         // `canonicalize` would silently follow them and hide the escape.
@@ -409,6 +411,30 @@ pub fn reject_symlinks_in_path(path: &Path) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// JUDGMENT CALL 42: macOS installs `/var` and `/tmp` as OS-managed symlinks
+/// into `/private`, and `std::env::temp_dir()` returns `/var/folders/...`.
+/// Replacing only those exact first components before validation keeps the
+/// system alias while preserving symlink rejection for every later component;
+/// a pack-controlled link still fails closed. Other paths are unchanged.
+fn normalize_system_path_aliases(path: &Path) -> Cow<'_, Path> {
+    #[cfg(target_os = "macos")]
+    {
+        let mut components = path.components();
+        if let (Some(Component::RootDir), Some(Component::Normal(first))) =
+            (components.next(), components.next())
+        {
+            let alias = first.to_string_lossy();
+            if alias == "var" || alias == "tmp" {
+                let mut normalized = PathBuf::from("/private");
+                normalized.push(first);
+                normalized.extend(components);
+                return Cow::Owned(normalized);
+            }
+        }
+    }
+    Cow::Borrowed(path)
 }
 
 /// One filesystem rule: a logical path under a named root and an access mode.
