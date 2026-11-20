@@ -102,6 +102,18 @@ re-verification in this worktree passed:
 | `python3 tools/check_grammar_sources.py` | PASS (27 pinned grammars) |
 | `python3 tools/generate_third_party_notices.py` | PASS (notices current) |
 
+Ed25519 and scanner integration were then merged and re-verified in the parent
+worktree:
+
+| Command | Observed result |
+|---|---|
+| `python3 -m unittest discover -s tools/tests -v` | PASS: 10 tests. |
+| `python3 tools/packtool.py verify-registry ... --verify-packs` | PASS: 29 packs verified; attestation key-id `8ec9528bf1f0e31f`; `OK`. |
+| keyed `verify` over 29 packs | PASS: `verified strict packs: 29`. |
+| `python3 tools/make_libraries.py` + re-sign | PASS: all 29 libraries refreshed with `region_end.toml`, checksummed, and signed outside the repository. |
+| `git grep` for HMAC/private-key material | PASS: no `signature.hmac`, `hmac-sha256`, `MELD_PACK_KEY`, PEM, seed, or `meld-keys` material. |
+| `cargo deny check` after `publish = false` | PASS: `advisories ok, bans ok, licenses ok, sources ok`. |
+
 GitHub push remains blocked: the available OAuth credential has only the
 `repo` scope and GitHub rejects pushes that create or update workflow files
 without the `workflow` scope. All CI and release workflows are committed
