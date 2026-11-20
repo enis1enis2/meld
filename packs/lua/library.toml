@@ -6,4 +6,4 @@ id = "lua"
 name = "Lua"
 version = "0.1.0"
 aliases = ["lua5.4"]
-exports = ["pack.toml", "queries/highlights.scm", "queries/injections.scm", "runner.toml", "inline.toml", "lsp.toml", "toolchain.toml", "README.md", "tests/conformance.json"]
+exports = ["pack.toml", "queries/highlights.scm", "queries/injections.scm", "region_end.toml", "runner.toml", "inline.toml", "lsp.toml", "toolchain.toml", "README.md", "tests/conformance.json"]

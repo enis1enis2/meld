@@ -4,8 +4,8 @@
 JUDGMENT CALL: a Lang Library is a Lang Pack plus a small install manifest
 (spec/libraries.md). Existing packs predate that manifest, so this tool derives
 it from `pack.toml` instead of hand-editing 28 directories. It also refreshes
-`checksums.sha256`; signing stays a separate, explicit step because the HMAC key
-must never live in the repository (project.md §9).
+`checksums.sha256`; Ed25519 signing stays a separate, explicit step because the
+private key must never live in the repository (project.md §9).
 """
 from __future__ import annotations
 
@@ -37,6 +37,7 @@ EXPORT_ORDER = (
     "grammar/REFERENCE.md",
     "queries/highlights.scm",
     "queries/injections.scm",
+    "region_end.toml",
     "region_end.wat",
     "region_end.sh",
     "runner.toml",

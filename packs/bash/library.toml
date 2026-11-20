@@ -6,4 +6,4 @@ id = "bash"
 name = "Bash"
 version = "0.1.0"
 aliases = ["sh", "shell", "posix-sh"]
-exports = ["pack.toml", "grammar/REFERENCE.md", "queries/highlights.scm", "queries/injections.scm", "region_end.sh", "runner.toml", "lsp.toml", "toolchain.toml", "worker.sh", "README.md", "tests/feed.meld", "tests/conformance.json", "tests/run_conformance.py"]
+exports = ["pack.toml", "grammar/REFERENCE.md", "queries/highlights.scm", "queries/injections.scm", "region_end.toml", "region_end.sh", "runner.toml", "lsp.toml", "toolchain.toml", "worker.sh", "README.md", "tests/feed.meld", "tests/conformance.json", "tests/run_conformance.py"]

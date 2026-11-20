@@ -6,4 +6,4 @@ id = "python"
 name = "Python"
 version = "0.1.0"
 aliases = ["py", "python3"]
-exports = ["pack.toml", "queries/highlights.scm", "runner.toml", "inline.toml", "lsp.toml", "toolchain.toml", "README.md", "tests/conformance.json"]
+exports = ["pack.toml", "queries/highlights.scm", "region_end.toml", "runner.toml", "inline.toml", "lsp.toml", "toolchain.toml", "README.md", "tests/conformance.json"]

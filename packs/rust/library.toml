@@ -6,4 +6,4 @@ id = "rust"
 name = "Rust"
 version = "0.1.0"
 aliases = []
-exports = ["pack.toml", "grammar/REFERENCE.md", "queries/highlights.scm", "queries/injections.scm", "region_end.wat", "tests/feed.meld"]
+exports = ["pack.toml", "grammar/REFERENCE.md", "queries/highlights.scm", "queries/injections.scm", "region_end.toml", "region_end.wat", "tests/feed.meld"]
