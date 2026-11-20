@@ -356,6 +356,11 @@ Additional judgment calls (also inline in the affected specs/code):
     from crash reports (observed as a Windows-only failure in
     `stderr_tail_is_included_in_crash_report`). The wait is bounded, so error
     reporting remains non-blocking within a fixed budget.
+59. CLI integration tests take a shared test-only mutex. Several fixtures spawn
+    real Node/Python/shell workers; parallel cold starts on Windows made the
+    REPL JavaScript worker intermittently exceed the unchanged 10 s T2
+    initialize deadline. Serializing these fixtures removes runner contention
+    without changing an assertion, a timeout, or a sandbox policy.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

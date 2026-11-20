@@ -5,6 +5,19 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
+use std::sync::Mutex;
+
+// JUDGMENT CALL 59: these fixtures spawn real Node/Python/shell workers. On
+// Windows, parallel cold starts contended enough that the REPL JavaScript
+// worker occasionally missed the unchanged 10 s T2 initialize deadline. A
+// test-only lock serializes CLI integration cases so the suite measures Meld
+// behavior, not runner startup contention. Assertions, policy and timeouts do
+// not change.
+static CLI_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+fn cli_test_guard() -> std::sync::MutexGuard<'static, ()> {
+    CLI_TEST_LOCK.lock().unwrap_or_else(|err| err.into_inner())
+}
 
 fn copy_dir(src: &Path, dst: &Path) {
     std::fs::create_dir_all(dst).unwrap();
@@ -116,6 +129,7 @@ fn key_pair(base: &Path) -> PathBuf {
 
 #[test]
 fn fmt_delegates_region_bodies_to_a_pack_owned_formatter() {
+    let _guard = cli_test_guard();
     let dir = temp_dir("fmt");
     let file = dir.join("sample.meld");
     std::fs::write(&file, "#meld python\n\n@mockfmt {\n  hello    world\n}\n").unwrap();
@@ -146,6 +160,7 @@ fn fmt_delegates_region_bodies_to_a_pack_owned_formatter() {
 
 #[test]
 fn repl_switches_languages_and_keeps_running() {
+    let _guard = cli_test_guard();
     let output = run(
         &["repl"],
         Some(":lang javascript\nconsole.log(\"from repl\")\n:exit\n"),
@@ -163,6 +178,7 @@ fn repl_switches_languages_and_keeps_running() {
 
 #[test]
 fn third_party_shell_pack_runs_without_core_changes() {
+    let _guard = cli_test_guard();
     let packs = root().join("tests/fixtures/pack-third-party");
     let output = run(&["run", "examples/08-shell-pack.meld"], None, Some(&packs));
     assert!(
@@ -175,6 +191,7 @@ fn third_party_shell_pack_runs_without_core_changes() {
 
 #[test]
 fn check_splits_a_ruby_heredoc_using_pack_metadata() {
+    let _guard = cli_test_guard();
     let dir = temp_dir("heredoc");
     let file = dir.join("sample.meld");
     std::fs::write(
@@ -196,6 +213,7 @@ fn check_splits_a_ruby_heredoc_using_pack_metadata() {
 
 #[test]
 fn fixture_pack_scanner_metadata_is_data_only() {
+    let _guard = cli_test_guard();
     let dir = temp_dir("region-end");
     let file = dir.join("sample.meld");
     std::fs::write(
@@ -242,6 +260,7 @@ fn fixture_pack_scanner_metadata_is_data_only() {
 
 #[test]
 fn imported_library_overrides_a_same_named_builtin_pack() {
+    let _guard = cli_test_guard();
     // JUDGMENT CALL: the project is isolated so this test never writes a lock
     // into the repository. A copy of the built-in bash pack (which supplies the
     // `shell` alias) is placed in the temp project, while `meld.lock` pins an
