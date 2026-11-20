@@ -116,7 +116,7 @@ impl ProcessTreeGuard {
     }
 
     pub fn wait(&mut self) -> Result<ExitStatus> {
-        Ok(self.child.wait()?)
+        self.child.wait().map_err(Into::into)
     }
 }
 
@@ -140,7 +140,11 @@ pub fn kill_process_tree(pid: u32) -> Result<()> {
         let result = unsafe { libc::killpg(pid as libc::pid_t, libc::SIGKILL) };
         if result != 0 {
             let err = std::io::Error::last_os_error();
-            if err.kind() != std::io::ErrorKind::NotFound {
+            // ESRCH is not mapped to `NotFound` on every Rust/libc target, so
+            // match the raw errno as well. A process group that vanished before
+            // teardown is success for fail-closed killing; other errors are not.
+            if err.raw_os_error() != Some(libc::ESRCH) && err.kind() != std::io::ErrorKind::NotFound
+            {
                 return Err(err.into());
             }
         }
@@ -371,18 +375,13 @@ impl SpawnedProcess {
 
     /// Best-effort, bounded look at captured stderr. It never blocks.
     pub fn drain_stderr(&mut self) -> String {
-        loop {
-            match self.stderr.rx.try_recv() {
-                Ok(Packet::Data(bytes)) => {
-                    if self.stderr_seen < self.io.max_stderr_bytes {
-                        let room = (self.io.max_stderr_bytes - self.stderr_seen) as usize;
-                        let take = room.min(bytes.len());
-                        self.stderr_text
-                            .push_str(&String::from_utf8_lossy(&bytes[..take]));
-                        self.stderr_seen += take as u64;
-                    }
-                }
-                Ok(Packet::Eof) | Ok(Packet::Error(_)) | Err(_) => break,
+        while let Ok(Packet::Data(bytes)) = self.stderr.rx.try_recv() {
+            if self.stderr_seen < self.io.max_stderr_bytes {
+                let room = (self.io.max_stderr_bytes - self.stderr_seen) as usize;
+                let take = room.min(bytes.len());
+                self.stderr_text
+                    .push_str(&String::from_utf8_lossy(&bytes[..take]));
+                self.stderr_seen += take as u64;
             }
         }
         self.stderr_text.clone()
@@ -419,11 +418,11 @@ impl SpawnedProcess {
     }
 
     pub fn try_wait(&mut self) -> Result<Option<ExitStatus>> {
-        Ok(self.guard.child_mut().try_wait()?)
+        self.guard.child_mut().try_wait().map_err(Into::into)
     }
 
     pub fn wait(&mut self) -> Result<ExitStatus> {
-        Ok(self.guard.wait()?)
+        self.guard.wait()
     }
 }
 
@@ -432,6 +431,10 @@ impl Drop for SpawnedProcess {
         let _ = self.kill_tree();
     }
 }
+
+/// Placeholder kept public so integration code can check that a backend's
+/// kill mechanism is present without spawning a process.
+pub const PROCESS_TREE_KILL_REQUIRED: bool = true;
 
 #[cfg(test)]
 mod tests {
@@ -445,7 +448,3 @@ mod tests {
         assert_eq!(cmd.get_args().collect::<Vec<_>>().len(), 2);
     }
 }
-
-/// Placeholder kept public so integration code can check that a backend's
-/// kill mechanism is present without spawning a process.
-pub const PROCESS_TREE_KILL_REQUIRED: bool = true;

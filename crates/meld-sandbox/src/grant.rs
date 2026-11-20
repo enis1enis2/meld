@@ -477,7 +477,7 @@ fn split_top_level(text: &str, separator: char) -> Vec<&str> {
     parts
 }
 
-fn split_once_top_level<'a>(text: &'a str, separator: char) -> Option<(&'a str, &'a str)> {
+fn split_once_top_level(text: &str, separator: char) -> Option<(&str, &str)> {
     let mut depth = 0i32;
     let mut quoted = false;
     let mut escaped = false;

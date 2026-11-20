@@ -11,8 +11,14 @@
 //! declared policy must fail closed: it returns an error instead of spawning
 //! an unconfined process.
 //!
-//! This crate is a standalone workspace; the parent agent integrates it into
-//! the root workspace later.
+//! **JUDGMENT CALL:** each OS backend attests the mechanisms it uses. Linux
+//! combines namespaces, seccomp, optional Landlock, cgroups, and an optional
+//! probed OCI fallback; macOS uses Seatbelt and Windows uses Job Objects plus
+//! AppContainer. A missing or unenforceable mechanism is an execution error,
+//! not a weaker sandbox.
+//!
+//! The CLI is the integration point: it computes the effective policy and asks
+//! the platform backend to enforce it before any T2 worker is spawned.
 
 pub mod backend;
 pub mod capability;

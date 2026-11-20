@@ -326,7 +326,7 @@ fn rule_map(policy: &SandboxPolicy) -> Result<BTreeMap<i64, Vec<seccompiler::Sec
         libc::SYS_execve,
     ];
     for syscall in baseline {
-        rules.insert(*syscall as i64, Vec::new());
+        rules.insert(*syscall, Vec::new());
     }
     for syscall in network_syscalls(policy) {
         rules.insert(syscall, Vec::new());
@@ -340,19 +340,19 @@ pub fn network_syscalls(policy: &SandboxPolicy) -> Vec<i64> {
         return Vec::new();
     }
     let mut out = vec![
-        libc::SYS_socket as i64,
-        libc::SYS_connect as i64,
-        libc::SYS_getsockopt as i64,
-        libc::SYS_setsockopt as i64,
-        libc::SYS_shutdown as i64,
-        libc::SYS_recvfrom as i64,
-        libc::SYS_sendto as i64,
+        libc::SYS_socket,
+        libc::SYS_connect,
+        libc::SYS_getsockopt,
+        libc::SYS_setsockopt,
+        libc::SYS_shutdown,
+        libc::SYS_recvfrom,
+        libc::SYS_sendto,
     ];
     if policy.network.protocols.unix
         || policy.network.protocols.http
         || policy.network.protocols.https
     {
-        out.push(libc::SYS_socketpair as i64);
+        out.push(libc::SYS_socketpair);
     }
     out
 }
@@ -649,7 +649,7 @@ mod tests {
         allow
             .capabilities
             .allow(crate::capability::Capability::Network);
-        assert!(network_syscalls(&allow).contains(&(libc::SYS_socket as i64)));
+        assert!(network_syscalls(&allow).contains(&libc::SYS_socket));
         assert!(!compile_seccomp(&allow).unwrap().is_empty());
     }
 

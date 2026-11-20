@@ -218,9 +218,7 @@ mod tests {
             .add_root(SafeRoot::new("project", &base).unwrap())
             .unwrap();
         pack.fs.grant("project", "src/**", Access::Read).unwrap();
-        for cap in [Capability::FsRead] {
-            pack.capabilities.allow(cap);
-        }
+        pack.capabilities.allow(Capability::FsRead);
         let mut runner = SandboxPolicy::deny_all("runner");
         runner
             .fs
