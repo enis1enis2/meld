@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import base64
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+RUNTIME_COMMANDS = {"python": "python3", "javascript": "node", "lua": "lua"}
 WORKERS = {
     "python": ["python3", "-u", str(ROOT / "packs/python/worker.py")],
     "javascript": ["node", str(ROOT / "packs/javascript/worker.js")],
@@ -161,12 +163,24 @@ def check_roundtrip(src: str, dst: str):
 
 def main() -> int:
     available = []
+    missing_runtimes = {
+        lang: command
+        for lang, command in RUNTIME_COMMANDS.items()
+        if shutil.which(command) is None
+    }
+    for lang, command in sorted(missing_runtimes.items()):
+        print(f"SKIP {lang}: runtime {command!r} is not on PATH")
     for lang in WORKERS:
+        if lang in missing_runtimes:
+            continue
         try:
             check_initialize(lang)
             available.append(lang)
         except (FileNotFoundError, WorkerError) as exc:
-            print(f"{lang}: unavailable ({exc})")
+            print(f"SKIP {lang}: worker unavailable ({exc})")
+    if not available:
+        print("t2 reference harness: SKIPPED (no T2 runtimes available)")
+        return 0
     problems = 0
 
     print("\n-- Phase 2: T2 stdout --")

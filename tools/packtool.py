@@ -141,9 +141,15 @@ def _checksums_text(entries: dict[str, str]) -> str:
     return "".join(f"{entries[rel]}  {rel}\n" for rel in sorted(entries))
 
 
+def _checksums_bytes(entries: dict[str, str]) -> bytes:
+    # Signing consumes bytes from disk, so canonical validation must also be
+    # byte-based. In particular, text-mode reads must never hide CRLF input.
+    return _checksums_text(entries).encode("utf-8")
+
+
 def write_checksums(pack_dir: Path) -> Path:
     target = Path(pack_dir) / CHECKSUM_FILE
-    target.write_text(_checksums_text(compute_checksums(pack_dir)), encoding="utf-8")
+    target.write_bytes(_checksums_bytes(compute_checksums(pack_dir)))
     return target
 
 
@@ -151,21 +157,27 @@ def read_checksums(pack_dir: Path) -> dict[str, str]:
     path = Path(pack_dir) / CHECKSUM_FILE
     if not path.is_file():
         raise PackToolError(f"missing {CHECKSUM_FILE} in {pack_dir}")
-    text = path.read_text(encoding="utf-8")
+    data = path.read_bytes()
+    if b"\r" in data:
+        raise PackToolError(f"{CHECKSUM_FILE} must use LF line endings (CRLF is not canonical) in {pack_dir}")
     entries: dict[str, str] = {}
-    for lineno, line in enumerate(text.splitlines(), 1):
+    for lineno, line in enumerate(data.split(b"\n"), 1):
         if not line:
             continue
-        match = re.fullmatch(r"([0-9a-f]{64})  (\S.*)", line)
+        match = re.fullmatch(rb"([0-9a-f]{64})  (\S.*)", line)
         if not match:
             raise PackToolError(f"malformed {CHECKSUM_FILE}:{lineno} in {pack_dir}")
-        digest, rel = match.groups()
+        digest_bytes, rel_bytes = match.groups()
+        try:
+            rel = rel_bytes.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise PackToolError(f"malformed {CHECKSUM_FILE}:{lineno} in {pack_dir}") from exc
         if rel in entries:
             raise PackToolError(f"duplicate path in {CHECKSUM_FILE}: {rel}")
         if Path(rel).is_absolute() or ".." in Path(rel).parts or "\\" in rel:
             raise PackToolError(f"unsafe path in {CHECKSUM_FILE}: {rel}")
-        entries[rel] = digest
-    if text != _checksums_text(entries):
+        entries[rel] = digest_bytes.decode("ascii")
+    if data != _checksums_bytes(entries):
         raise PackToolError(f"{CHECKSUM_FILE} is not canonical (sorted paths, LF, two spaces)")
     return entries
 
@@ -283,8 +295,8 @@ def sign_pack(pack_dir: Path, private_key_path: Path) -> Path:
     key = _load_private_key(key_path)
     # JUDGMENT CALL 54: signing a canonical but stale manifest would produce a
     # pack that fails verification on every host. Recompute and compare the
-    # payload digests before signing; the signed message still uses the exact
-    # checksum bytes on disk, including their platform line endings.
+    # payload digests before signing; the signed message uses the exact checksum
+    # bytes on disk, which are validated as canonical LF-only bytes first.
     _expected, _actual, problems = _checksum_problems(pack_dir)
     if problems:
         raise PackToolError("refusing to sign stale checksums: " + "; ".join(problems))

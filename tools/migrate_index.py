@@ -17,14 +17,47 @@ def canonical(data: dict) -> str:
     return json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
-def safe_path(value: str) -> str:
-    path = pathlib.PurePosixPath(value)
-    if path.is_absolute() or ".." in path.parts:
+def safe_path(value: str, root: pathlib.Path | None = None, *,
+              allow_parent: bool = True) -> str:
+    """Validate an index path with the same rules as packtool registries.
+
+    JUDGMENT CALL: packtool accepts ``../pack`` registry paths only when the
+    index is attested, but still rejects absolute paths, backslashes and any
+    path that resolves outside the registry's allowed root. Symlink components
+    are rejected so an index cannot redirect a migration outside the tree.
+    """
+    if not isinstance(value, str) or not value or "\x00" in value:
         raise SystemExit(f"migrate_index.py: unsafe relative path {value!r}")
+    if "\\" in value or re.match(r"^[A-Za-z]:", value):
+        raise SystemExit(f"migrate_index.py: unsafe relative path {value!r}")
+    path = pathlib.PurePosixPath(value)
+    if path.is_absolute() or (not allow_parent and ".." in path.parts):
+        raise SystemExit(f"migrate_index.py: unsafe relative path {value!r}")
+    if root is not None:
+        base = pathlib.Path(root).resolve()
+        # Mirrors packtool.resolve_registry_pack(..., attested=True): an
+        # attested index may reach sibling pack directories, but nothing else.
+        allowed_root = base.parent.parent if allow_parent else base
+        current = base
+        for part in path.parts:
+            if part in ("", "."):
+                continue
+            if part == "..":
+                current = current.parent
+                continue
+            current = current / part
+            if current.is_symlink():
+                raise SystemExit(f"migrate_index.py: symlink in path {value!r}")
+        try:
+            resolved = current.resolve()
+        except OSError as exc:
+            raise SystemExit(f"migrate_index.py: unresolvable path {value!r}: {exc}") from exc
+        if not resolved.is_relative_to(allowed_root.resolve()):
+            raise SystemExit(f"migrate_index.py: path escapes allowed root: {value!r}")
     return value
 
 
-def migrate_registry(data: dict) -> dict:
+def migrate_registry(data: dict, root: pathlib.Path | None = None) -> dict:
     schema = data.get("schema")
     if schema not in (None, "meld-pack-registry/0", REGISTRY):
         raise SystemExit(f"migrate_index.py: unsupported registry schema {schema!r}")
@@ -47,7 +80,10 @@ def migrate_registry(data: dict) -> dict:
             "tier": entry.get("tier", ""),
             "level": entry.get("level", ""),
             "strict": bool(entry.get("strict", False)),
-            "path": safe_path(str(entry.get("path", f"packs/{entry['id']}/{version}"))),
+            "path": safe_path(
+                str(entry.get("path", f"packs/{entry['id']}/{version}")),
+                root, allow_parent=True,
+            ),
             "checksums_sha256": entry.get("checksums_sha256"),
             "signature": entry.get("signature"),
         }
@@ -56,7 +92,7 @@ def migrate_registry(data: dict) -> dict:
     return {"packs": entries, "schema": REGISTRY}
 
 
-def migrate_library(data: dict) -> dict:
+def migrate_library(data: dict, root: pathlib.Path | None = None) -> dict:
     schema = data.get("schema")
     if schema not in (None, "meld-lang-library-index/0", LIBRARY):
         raise SystemExit(f"migrate_index.py: unsupported library index schema {schema!r}")
@@ -79,7 +115,7 @@ def migrate_library(data: dict) -> dict:
             "aliases": list(entry.get("aliases", [])),
             "id": key,
             "level": entry.get("level", ""),
-            "path": safe_path(str(entry.get("path", key))),
+            "path": safe_path(str(entry.get("path", key)), root, allow_parent=False),
             "source": str(entry.get("source", "")),
             "tier": entry.get("tier", ""),
             "version": str(entry.get("version", "0.0.0")),
@@ -100,10 +136,11 @@ def main() -> int:
     if not isinstance(data, dict):
         raise SystemExit("migrate_index.py: index root must be an object")
     schema = data.get("schema", "")
+    index_root = path.parent.resolve()
     if "registry" in str(schema) or "packs" in data:
-        migrated = canonical(migrate_registry(data))
+        migrated = canonical(migrate_registry(data, index_root))
     else:
-        migrated = canonical(migrate_library(data))
+        migrated = canonical(migrate_library(data, index_root))
     if args.check:
         if original != migrated:
             print(f"migrate_index.py: {path} needs migration", file=sys.stderr)

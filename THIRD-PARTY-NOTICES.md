@@ -31,7 +31,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `const-oid` | `0.10.3` | Apache-2.0 OR MIT | `be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a` |
 | `const_format` | `0.2.37` | Zlib | `a3decb4d6965448659923544a634a0571ba44cede4e11ef15a5a317126840454` |
 | `const_format_proc_macros` | `0.2.37` | Zlib | `941b570269a642506f08cb5b688c04bfa6cfd41a26f8bcdc49db8fd00c0ab659` |
-| `core_detect` | `1.0.0` | MIT/Apache-2.0 | `7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48` |
+| `core_detect` | `1.0.0` | MIT OR Apache-2.0 | `7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48` |
 | `cpp_demangle` | `0.4.5` | MIT OR Apache-2.0 | `f2bb79cb74d735044c972aae58ed0aaa9a837e85b01106a54c39e42e97f62253` |
 | `cpufeatures` | `0.2.17` | MIT OR Apache-2.0 | `59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280` |
 | `cpufeatures` | `0.3.1` | MIT OR Apache-2.0 | `5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566` |
@@ -55,7 +55,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `crypto-common` | `0.1.7` | MIT OR Apache-2.0 | `78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a` |
 | `crypto-common` | `0.2.2` | MIT OR Apache-2.0 | `ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453` |
 | `curve25519-dalek` | `5.0.0` | BSD-3-Clause | `b5eed333089e2e1c1ac8c6c0398e5e2497b4c9926ca6d0365ed1e099afa5bc23` |
-| `curve25519-dalek-derive` | `0.1.1` | MIT/Apache-2.0 | `f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3` |
+| `curve25519-dalek-derive` | `0.1.1` | MIT OR Apache-2.0 | `f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3` |
 | `darling` | `0.20.11` | MIT | `fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee` |
 | `darling_core` | `0.20.11` | MIT | `0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e` |
 | `darling_macro` | `0.20.11` | MIT | `fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead` |
@@ -76,11 +76,11 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `encoding_rs` | `0.8.44` | (Apache-2.0 OR MIT) AND BSD-3-Clause | `89253175e704ab869b04f9db224d38630e0211a53841a79181deae0889e169f5` |
 | `equivalent` | `1.0.3` | Apache-2.0 OR MIT | `00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826` |
 | `errno` | `0.3.15` | MIT OR Apache-2.0 | `e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776` |
-| `fallible-iterator` | `0.3.0` | MIT/Apache-2.0 | `2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649` |
+| `fallible-iterator` | `0.3.0` | MIT OR Apache-2.0 | `2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649` |
 | `fiat-crypto` | `0.3.0` | MIT OR Apache-2.0 OR BSD-1-Clause | `64cd1e32ddd350061ae6edb1b082d7c54915b5c672c389143b9a63403a109f24` |
 | `find-msvc-tools` | `0.1.15` | MIT OR Apache-2.0 | `1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48` |
 | `fluent-uri` | `0.4.1` | MIT | `bc74ac4d8359ae70623506d512209619e5cf8f347124910440dbc221714b328e` |
-| `fnv` | `1.0.7` | Apache-2.0 / MIT | `3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1` |
+| `fnv` | `1.0.7` | Apache-2.0 OR MIT | `3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1` |
 | `foldhash` | `0.1.5` | Zlib | `d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2` |
 | `foldhash` | `0.2.0` | Zlib | `77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb` |
 | `futures` | `0.3.34` | MIT OR Apache-2.0 | `9a31d2a3fbaaeb2af2368bbdd904aa8e812d3c04a1ee10d3171f52d556e5d0a3` |
@@ -91,7 +91,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `futures-sink` | `0.3.34` | MIT OR Apache-2.0 | `1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d` |
 | `futures-task` | `0.3.34` | MIT OR Apache-2.0 | `cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd` |
 | `futures-util` | `0.3.34` | MIT OR Apache-2.0 | `0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc` |
-| `fxhash` | `0.2.1` | Apache-2.0/MIT | `c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c` |
+| `fxhash` | `0.2.1` | Apache-2.0 OR MIT | `c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c` |
 | `fxprof-processed-profile` | `0.6.0` | MIT OR Apache-2.0 | `27d12c0aed7f1e24276a241aadc4cb8ea9f83000f34bc062b7cc2d51e3b0fabd` |
 | `generic-array` | `0.14.7` | MIT | `85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a` |
 | `getrandom` | `0.2.17` | MIT OR Apache-2.0 | `ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0` |
@@ -104,8 +104,8 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `heck` | `0.5.0` | MIT OR Apache-2.0 | `2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea` |
 | `httparse` | `1.10.1` | MIT OR Apache-2.0 | `6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87` |
 | `hybrid-array` | `0.4.15` | MIT OR Apache-2.0 | `27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17` |
-| `id-arena` | `2.3.0` | MIT/Apache-2.0 | `3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954` |
-| `ident_case` | `1.0.1` | MIT/Apache-2.0 | `b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39` |
+| `id-arena` | `2.3.0` | MIT OR Apache-2.0 | `3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954` |
+| `ident_case` | `1.0.1` | MIT OR Apache-2.0 | `b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39` |
 | `indexmap` | `2.14.2` | Apache-2.0 OR MIT | `cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855` |
 | `itertools` | `0.14.0` | MIT OR Apache-2.0 | `2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285` |
 | `itoa` | `1.0.19` | MIT OR Apache-2.0 | `3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4` |
@@ -124,16 +124,16 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `log` | `0.4.35` | MIT OR Apache-2.0 | `5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c` |
 | `ls-types` | `0.0.6` | MIT | `896e16b8e17d8732b9efe4d5b66cb0cc162b3023a2d8122f2aea6f7f185e0a67` |
 | `mach2` | `0.4.3` | BSD-2-Clause OR MIT OR Apache-2.0 | `d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44` |
-| `meld-cli` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-core` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-grammars` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-installer` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-lib` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-lsp` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-sandbox` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-t2` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-t3` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
-| `meld-value` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
+| `meld-cli` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-core` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-grammars` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-installer` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-lib` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-lsp` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-sandbox` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-t2` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-t3` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-value` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
 | `memchr` | `2.8.3` | Unlicense OR MIT | `cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98` |
 | `memfd` | `0.6.6` | MIT OR Apache-2.0 | `57804b2c9b69967f1536a56f86297e367a33b19e98852ed624b84551cdbc0d90` |
 | `mio` | `1.2.5` | MIT | `20521a903f02b0a573cd6840e9d0a5a0cc043d361fe924092cd70f8556cc9c4a` |
@@ -162,7 +162,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `regex` | `1.13.2` | MIT OR Apache-2.0 | `9807af0e638c12e753aa1b4e601791bf2a8f71274023c8bbeec12fc149950857` |
 | `regex-automata` | `0.4.19` | MIT OR Apache-2.0 | `41d60ef07df457506a0a1a2073112eb4aae5733dbd2813c3da77d1b0fd441158` |
 | `regex-syntax` | `0.8.12` | MIT OR Apache-2.0 | `d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6` |
-| `rustc-demangle` | `0.1.28` | MIT/Apache-2.0 | `b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb` |
+| `rustc-demangle` | `0.1.28` | MIT OR Apache-2.0 | `b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb` |
 | `rustc-hash` | `2.1.3` | Apache-2.0 OR MIT | `6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d` |
 | `rustc_version` | `0.4.1` | MIT OR Apache-2.0 | `cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92` |
 | `rustix` | `1.1.6` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa` |
@@ -252,7 +252,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `unicode-width` | `0.2.3` | MIT OR Apache-2.0 | `ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557` |
 | `unicode-xid` | `0.2.6` | MIT OR Apache-2.0 | `ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853` |
 | `uuid` | `1.29.3` | Apache-2.0 OR MIT | `3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64` |
-| `version_check` | `0.9.5` | MIT/Apache-2.0 | `0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a` |
+| `version_check` | `0.9.5` | MIT OR Apache-2.0 | `0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a` |
 | `wasi` | `0.11.1+wasi-snapshot-preview1` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b` |
 | `wasm-bindgen` | `0.2.130` | MIT OR Apache-2.0 | `a0181c14ddd6c7b8b0b0132a5f1ea2f32be0d893cd3ea97b6e3b28886b8a3d1c` |
 | `wasm-bindgen-macro` | `0.2.130` | MIT OR Apache-2.0 | `6e931a02a39abdbf66966fc35902b5ed58344750a70885bed4ebb3d8eaf28ed9` |
@@ -281,10 +281,10 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `wasmtime-internal-wit-bindgen` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `27c906fb941d8334ffb42bd3ad4bc8bda65e91a04abfecff0bb8ebc84efcdaf4` |
 | `wast` | `263.0.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `69d90bcf581b501aa1c358bc5dc0faa979cd375796908860ebcb6d1d70b907c7` |
 | `wat` | `1.263.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `bbc9c5aca783b3f1838be89f3f9937c528b90ec5faa6fb62d809726c16a7d8f7` |
-| `winapi` | `0.3.9` | MIT/Apache-2.0 | `5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419` |
-| `winapi-i686-pc-windows-gnu` | `0.4.0` | MIT/Apache-2.0 | `ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6` |
+| `winapi` | `0.3.9` | MIT OR Apache-2.0 | `5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419` |
+| `winapi-i686-pc-windows-gnu` | `0.4.0` | MIT OR Apache-2.0 | `ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6` |
 | `winapi-util` | `0.1.11` | Unlicense OR MIT | `c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22` |
-| `winapi-x86_64-pc-windows-gnu` | `0.4.0` | MIT/Apache-2.0 | `712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f` |
+| `winapi-x86_64-pc-windows-gnu` | `0.4.0` | MIT OR Apache-2.0 | `712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f` |
 | `winch-codegen` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `8372e9942acc32775282d0a1818f22e28411823d4158fedb2bf60b21e8657b64` |
 | `windows-link` | `0.2.1` | MIT OR Apache-2.0 | `f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5` |
 | `windows-sys` | `0.60.2` | MIT OR Apache-2.0 | `f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb` |

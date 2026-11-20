@@ -11,10 +11,15 @@ used by the language-expansion batch.
 from __future__ import annotations
 
 import argparse
+import json
+import os
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+EXACT_VERSION_RE = re.compile(r"^=?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+PINNED_REF_RE = re.compile(r"^pinned:[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 TEMPLATE_MANIFEST = '''id = "{lang}"
 aliases = []
@@ -97,6 +102,63 @@ def _toml_strings(items: list[str]) -> str:
     return ", ".join(f'"{item}"' for item in items)
 
 
+def _local_crate_exists(root: Path, crate: str, ref: str) -> bool:
+    """Return true when a pinned ref is already vendored or in the Cargo cache."""
+    if (root / "third-party" / "vendor" / f"{crate}-{ref}").is_dir():
+        return True
+    home = Path(os.environ.get("CARGO_HOME", root / ".cargo-home")) / "registry" / "src"
+    roots = [p for p in home.glob("index.crates.io-*") if p.is_dir()] or [home]
+    return any((base / f"{crate}-{ref}").is_dir() for base in roots)
+
+
+def validate_grammar_rev(rev: str, crate: str, root: Path = ROOT) -> str:
+    """Fail closed on malformed pins; verify exact-version pins when offline data exists.
+
+    Opaque ``pinned:<ref>`` values cannot be resolved without network access or a
+    local vendor/cache directory, so they are accepted only after strict format
+    validation. Exact versions are additionally checked against
+    ``grammar-sources.json`` or the local Cargo registry cache when available.
+    """
+    if not isinstance(rev, str) or not rev:
+        raise ValueError("grammar reference must not be empty")
+    if rev == "generated-placeholder":
+        return rev
+    if rev.startswith("pinned:"):
+        if not PINNED_REF_RE.fullmatch(rev):
+            raise ValueError(
+                f"malformed pinned grammar ref {rev!r}; expected 'pinned:<ref>' "
+                "with a non-empty ref matching [A-Za-z0-9._-]+"
+            )
+        ref = rev[len("pinned:"):]
+        if len(ref) > 128:
+            raise ValueError(f"pinned grammar ref is too long: {rev!r}")
+        if _local_crate_exists(root, crate, ref):
+            return rev
+        if EXACT_VERSION_RE.fullmatch(ref.lstrip("=")):
+            version = ref.lstrip("=")
+            sources_path = root / "grammar-sources.json"
+            documented: set[str] = set()
+            if sources_path.is_file():
+                doc = json.loads(sources_path.read_text(encoding="utf-8"))
+                documented = {
+                    str(entry["version"])
+                    for entry in doc.get("crates", [])
+                    if isinstance(entry, dict) and entry.get("crate") == crate
+                    and isinstance(entry.get("version"), str)
+                }
+            if version not in documented:
+                raise ValueError(
+                    f"pinned grammar ref {rev!r} is not documented in grammar-sources.json "
+                    "or available in the local Cargo cache"
+                )
+        return rev
+    if EXACT_VERSION_RE.fullmatch(rev.lstrip("=")):
+        return rev
+    raise ValueError(
+        f"unsupported grammar reference {rev!r}; use an exact version or 'pinned:<ref>'"
+    )
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("lang")
@@ -121,6 +183,14 @@ def main() -> int:
 
     rev = args.grammar or "generated-placeholder"
     crate = args.crate or f"tree-sitter-{lang}"
+    try:
+        validate_grammar_rev(rev, crate, ROOT)
+    except (ValueError, OSError, json.JSONDecodeError) as exc:
+        print(f"invalid grammar reference: {exc}", file=sys.stderr)
+        return 2
+    if args.strict and rev == "generated-placeholder":
+        print("--strict requires --grammar with an exact version or pinned:<ref>", file=sys.stderr)
+        return 2
     aliases = [v.strip() for v in args.aliases.split(",") if v.strip()]
     extensions = [v.strip() for v in args.extensions.split(",") if v.strip()]
     keywords = [v.strip() for v in args.keywords.split(",") if v.strip()]

@@ -11,7 +11,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from fuzz_splitter import split
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from reference_splitter import split  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 

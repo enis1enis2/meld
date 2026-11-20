@@ -73,7 +73,7 @@ def main() -> int:
         data = load_json(str(conformance.relative_to(root)))
         check(bool(data.get("lang")) and bool(data.get("cases")), f"{conformance.name}: missing lang/cases", errors)
 
-    for config in ("audit.toml", "about.toml", "third-party/grammars.toml",
+    for config in (".cargo/audit.toml", "about.toml", "third-party/grammars.toml",
                    "third-party/overrides.toml", "docs/book.toml"):
         data = load_toml(config)
         check(bool(data), f"{config}: empty configuration", errors)
