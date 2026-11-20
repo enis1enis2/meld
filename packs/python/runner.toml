@@ -6,6 +6,12 @@ cwd = "project"
 stdout = "protocol"
 stderr = "forward"
 
+# Runner constraints: the worker may read and write the project tree and has no
+# network. Grants can only narrow this set; they cannot add authority.
+[sandbox]
+network = false
+fs = ["project"]
+
 [limits]
 max_line_bytes = 1048576
 idle_timeout_ms = 30000

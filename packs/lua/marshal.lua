@@ -90,6 +90,17 @@ local function is_array(t)
   return true
 end
 
+local EMPTY_ARRAY_MT = { __meld_empty_array = true }
+
+function Meld.empty_array()
+  return setmetatable({}, EMPTY_ARRAY_MT)
+end
+
+function Meld.array(values)
+  if #values > 0 then return values end
+  return Meld.empty_array()
+end
+
 function Meld.encode(v)
   local k = meltag(v)
   if k == "null" or v == nil or v == cjson.null then return cjson.null end
@@ -117,8 +128,13 @@ function Meld.encode(v)
     for key, val in pairs(v) do out[tostring(key)] = Meld.encode(val) end
     return { ["$map"] = out }
   elseif is_array(v) then
-    local out = setmetatable({}, cjson.empty_array_mt)
+    local out = {}
     for i = 1, #v do out[i] = Meld.encode(v[i]) end
+    -- JUDGMENT CALL: lua-cjson does not expose `empty_array_mt` on every host.
+    -- Only a genuinely empty Meld array carries the marker so the protocol
+    -- encoder emits `[]` without turning legitimate empty maps into arrays or
+    -- mislabelling non-empty arrays as empty.
+    if #out == 0 then return Meld.empty_array() end
     return out
   end
   local out = {}
@@ -174,5 +190,30 @@ function Meld.decode(w)
   return Meld.map(out)
 end
 
+-- Encode a JSON-shaped protocol envelope. cjson handles scalar escaping, while
+-- this wrapper preserves the array/object distinction for empty tables.
+local function encode_json(v)
+  if v == nil or v == cjson.null then return "null" end
+  local kind = type(v)
+  if kind == "boolean" then return v and "true" or "false" end
+  if kind == "number" or kind == "string" then return cjson.encode(v) end
+  if kind ~= "table" then error("cannot JSON-encode Lua " .. kind) end
+
+  local mt = getmetatable(v)
+  if mt and mt.__meld_empty_array then return "[]" end
+  if #v > 0 and is_array(v) then
+    local parts = {}
+    for i = 1, #v do parts[i] = encode_json(v[i]) end
+    return "[" .. table.concat(parts, ",") .. "]"
+  end
+
+  local parts = {}
+  for key, val in pairs(v) do
+    parts[#parts + 1] = cjson.encode(tostring(key)) .. ":" .. encode_json(val)
+  end
+  return "{" .. table.concat(parts, ",") .. "}"
+end
+
+Meld.encode_json = encode_json
 Meld.json = cjson
 return Meld

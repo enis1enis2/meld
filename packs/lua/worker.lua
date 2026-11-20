@@ -29,7 +29,7 @@ local function raise(code, message, source)
   error({ code = code, message = message, source = source }, 0)
 end
 
-local function empty_array() return setmetatable({}, cjson.empty_array_mt) end
+local function empty_array() return Meld.empty_array() end
 
 local function initialize(params)
   if params.protocol ~= PROTOCOL then
@@ -53,7 +53,7 @@ local function execute(params)
   end
   local lines = stdout_lines
   stdout_lines = {}
-  return { stdout = lines, exports = empty_array() }
+  return { stdout = Meld.array(lines), exports = empty_array() }
 end
 
 -- JUDGMENT CALL: Lua has expressions but no expression-only compile mode, so
@@ -75,7 +75,7 @@ local function evaluate(params)
   end
   local lines = stdout_lines
   stdout_lines = {}
-  return { value = Meld.encode(value), stdout = lines }
+  return { value = Meld.encode(value), stdout = Meld.array(lines) }
 end
 
 local function fetch(params)
@@ -126,7 +126,7 @@ local DISPATCH = {
 }
 
 local function emit(obj)
-  io.write(cjson.encode(obj), "\n")
+  io.write(Meld.encode_json(obj), "\n")
   io.flush()
 end
 

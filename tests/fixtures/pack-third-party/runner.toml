@@ -11,6 +11,11 @@ cwd = "project"
 stdout = "protocol"
 stderr = "forward"
 
+# Deny-by-default runner constraints; grants may only narrow this set.
+[sandbox]
+network = false
+fs = ["project"]
+
 [limits]
 max_line_bytes = 1048576
 idle_timeout_ms = 30000
