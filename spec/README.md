@@ -148,6 +148,9 @@ Additional judgment calls (also inline in `libraries.md` and the code):
     GitHub slugs/URLs and local git repos through the same code path.
 24. Missing imports are skipped at runtime, and imported libraries are
     discovered last so a project lock overrides a same-named built-in pack.
+25. Temp clones honor `TMPDIR`/`MELD_PACK_TMP` and are visibility-checked after
+    git checkout; a chrooted git otherwise writes outside the Rust process's
+    view and looks like an empty catalog.
 
 Dependency versions were re-checked against crates.io on 2026-11-20 before
 implementation: `serde 1.0.229`, `serde_json 1.0.154`, and

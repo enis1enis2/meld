@@ -132,3 +132,31 @@ After pushing commit `245e591` to `origin/main`:
 
 All live smoke-test state was kept under
 `/mnt/data/opencode/tmp/opencode/meld-github-smoke`, outside the repository.
+
+## Follow-up: chrooted git temp-directory visibility
+
+An SSH user reported `meld-pack remote-list` printing "no libraries found"
+even though the public repository had 29 manifests. Reproduced with `TMPDIR`
+unset: the sandbox `git` wrapper chroots into `/mnt/data/pkgmgr/debian-root`,
+where the host's `/tmp` is not mounted. Git initialized and populated its own
+`/tmp/meld-pack-...`, while the Rust process read the host's empty directory,
+so the catalog was silently empty.
+
+Fix:
+
+- `meld-pack` now uses `MELD_PACK_TMP` first, then `TMPDIR`, then
+  `env::temp_dir()`, and verifies after `git checkout` that the clone's `.git`
+  is visible to the Rust process. A mismatch is an actionable error naming the
+  shared directory to use instead of an empty catalog.
+- The `meld-tryout` environment sets `TMPDIR=<tryout>/tmp`, which lives under
+  `/mnt/data` and is visible on both sides of the chroot.
+
+Verification after the fix:
+
+- With `TMPDIR` and `MELD_PACK_TMP` unset, `remote-list` now fails with
+  `temporary clone ... is not visible to meld-pack after git checkout; set TMPDIR or MELD_PACK_TMP ...`.
+- With `MELD_PACK_TMP=/mnt/data/opencode/tmp`, `remote-list` lists 29 libraries.
+- From `meld-tryout` with `TMPDIR` unset in the parent shell, sourcing the
+  updated `activate` sets `TMPDIR=<tryout>/tmp` and `remote-list` lists the
+  public libraries correctly.
+- `cargo test -p meld-installer` and `cargo build -p meld-installer` pass.

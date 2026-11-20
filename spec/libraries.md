@@ -174,8 +174,9 @@ meld-pack self-uninstall [--bin-dir <dir>]
 ```
 
 Environment fallbacks: `MELD_PACK_SOURCE`, `MELD_PACK_REF`, `MELD_PACK_KEY`,
-`MELD_LIB_ROOT`, and `MELD_ROOT`. Exit codes are `0` success, `1`
-validation/integrity failure, and `2` usage error.
+`MELD_LIB_ROOT`, `MELD_ROOT`, and `TMPDIR`/`MELD_PACK_TMP` for temporary git
+checkouts. Exit codes are `0` success, `1` validation/integrity failure, and
+`2` usage error.
 
 ### 4.1 Source selection
 
@@ -278,6 +279,7 @@ Hard rules inherited from `project.md` §9 and `registry.md` §4:
 | Alias used by two installed/remote libraries | ambiguous alias error |
 | Different bytes at installed coordinates | bump version or pass `--force` |
 | Missing imported directory at runtime | entry skipped; reported as `MISSING` |
+| Temporary clone not visible after git checkout | actionable error: set `TMPDIR` or `MELD_PACK_TMP` to a shared directory |
 | Unsupported `index.json`/`meld.lock` schema | hard error in `meld-pack`, warning in `meld` |
 
 ## 7. Implementation note
@@ -305,3 +307,6 @@ the integrity format.
    the project lock wins over built-ins (§5).
 7. HMAC remains symmetric and key-based; strict packs require a signature file,
    and keyed verification is optional but checked against a key-id first (§6).
+8. Temp clones honor `TMPDIR`/`MELD_PACK_TMP` and are checked for visibility
+   after checkout, so a chrooted git cannot silently produce an empty catalog
+   (§4.1/§6).

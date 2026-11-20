@@ -57,6 +57,7 @@ Options:
   --key <path>           HMAC key for authenticated verification (env: MELD_PACK_KEY)
   --root <dir>           library root (default: ~/.local/share/meld/libraries; env: MELD_LIB_ROOT)
   --project <dir>        project root containing meld.lock (default: MELD_ROOT or cwd ancestor)
+                          temporary clones use TMPDIR or MELD_PACK_TMP if set
   --bin-dir <dir>        destination for self-install
   --force                replace a different install at the same coordinates
   --no-import            install files without updating meld.lock
@@ -290,6 +291,25 @@ impl SourceSpec {
 }
 
 const DEFAULT_SOURCE_SPLIT: &str = "enis1enis2";
+const TEMP_DIR_ENV: &str = "MELD_PACK_TMP";
+
+/// Base directory for temporary git checkouts.
+///
+/// JUDGMENT CALL: `env::temp_dir()` is the normal choice, but some sandboxes
+/// run `git` in a chroot where the host's `/tmp` is not mounted. In that case
+/// git succeeds while the Rust side reads an empty directory, which looks like
+/// "no libraries found". `MELD_PACK_TMP` (and the usual `TMPDIR` fallback)
+/// lets callers name a directory visible to both processes; the post-checkout
+/// visibility check below turns any remaining mismatch into an actionable
+/// error instead of a silent empty catalog.
+fn temp_base() -> PathBuf {
+    if let Ok(dir) = env::var(TEMP_DIR_ENV) {
+        if !dir.is_empty() {
+            return PathBuf::from(dir);
+        }
+    }
+    env::temp_dir()
+}
 
 struct TempClone {
     dir: PathBuf,
@@ -328,7 +348,7 @@ impl TempClone {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let dir = env::temp_dir().join(format!("meld-pack-{}-{nanos}", process::id()));
+        let dir = temp_base().join(format!("meld-pack-{}-{nanos}", process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).map_err(|e| (1, format!("{}: {e}", dir.display())))?;
         let clone = Self { dir };
@@ -365,6 +385,14 @@ impl TempClone {
         ]) {
             let _ = fs::remove_dir_all(&clone.dir);
             return Err(err);
+        }
+        if !clone.dir.join(".git").is_dir() {
+            let message = format!(
+                "temporary clone {} is not visible to meld-pack after git checkout; set TMPDIR or {TEMP_DIR_ENV} to a directory shared with git (for example /mnt/data/opencode/tmp)",
+                clone.dir.display()
+            );
+            let _ = fs::remove_dir_all(&clone.dir);
+            return fail(message);
         }
         Ok(clone)
     }
