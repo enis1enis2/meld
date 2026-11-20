@@ -16,7 +16,7 @@ fn scanners() -> HashMap<String, Box<dyn splitter::EndScanner>> {
 }
 
 fn generate(seed: u64) -> String {
-    let mut s = u64::from(seed);
+    let mut s = seed;
     let parts = [
         "#meld python\n",
         "@python { s = 'a } b'; print(s) }\n",

@@ -706,8 +706,8 @@ fn cmd_list(opts: &Options) -> AppResult {
         return Ok(());
     }
     println!(
-        "{:<16} {:<10} {:<5} {:<5} {:<8} {}",
-        "ID", "VERSION", "TIER", "LEVEL", "STATUS", "SOURCE"
+        "{:<16} {:<10} {:<5} {:<5} {:<8} SOURCE",
+        "ID", "VERSION", "TIER", "LEVEL", "STATUS"
     );
     for entry in index.libraries.values() {
         let status = if root.join(&entry.path).is_dir() {
@@ -733,8 +733,8 @@ fn cmd_remote_list(opts: &Options) -> AppResult {
         return Ok(());
     }
     println!(
-        "{:<16} {:<10} {:<5} {:<5} {}",
-        "ID", "VERSION", "TIER", "LEVEL", "NAME"
+        "{:<16} {:<10} {:<5} {:<5} NAME",
+        "ID", "VERSION", "TIER", "LEVEL"
     );
     for lib in libraries {
         println!(

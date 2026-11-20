@@ -88,6 +88,12 @@ impl SyntaxLayer {
     }
 }
 
+impl Default for SyntaxLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Blank Meld glue lines while preserving every byte offset. **JUDGMENT
 /// CALL:** `export`/`import` are host directives, not region source; parsing
 /// them as Python/JS/Lua produces misleading ERROR nodes in `meld check`.

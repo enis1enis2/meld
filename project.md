@@ -1,6 +1,10 @@
 Meld — a language that switches to any language mid-file
 
-Status: PLAN ONLY. Nothing here is built. Working name: Meld (judgment call: any name works; rename freely).
+Status: authoritative design plan. The original "PLAN ONLY" line was stale and
+was corrected on 2026-11-20 after Phases 0–7 were implemented. Implementation
+evidence lives in `status/`; this document remains the source of truth for
+design decisions. Working name: Meld (judgment call: any name works; rename
+freely).
 
 1. Goal (and the honest version of it)
 

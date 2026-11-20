@@ -544,7 +544,7 @@ fn format_glue(body: &str) -> String {
             let mut parts = rest.split_whitespace();
             let name = parts.next();
             let bridge = match (parts.next(), parts.next()) {
-                (Some(as_kw), Some(b)) if as_kw == "as" => Some(b),
+                (Some("as"), Some(b)) => Some(b),
                 _ => None,
             };
             name.map(|n| match bridge {
@@ -555,7 +555,7 @@ fn format_glue(body: &str) -> String {
             let mut parts = rest.split_whitespace();
             let name = parts.next();
             let from = match (parts.next(), parts.next()) {
-                (Some(from_kw), Some(r)) if from_kw == "from" => Some(r),
+                (Some("from"), Some(r)) => Some(r),
                 _ => None,
             };
             name.and_then(|n| from.map(|r| format!("import {n} from {r}")))

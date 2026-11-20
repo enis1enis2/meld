@@ -1,0 +1,13 @@
+Meld — a language that switches to any language mid-file
+Copyright (c) 2026 Meld contributors
+
+This project is dual-licensed under the MIT License and the Apache License,
+Version 2.0, at your option. See LICENSE-MIT and LICENSE-APACHE.
+
+Lang Packs and Lang Libraries are independent data packages. Their authors and
+licences are recorded in each pack's metadata. The upstream tree-sitter
+grammars, interpreter downloads, language servers and other third-party tools
+referenced by packs are not redistributed as part of the Meld core unless a
+LICENSE/NOTICE entry is added for them in third-party/.
+
+This NOTICE is included in all source and binary distributions.
