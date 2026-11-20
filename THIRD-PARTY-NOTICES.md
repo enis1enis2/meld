@@ -11,7 +11,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 
 | Crate | Version | License | SHA256 (crates.io archive) |
 |---|---|---|---|
-| `addr2line` | `0.26.1` | Apache-2.0 OR MIT | `59317f77929f0e679d39364702289274de2f0f0b22cbf50b2b8cff2169a0b27a` |
+| `addr2line` | `0.25.1` | Apache-2.0 OR MIT | `1b5d307320b3181d6d7954e663bd7c774a838b8220fe0593c86d9fb09f498b4b` |
 | `aho-corasick` | `1.1.5` | Unlicense OR MIT | `c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba` |
 | `allocator-api2` | `0.2.21` | MIT OR Apache-2.0 | `683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923` |
 | `anyhow` | `1.0.104` | MIT OR Apache-2.0 | `330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470` |
@@ -23,51 +23,65 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `block-buffer` | `0.12.1` | MIT OR Apache-2.0 | `d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa` |
 | `borrow-or-share` | `0.2.4` | MIT-0 | `dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c` |
 | `bumpalo` | `3.20.4` | MIT OR Apache-2.0 | `87a0cf66fd1eb2fb7b822cb78370d82303750809bc6ba855f3f58e517d3238db` |
+| `byteorder` | `1.5.0` | Unlicense OR MIT | `1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b` |
 | `bytes` | `1.12.2` | MIT | `776dfebd015e2d8732c684a2c71003674ccb49457b539b9e82151ba38e96dd7c` |
 | `cc` | `1.11.2` | MIT OR Apache-2.0 | `33ef9e3e8154a45c7a95cff4c1299702106ad94062d7bb85fdc5d3a5afd91d45` |
 | `cfg-if` | `1.0.5` | MIT OR Apache-2.0 | `4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600` |
 | `cobs` | `0.3.0` | MIT OR Apache-2.0 | `0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1` |
 | `const-oid` | `0.10.3` | Apache-2.0 OR MIT | `be95d4a884358a21a199689323c29e9256b4a1b315e22f183d155422041d3a9a` |
+| `const_format` | `0.2.37` | Zlib | `a3decb4d6965448659923544a634a0571ba44cede4e11ef15a5a317126840454` |
+| `const_format_proc_macros` | `0.2.37` | Zlib | `941b570269a642506f08cb5b688c04bfa6cfd41a26f8bcdc49db8fd00c0ab659` |
 | `core_detect` | `1.0.0` | MIT/Apache-2.0 | `7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48` |
-| `cpp_demangle` | `0.5.1` | MIT OR Apache-2.0 | `0667304c32ea56cb4cd6d2d7c0cfe9a2f8041229db8c033af7f8d69492429def` |
+| `cpp_demangle` | `0.4.5` | MIT OR Apache-2.0 | `f2bb79cb74d735044c972aae58ed0aaa9a837e85b01106a54c39e42e97f62253` |
 | `cpufeatures` | `0.2.17` | MIT OR Apache-2.0 | `59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280` |
 | `cpufeatures` | `0.3.1` | MIT OR Apache-2.0 | `5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566` |
-| `cranelift-assembler-x64` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `147e998317ed418623afd8dc719b3413d391a3b2f048100f459a90dadfd4fd72` |
-| `cranelift-assembler-x64-meta` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `775c4e3222b290bc05e07e73e0cfab0b3b4c6510034f70585fa7cbf4feb9f0ea` |
-| `cranelift-bforest` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `f64e582cbf252e01cbcf4c701b26a349fab461a9f0c327025995db64b1364a78` |
-| `cranelift-bitset` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `ba37434039b4cdc98d3178eefca3f5bd180b955e49c0787e9cc0eee3de182fcb` |
-| `cranelift-codegen` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `028652607246c4117796ed9ab9e966994b4ee12146b329a91e85c8fd1335152f` |
-| `cranelift-codegen-meta` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `21ba849e90d3398951aef9a9a3d2fa1e7df6196836ae1d0723ec24b091215b84` |
-| `cranelift-codegen-shared` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `6116ab06dc15034ee1b4e3124371acb6742c189b438040837aeb0cfcf790e356` |
-| `cranelift-control` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `33a932ab1cef0158e6b0f0360139d5d19bdf7a3bee0160f02865b1bdafb218c7` |
-| `cranelift-entity` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `7c048097f9ae9b7c23db66e6f35882f6e1fbcd522f3db2a520d5c7aaa0079a67` |
-| `cranelift-frontend` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `3b45328ff7bac253860079032352989eae50341e155ddd4c6cfb8f5d40c490fa` |
-| `cranelift-isle` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `ff643d297ee16c7a8a6aba6bf526b610879635275ec14e7ee75b94f0b46e9514` |
-| `cranelift-native` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `66b186c9de1edc598d055ff3f13918fc8f49d3e23811b99ab45a3cbf52dc2a7b` |
-| `cranelift-srcgen` | `0.137.3` | Apache-2.0 WITH LLVM-exception | `e30dff68753c0933cb30eb445d75d6b3cdcc0f7f0121b9c5aaabbe4a8315617d` |
+| `cranelift-assembler-x64` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `f059af2e8458d7d7711d19d69e86f987610818bd46b5647b488a61d49142cdab` |
+| `cranelift-assembler-x64-meta` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `02f75f03a4c08abcd1b5a2f175842520125f37c2163b2aa1c4b1220a96e20a3b` |
+| `cranelift-bforest` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `28aa268fc210c46a030a28a21b6c0b0e218f5b0fad1f13b9e6468a1a98cf3027` |
+| `cranelift-bitset` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `1606b8fffb6345a18d96e6ad384a0c60ba30c8142979a74aa1fd7e6d2892397b` |
+| `cranelift-codegen` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `ebe5667a6f9e0bada499a1f874267f8d4d1a429b62346c6652c191762ecdf8d5` |
+| `cranelift-codegen-meta` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `efada320dcb45f22d8552547dfde773fa965b582bb4a2895e8e678cfedb0c85e` |
+| `cranelift-codegen-shared` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `0776090a12a07b211fa8f26d274b04a6e8454d7d7df057ebb0ecede53159d6b1` |
+| `cranelift-control` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `6fe8b55c020a50fcabc67563395ea8afa27cc862045e486dc947d271e1f7da17` |
+| `cranelift-entity` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `da7bf7d00a780909ef584af51080a661fbd568e33b44440725c4672044eeb002` |
+| `cranelift-frontend` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `bdbeb97775f6f5b398c7b65f321175b94157bc2d61dc05ceb14f7bf08d43d0d6` |
+| `cranelift-isle` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `5556937e08e45a1e6b4cdf9a051deb8072a81c07cf7824043e0d42d8c1663a70` |
+| `cranelift-native` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `028470273cdc58affb82b94bbb9ae10bcd77abb1d15c8f9dbbb3855ea71adf4a` |
+| `cranelift-srcgen` | `0.123.23` | Apache-2.0 WITH LLVM-exception | `cb3e5ca8a6d793f5c56aaa3a52a57e4d3da953293724d47f56562e0684136450` |
 | `crc32fast` | `1.5.5` | MIT OR Apache-2.0 | `2b929dd2a135771f40afabd1073f85eed59c800b7c61901e5c254270497dad64` |
 | `crossbeam-deque` | `0.8.8` | MIT OR Apache-2.0 | `622f3fc73690be383c7214310406f28a90e6edeadc3cea882f9d71e495b9711a` |
 | `crossbeam-epoch` | `0.9.21` | MIT OR Apache-2.0 | `dc74980687109a3b14c72fd458107bf0baa1da1a1a805e178d15501ba9b86d9d` |
 | `crossbeam-utils` | `0.8.23` | MIT OR Apache-2.0 | `a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6` |
 | `crypto-common` | `0.1.7` | MIT OR Apache-2.0 | `78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a` |
 | `crypto-common` | `0.2.2` | MIT OR Apache-2.0 | `ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453` |
+| `curve25519-dalek` | `5.0.0` | BSD-3-Clause | `b5eed333089e2e1c1ac8c6c0398e5e2497b4c9926ca6d0365ed1e099afa5bc23` |
+| `curve25519-dalek-derive` | `0.1.1` | MIT/Apache-2.0 | `f46882e17999c6cc590af592290432be3bce0428cb0d5f8b6715e4dc7b383eb3` |
+| `darling` | `0.20.11` | MIT | `fc7f46116c46ff9ab3eb1597a45688b6715c6e628b5c133e288e709a29bcb4ee` |
+| `darling_core` | `0.20.11` | MIT | `0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e` |
+| `darling_macro` | `0.20.11` | MIT | `fc34b93ccb385b40dc71c6fceac4b2ad23662c7eeb248cf10d529b7e055b6ead` |
 | `dashmap` | `6.2.1` | MIT | `e6361d5c062261c78a176addb82d4c821ae42bed6089de0e12603cd25de2059c` |
 | `debugid` | `0.8.0` | Apache-2.0 | `bef552e6f588e446098f6ba40d89ac146c8c7b64aade83c051ee00bb5d2bc18d` |
+| `derive_builder` | `0.20.2` | MIT OR Apache-2.0 | `507dfb09ea8b7fa618fcf76e953f4f5e192547945816d5358edffe39f6f94947` |
+| `derive_builder_core` | `0.20.2` | MIT OR Apache-2.0 | `2d5bcf7b024d6835cfb3d473887cd966994907effbe9227e8c8219824d06c4e8` |
+| `derive_builder_macro` | `0.20.2` | MIT OR Apache-2.0 | `ab63b0e2bf4d5928aff72e83a7dace85d7bba5fe12dcc3c5a572d78caffd3f3c` |
 | `digest` | `0.10.7` | MIT OR Apache-2.0 | `9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292` |
 | `digest` | `0.11.3` | MIT OR Apache-2.0 | `f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2` |
 | `directories-next` | `2.0.0` | MIT OR Apache-2.0 | `339ee130d97a610ea5a5872d2bbb130fdf68884ff09d3028b81bec8a1ac23bbc` |
 | `dirs-sys-next` | `0.1.2` | MIT OR Apache-2.0 | `4ebda144c4fe02d1f7ea1a7d9641b6fc6b580adcfa024ae48797ecdeb6825b4d` |
+| `ed25519` | `3.0.0` | Apache-2.0 OR MIT | `29fcf32e6c73d1079f83ab4d782de2d81620346a5f38c6237a86a22f8368980a` |
+| `ed25519-dalek` | `3.0.0` | BSD-3-Clause | `6ebaa1a2bf1290ab3bfe5a7b771d050ebffab2711c19a81691c683a5144a25de` |
 | `either` | `1.19.0` | MIT OR Apache-2.0 | `0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be` |
 | `embedded-io` | `0.4.0` | MIT OR Apache-2.0 | `ef1a6892d9eef45c8fa6b9e0086428a2cca8491aca8f787c534a3d6d0bcb3ced` |
 | `embedded-io` | `0.6.1` | MIT OR Apache-2.0 | `edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d` |
 | `encoding_rs` | `0.8.44` | (Apache-2.0 OR MIT) AND BSD-3-Clause | `89253175e704ab869b04f9db224d38630e0211a53841a79181deae0889e169f5` |
 | `equivalent` | `1.0.3` | Apache-2.0 OR MIT | `00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826` |
 | `errno` | `0.3.15` | MIT OR Apache-2.0 | `e35d6e78f4cebb90e51d543db8fe41528851d6deeef6ef21ebd4bfdc1e784776` |
-| `fastrand` | `2.5.0` | Apache-2.0 OR MIT | `da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223` |
+| `fallible-iterator` | `0.3.0` | MIT/Apache-2.0 | `2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649` |
+| `fiat-crypto` | `0.3.0` | MIT OR Apache-2.0 OR BSD-1-Clause | `64cd1e32ddd350061ae6edb1b082d7c54915b5c672c389143b9a63403a109f24` |
 | `find-msvc-tools` | `0.1.15` | MIT OR Apache-2.0 | `1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48` |
-| `fixedbitset` | `0.4.2` | MIT/Apache-2.0 | `0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80` |
 | `fluent-uri` | `0.4.1` | MIT | `bc74ac4d8359ae70623506d512209619e5cf8f347124910440dbc221714b328e` |
 | `fnv` | `1.0.7` | Apache-2.0 / MIT | `3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1` |
+| `foldhash` | `0.1.5` | Zlib | `d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2` |
 | `foldhash` | `0.2.0` | Zlib | `77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb` |
 | `futures` | `0.3.34` | MIT OR Apache-2.0 | `9a31d2a3fbaaeb2af2368bbdd904aa8e812d3c04a1ee10d3171f52d556e5d0a3` |
 | `futures-channel` | `0.3.34` | MIT OR Apache-2.0 | `b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4` |
@@ -77,18 +91,21 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `futures-sink` | `0.3.34` | MIT OR Apache-2.0 | `1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d` |
 | `futures-task` | `0.3.34` | MIT OR Apache-2.0 | `cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd` |
 | `futures-util` | `0.3.34` | MIT OR Apache-2.0 | `0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc` |
-| `fxprof-processed-profile` | `0.8.1` | MIT OR Apache-2.0 | `25234f20a3ec0a962a61770cfe39ecf03cb529a6e474ad8cff025ed497eda557` |
+| `fxhash` | `0.2.1` | Apache-2.0/MIT | `c31b6d751ae2c7f11320402d34e41349dd1016f8d5d45e48c4312bc8625af50c` |
+| `fxprof-processed-profile` | `0.6.0` | MIT OR Apache-2.0 | `27d12c0aed7f1e24276a241aadc4cb8ea9f83000f34bc062b7cc2d51e3b0fabd` |
 | `generic-array` | `0.14.7` | MIT | `85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a` |
 | `getrandom` | `0.2.17` | MIT OR Apache-2.0 | `ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0` |
 | `getrandom` | `0.4.3` | MIT OR Apache-2.0 | `300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099` |
-| `gimli` | `0.33.0` | MIT OR Apache-2.0 | `0bf7f043f89559805f8c7cacc432749b2fa0d0a0a9ee46ce47164ed5ba7f126c` |
+| `getset` | `0.1.7` | MIT | `6cf442baaabe4213ce7d1239afc26c039180b6456da2cededa316ae2c8a77a77` |
+| `gimli` | `0.32.3` | MIT OR Apache-2.0 | `e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7` |
 | `hashbrown` | `0.14.5` | MIT OR Apache-2.0 | `e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1` |
-| `hashbrown` | `0.16.1` | MIT OR Apache-2.0 | `841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100` |
+| `hashbrown` | `0.15.5` | MIT OR Apache-2.0 | `9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1` |
 | `hashbrown` | `0.17.1` | MIT OR Apache-2.0 | `ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a` |
 | `heck` | `0.5.0` | MIT OR Apache-2.0 | `2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea` |
 | `httparse` | `1.10.1` | MIT OR Apache-2.0 | `6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87` |
 | `hybrid-array` | `0.4.15` | MIT OR Apache-2.0 | `27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17` |
 | `id-arena` | `2.3.0` | MIT/Apache-2.0 | `3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954` |
+| `ident_case` | `1.0.1` | MIT/Apache-2.0 | `b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39` |
 | `indexmap` | `2.14.2` | Apache-2.0 OR MIT | `cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855` |
 | `itertools` | `0.14.0` | MIT OR Apache-2.0 | `2b192c782037fadd9cfa75548310488aabdbf3d2da73885b31bd0abd03351285` |
 | `itoa` | `1.0.19` | MIT OR Apache-2.0 | `3bd1574e617a9a6c1f8f8181bd7e841e1f20e4277607ef28945765188d6284d4` |
@@ -96,6 +113,8 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `ittapi-sys` | `0.4.0` | GPL-2.0-only OR BSD-3-Clause | `52f5385394064fa2c886205dba02598013ce83d3e92d33dbdc0c52fe0e7bf4fc` |
 | `jobserver` | `0.1.35` | MIT OR Apache-2.0 | `1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3` |
 | `js-sys` | `0.3.107` | MIT OR Apache-2.0 | `8dc09d2154098bbf4ef54eab6b117a3c24cbbffe94046b16ee6d6d4510584d3a` |
+| `konst` | `0.2.20` | Zlib | `128133ed7824fcd73d6e7b17957c5eb7bacb885649bd8c69708b2331a10bcefb` |
+| `konst_macro_rules` | `0.2.19` | Zlib | `a4933f3f57a8e9d9da04db23fb153356ecaf00cbd14aee46279c33dc80925c37` |
 | `leb128fmt` | `0.1.0` | MIT OR Apache-2.0 | `09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2` |
 | `libc` | `0.2.191` | MIT OR Apache-2.0 | `65cd87c9a6d60536580b316ad985726104730a5151c99845f2490428ef91240a` |
 | `libm` | `0.2.16` | MIT | `b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981` |
@@ -104,13 +123,14 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `lock_api` | `0.4.14` | MIT OR Apache-2.0 | `224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965` |
 | `log` | `0.4.35` | MIT OR Apache-2.0 | `5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c` |
 | `ls-types` | `0.0.6` | MIT | `896e16b8e17d8732b9efe4d5b66cb0cc162b3023a2d8122f2aea6f7f185e0a67` |
-| `mach2` | `0.6.0` | BSD-2-Clause OR MIT OR Apache-2.0 | `dae608c151f68243f2b000364e1f7b186d9c29845f7d2d85bd31b9ad77ad552b` |
+| `mach2` | `0.4.3` | BSD-2-Clause OR MIT OR Apache-2.0 | `d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44` |
 | `meld-cli` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-core` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-grammars` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-installer` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-lib` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-lsp` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
+| `meld-sandbox` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-t2` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-t3` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
 | `meld-value` | `0.1.0` | MIT OR Apache-2.0 (workspace crate) | `workspace crate (no registry checksum)` |
@@ -118,18 +138,18 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `memfd` | `0.6.6` | MIT OR Apache-2.0 | `57804b2c9b69967f1536a56f86297e367a33b19e98852ed624b84551cdbc0d90` |
 | `mio` | `1.2.5` | MIT | `20521a903f02b0a573cd6840e9d0a5a0cc043d361fe924092cd70f8556cc9c4a` |
 | `multiversion_no_op` | `1.0.0` | Apache-2.0 OR MIT | `743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d` |
-| `object` | `0.40.0` | Apache-2.0 OR MIT | `dd229a0361b9d0d4396176e02d65897f487eebeab7caa6d443855ee152ca0b9c` |
+| `object` | `0.37.3` | Apache-2.0 OR MIT | `ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe` |
+| `oci-spec` | `0.10.0` | Apache-2.0 | `3df6f876ad774d6a676f7e968f5c3edacc32f90e65fe680a8b686235396556fb` |
 | `once_cell` | `1.21.4` | MIT OR Apache-2.0 | `9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50` |
 | `parking_lot` | `0.12.5` | MIT OR Apache-2.0 | `93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a` |
 | `parking_lot_core` | `0.9.12` | MIT OR Apache-2.0 | `2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1` |
 | `percent-encoding` | `2.3.2` | MIT OR Apache-2.0 | `9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220` |
-| `petgraph` | `0.6.5` | MIT OR Apache-2.0 | `b4c5cc86750666a3ed20bdaf5ca2a0344f9c67674cae0515bec2da16fbaa47db` |
 | `pin-project-lite` | `0.2.18` | Apache-2.0 OR MIT | `c938015719552d665fd0553b90d96cd7ff58e83e4c061ca99e6bb78865a72752` |
 | `pkg-config` | `0.3.34` | MIT OR Apache-2.0 | `f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548` |
 | `postcard` | `1.1.3` | MIT OR Apache-2.0 | `6764c3b5dd454e283a30e6dfe78e9b31096d9e32036b5d1eaac7a6119ccb9a24` |
 | `proc-macro2` | `1.0.107` | MIT OR Apache-2.0 | `985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9` |
-| `pulley-interpreter` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `aeb7ed128aa5734a9bbad079eede1861ffd6362745cb595967f9fb78e2eba3de` |
-| `pulley-macros` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `f56330a5820c87d062fe79e3e2fa68dd96d4f6f11a3e299dcf16df35acc02b19` |
+| `pulley-interpreter` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `3897ec6f561af55029e36987aa84d805679ae459d28966bfb1e6a266db811259` |
+| `pulley-macros` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `4645332efe32c01e952d3e3135dac1ccbb671bb8bf7779e322d401dc6978ceb9` |
 | `quote` | `1.0.47` | MIT OR Apache-2.0 | `1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001` |
 | `r-efi` | `6.0.0` | MIT OR Apache-2.0 OR LGPL-2.1-or-later | `f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf` |
 | `rayon` | `1.12.0` | MIT OR Apache-2.0 | `fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d` |
@@ -138,36 +158,43 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `redox_users` | `0.4.6` | MIT | `ba009ff324d1fc1b900bd1fdb31564febe58a8ccc8a6fdbb93b543d33b13ca43` |
 | `ref-cast` | `1.0.27` | MIT OR Apache-2.0 | `7e440fb4e4b4147295338efb76001ab9e4efc0e5839df2c47fc5ac2381d365c3` |
 | `ref-cast-impl` | `1.0.27` | MIT OR Apache-2.0 | `92ecd8964f8453721699a1ed72037b0db49ce2f5a5138486ee89bed6f67cdf3a` |
-| `regalloc2` | `0.15.3` | Apache-2.0 WITH LLVM-exception | `34f923657880712029496c2e68bb40bef163806b2011adde559b28bbcedc82ea` |
+| `regalloc2` | `0.12.2` | Apache-2.0 WITH LLVM-exception | `5216b1837de2149f8bc8e6d5f88a9326b63b8c836ed58ce4a0a29ec736a59734` |
 | `regex` | `1.13.2` | MIT OR Apache-2.0 | `9807af0e638c12e753aa1b4e601791bf2a8f71274023c8bbeec12fc149950857` |
 | `regex-automata` | `0.4.19` | MIT OR Apache-2.0 | `41d60ef07df457506a0a1a2073112eb4aae5733dbd2813c3da77d1b0fd441158` |
 | `regex-syntax` | `0.8.12` | MIT OR Apache-2.0 | `d902046e6a28a1e4c3cab97258a0ce11e994903f01c2d97a9447a0b3df85f4f6` |
 | `rustc-demangle` | `0.1.28` | MIT/Apache-2.0 | `b74b56ffa8bb2830709a538c2cbcae9aa062db0d2a42563bfb09bdaae44020eb` |
 | `rustc-hash` | `2.1.3` | Apache-2.0 OR MIT | `6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d` |
+| `rustc_version` | `0.4.1` | MIT OR Apache-2.0 | `cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92` |
 | `rustix` | `1.1.6` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `e5e76742e5294153d4dde1207dbec5bdd81eef6fabdc0d2118babadabfd858aa` |
 | `rustversion` | `1.0.23` | MIT OR Apache-2.0 | `cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f` |
 | `scopeguard` | `1.2.0` | MIT OR Apache-2.0 | `94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49` |
+| `seccompiler` | `0.5.0` | Apache-2.0 OR BSD-3-Clause | `a4ae55de56877481d112a559bbc12667635fdaf5e005712fd4e2b2fa50ffc884` |
 | `semver` | `1.0.28` | MIT OR Apache-2.0 | `8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd` |
 | `serde` | `1.0.229` | MIT OR Apache-2.0 | `4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba` |
 | `serde_core` | `1.0.229` | MIT OR Apache-2.0 | `67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48` |
 | `serde_derive` | `1.0.229` | MIT OR Apache-2.0 | `e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348` |
 | `serde_json` | `1.0.154` | MIT OR Apache-2.0 | `e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6` |
+| `serde_spanned` | `0.6.9` | MIT OR Apache-2.0 | `bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3` |
 | `serde_spanned` | `1.1.3` | MIT OR Apache-2.0 | `9c187e0a369471c550af028cba56d4f4fa2a489ad28151ae95a4d340a2a8b782` |
 | `sha2` | `0.10.9` | MIT OR Apache-2.0 | `a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283` |
 | `sha2` | `0.11.1` | MIT OR Apache-2.0 | `47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19` |
 | `shlex` | `2.0.1` | MIT OR Apache-2.0 | `f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba` |
 | `signal-hook-registry` | `1.4.8` | MIT OR Apache-2.0 | `c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b` |
+| `signature` | `3.0.0` | Apache-2.0 OR MIT | `28d567dcbaf0049cb8ac2608a76cd95ff9e4412e1899d389ee400918ca7537f5` |
 | `simdutf8` | `0.1.5` | MIT OR Apache-2.0 | `e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e` |
 | `slab` | `0.4.12` | MIT | `0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5` |
 | `smallvec` | `1.16.6` | MIT OR Apache-2.0 | `3244542535d5de959d90ec55d1b5ff0fd2bb7b1310223907d5f11932847f7b59` |
 | `socket2` | `0.6.5` | MIT OR Apache-2.0 | `c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4` |
 | `stable_deref_trait` | `1.2.1` | MIT OR Apache-2.0 | `6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596` |
 | `streaming-iterator` | `0.1.9` | MIT OR Apache-2.0 | `2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520` |
+| `strsim` | `0.11.1` | MIT | `7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f` |
+| `strum` | `0.27.2` | MIT | `af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf` |
+| `strum_macros` | `0.27.2` | MIT | `7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7` |
+| `subtle` | `2.6.1` | BSD-3-Clause | `13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292` |
 | `syn` | `2.0.119` | MIT OR Apache-2.0 | `872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297` |
 | `syn` | `3.0.10` | MIT OR Apache-2.0 | `4ae9ccbea3a7b0b09443036490c8f34a8b1b760fd345e5c0dae0aac718faea79` |
 | `sync_wrapper` | `1.0.2` | Apache-2.0 | `0bf256ce5efdfa370213c1dabab5935a12e49f2c58d15e9eac2870d3b4f27263` |
 | `target-lexicon` | `0.13.6` | Apache-2.0 WITH LLVM-exception | `8c447be3a2abfa84b2d91680c56600bd6b2873866de27b36ec911be705e291da` |
-| `tempfile` | `3.27.0` | MIT OR Apache-2.0 | `32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd` |
 | `termcolor` | `1.4.1` | Unlicense OR MIT | `06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755` |
 | `thiserror` | `1.0.69` | MIT OR Apache-2.0 | `b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52` |
 | `thiserror` | `2.0.21` | MIT OR Apache-2.0 | `09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e` |
@@ -176,9 +203,13 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `tokio` | `1.54.1` | MIT | `b52fd3255258d26fac7264ab5a76b53c13367136dc011d3d6ad4f8ed070396a3` |
 | `tokio-macros` | `2.7.2` | MIT | `78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e` |
 | `tokio-util` | `0.7.20` | MIT | `e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b` |
+| `toml` | `0.8.23` | MIT OR Apache-2.0 | `dc1beb996b9d83529a9e75c17a1686767d148d70663143c7854d8b4a09ced362` |
 | `toml` | `1.2.1+spec-1.1.0` | MIT OR Apache-2.0 | `d5755c51863cdac711f1956baf8eb9588e060755f7d3c4c979e70ea1e1f32cd7` |
+| `toml_datetime` | `0.6.11` | MIT OR Apache-2.0 | `22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c` |
 | `toml_datetime` | `1.1.3+spec-1.1.0` | MIT OR Apache-2.0 | `173f25c883cd2176a2d8212155638c0a60d484a9d84546d270866f40f56b6e49` |
+| `toml_edit` | `0.22.27` | MIT OR Apache-2.0 | `41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a` |
 | `toml_parser` | `1.1.5+spec-1.1.0` | MIT OR Apache-2.0 | `baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c` |
+| `toml_write` | `0.1.2` | MIT OR Apache-2.0 | `5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801` |
 | `toml_writer` | `1.2.0+spec-1.1.0` | MIT OR Apache-2.0 | `009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a` |
 | `tower` | `0.5.3` | MIT | `ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4` |
 | `tower-layer` | `0.3.3` | MIT | `121c2a6cda46980bb0fcd1647ffaf6cd3fc79a013de288782836f6df9c48780e` |
@@ -219,6 +250,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `typenum` | `1.20.1` | MIT OR Apache-2.0 | `b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20` |
 | `unicode-ident` | `1.0.27` | (MIT OR Apache-2.0) AND Unicode-3.0 | `a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563` |
 | `unicode-width` | `0.2.3` | MIT OR Apache-2.0 | `ca718471876992059f251e33aafc334346ada08042b7661dd1fe313a9bced557` |
+| `unicode-xid` | `0.2.6` | MIT OR Apache-2.0 | `ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853` |
 | `uuid` | `1.29.3` | Apache-2.0 OR MIT | `3c14b15dffa2f4bd712103e857140aa04a4f2ff6e955c77d7eb8e53ee02a3b64` |
 | `version_check` | `0.9.5` | MIT/Apache-2.0 | `0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a` |
 | `wasi` | `0.11.1+wasi-snapshot-preview1` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b` |
@@ -226,37 +258,50 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `wasm-bindgen-macro` | `0.2.130` | MIT OR Apache-2.0 | `6e931a02a39abdbf66966fc35902b5ed58344750a70885bed4ebb3d8eaf28ed9` |
 | `wasm-bindgen-macro-support` | `0.2.130` | MIT OR Apache-2.0 | `2ca4b54280e455bd831e33a6b8e734baf432fe63fbc35c42ac14ce67a043a53a` |
 | `wasm-bindgen-shared` | `0.2.130` | MIT OR Apache-2.0 | `3b1f9c3798725016c6ee5f2f57869ec0831e8bbc0ab0310a86e787e97f41389e` |
-| `wasm-compose` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `df7deb87d659b1df555d3195e3df56d1f03b73d165c5a1bc3a0bad24274ea147` |
-| `wasm-encoder` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `2608e8bb6d67fd68f5a8d0eb1363d6e7bcbc1f8ded5a0bd3a1e382462b876b22` |
+| `wasm-encoder` | `0.236.1` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `724fccfd4f3c24b7e589d333fc0429c68042897a7e8a5f8694f31792471841e7` |
 | `wasm-encoder` | `0.263.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `0b883a26aea02eaabe2d2c3fba7eb039ef5cdcb5d5201ae5551e73d5e251a81f` |
-| `wasm-metadata` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `b88de21560ecd49deb8d8f1616b9b695f66fc312c5eca503f43accdc5795339e` |
-| `wasmparser` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `4f20f20e44f7e8aeb6744823ea9d869ede51e51be4fdaedede2852282e54d2d8` |
+| `wasmparser` | `0.236.1` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `a9b1e81f3eb254cf7404a82cee6926a4a3ccc5aad80cc3d43608a070c67aa1d7` |
 | `wasmparser` | `0.263.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `4f5fa0a054ae153606df820eb0a84213e28cda41bbe04ba2628e71b6ba100fcb` |
-| `wasmprinter` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `86a21c9e3325655ba02de3e645bc8357a8b3651a2e3ada25b6dbc37560deb9b7` |
-| `wasmtime` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `3231d67bedf0f4849558b01ee5accd0283469cff7ee6746ce6a9742ddc178312` |
-| `wasmtime-environ` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `a24cca20d8f3525071fcc71c0de558c754894934c43fb5550b4d23ada3523e92` |
-| `wasmtime-internal-cache` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `b9326591ca405eb6e3cfd10cc667420cee850418e650f675d5071b3eedd892c2` |
-| `wasmtime-internal-component-macro` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `b3e7b4191a7e411836b8d34cfcd20360dc134d897e9583a3686262b422643036` |
-| `wasmtime-internal-component-util` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `d58085475f745779eb5c2d5cd3d60695d280d9c2cf261f7e96e9949b293f7a82` |
-| `wasmtime-internal-core` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `b4668db5cde6343ae9c7c188741689d30bcefa40c70647b87be2afb2c14511aa` |
-| `wasmtime-internal-cranelift` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `8c5744433223d6dca55e8933510f73cf7e2aa06ca53e3f039fd3c309e315546a` |
-| `wasmtime-internal-fiber` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `ead05f9d1428e98562bef6d3c42c5c9911ac25373e9d5f6d81fa26a3efb74ae3` |
-| `wasmtime-internal-jit-debug` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `89ea96d3eac206f9e088ebfc13a27f6353bdaa6a9e467e0ba9b05e00c79cee27` |
-| `wasmtime-internal-jit-icache-coherence` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `62a0d73e89a065e74332c8651d27bbc9fa1e4c7357ff219c3929aa9c02b6a31e` |
-| `wasmtime-internal-unwinder` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `b413aca82d92129c193752d8109c1101d2b49090ea8e3028d7c7514dbb9750c2` |
-| `wasmtime-internal-versioned-export-macros` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `e084771993bee8dd7dd0af42f10b56e1f665d67c8adbef340991e268b03289d1` |
-| `wasmtime-internal-wit-bindgen` | `50.0.3` | Apache-2.0 WITH LLVM-exception | `735a94d76f9b7f34b3fdb3181ac1f4234b5b0c9916b1b54a840c399e209cccda` |
+| `wasmprinter` | `0.236.1` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `2df225df06a6df15b46e3f73ca066ff92c2e023670969f7d50ce7d5e695abbb1` |
+| `wasmtime` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `ac421e68f25e93eda1f5d977fab839f030da3d13bbb2e80392f487809e44e6e4` |
+| `wasmtime-environ` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `3d73c145a50af3f8695592c4f9b708496cc6ece5ad2c0f3779c9d14e34af0b8b` |
+| `wasmtime-internal-asm-macros` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `3a9c18f7190716a028036b0e36bd491258b3760d81af82c3ddc2c75b05cf30ae` |
+| `wasmtime-internal-cache` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `e2ee46189f2ad877221274cb0c8b82cefb21ee17261ecb6c0692506e7bdd5b97` |
+| `wasmtime-internal-component-macro` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `96d90fbe8941f59927db80ccf926caaf27addc906435afbefcb50c5f3e98ebbf` |
+| `wasmtime-internal-component-util` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `997779d92d220639b36265cb8f429663cdd4df550b21374b6bb6dcefd195fd99` |
+| `wasmtime-internal-cranelift` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `01294d7a391d60b5d156a9b601c9682ae6a38495f1d068db262383a8ec189ad9` |
+| `wasmtime-internal-fiber` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `af65880e9122ea5f746c144f0a1edae9c0c5d6f32c0527620db4f7e499e22abc` |
+| `wasmtime-internal-jit-debug` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `74bbcf971a0d8bac92608e7749d5ced9eee8846c9f637bcadb8b09bdb3d71386` |
+| `wasmtime-internal-jit-icache-coherence` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `7c4a9719db54c6b7ace5b5b02c591cf6b435b5894cd8ebf0026dbe5cc121cd87` |
+| `wasmtime-internal-math` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `97ddd17fc03e6c11b07e6836d4b4d7b6fda0db449367cf21815898db50223140` |
+| `wasmtime-internal-slab` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `638a2cff31ff9f6aab12dfed712518af4974f6264d92e84c6b69c49895217916` |
+| `wasmtime-internal-unwinder` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `be397e4b6f5e08547a387d382d6cc6b3cc008254f8f07009865d456fa70792d7` |
+| `wasmtime-internal-versioned-export-macros` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `9a404dcbf507b7b371283a0b77052c67c520dd0b2b9f3d42015aa6a74e6ceeca` |
+| `wasmtime-internal-winch` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `726ced70eb0d1f6eabd2381ad306afd2c5ed314d76ef44eab9c96bf9feccb252` |
+| `wasmtime-internal-wit-bindgen` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `27c906fb941d8334ffb42bd3ad4bc8bda65e91a04abfecff0bb8ebc84efcdaf4` |
 | `wast` | `263.0.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `69d90bcf581b501aa1c358bc5dc0faa979cd375796908860ebcb6d1d70b907c7` |
 | `wat` | `1.263.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `bbc9c5aca783b3f1838be89f3f9937c528b90ec5faa6fb62d809726c16a7d8f7` |
 | `winapi` | `0.3.9` | MIT/Apache-2.0 | `5c839a674fcd7a98952e593242ea400abe93992746761e38641405d28b00f419` |
 | `winapi-i686-pc-windows-gnu` | `0.4.0` | MIT/Apache-2.0 | `ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6` |
 | `winapi-util` | `0.1.11` | Unlicense OR MIT | `c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22` |
 | `winapi-x86_64-pc-windows-gnu` | `0.4.0` | MIT/Apache-2.0 | `712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f` |
+| `winch-codegen` | `36.0.23` | Apache-2.0 WITH LLVM-exception | `8372e9942acc32775282d0a1818f22e28411823d4158fedb2bf60b21e8657b64` |
 | `windows-link` | `0.2.1` | MIT OR Apache-2.0 | `f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5` |
+| `windows-sys` | `0.60.2` | MIT OR Apache-2.0 | `f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb` |
 | `windows-sys` | `0.61.2` | MIT OR Apache-2.0 | `ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc` |
+| `windows-targets` | `0.53.5` | MIT OR Apache-2.0 | `4945f9f551b88e0d65f3db0bc25c33b8acea4d9e41163edf90dcd0b19f9069f3` |
+| `windows_aarch64_gnullvm` | `0.53.1` | MIT OR Apache-2.0 | `a9d8416fa8b42f5c947f8482c43e7d89e73a173cead56d044f6a56104a6d1b53` |
+| `windows_aarch64_msvc` | `0.53.1` | MIT OR Apache-2.0 | `b9d782e804c2f632e395708e99a94275910eb9100b2114651e04744e9b125006` |
+| `windows_i686_gnu` | `0.53.1` | MIT OR Apache-2.0 | `960e6da069d81e09becb0ca57a65220ddff016ff2d6af6a223cf372a506593a3` |
+| `windows_i686_gnullvm` | `0.53.1` | MIT OR Apache-2.0 | `fa7359d10048f68ab8b09fa71c3daccfb0e9b559aed648a8f95469c27057180c` |
+| `windows_i686_msvc` | `0.53.1` | MIT OR Apache-2.0 | `1e7ac75179f18232fe9c285163565a57ef8d3c89254a30685b57d83a38d326c2` |
+| `windows_x86_64_gnu` | `0.53.1` | MIT OR Apache-2.0 | `9c3842cdd74a865a8066ab39c8a7a473c0778a3f29370b5fd6b4b9aa7df4a499` |
+| `windows_x86_64_gnullvm` | `0.53.1` | MIT OR Apache-2.0 | `0ffa179e2d07eee8ad8f57493436566c7cc30ac536a3379fdf008f47f6bb7ae1` |
+| `windows_x86_64_msvc` | `0.53.1` | MIT OR Apache-2.0 | `d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650` |
+| `winnow` | `0.7.15` | MIT | `df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945` |
 | `winnow` | `1.0.5` | MIT | `8c3b93199df0ab874cdf0c6a94f0a0dc3423fe41f1cafb62b8bd7b1deb277aef` |
-| `wit-component` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `2818766842bd2321074c348fb5c15d8fdb105a9eb78374e6d77c7d4127e1f2f9` |
-| `wit-parser` | `0.261.0` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `962e43c4db2da607b50839a531e5b63473268b40efdf8028d5c54b572ca4f6f6` |
+| `wit-parser` | `0.236.1` | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `16e4833a20cd6e85d6abfea0e63a399472d6f88c6262957c17f546879a80ba15` |
+| `zeroize` | `1.9.2` | Apache-2.0 OR MIT | `85ccff8a4805aba1eaa4cd4afcd49f7557dd2cf5fd79ffc37f8959466effc5aa` |
 | `zmij` | `1.0.23` | MIT | `29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b` |
 | `zstd` | `0.13.5` | BSD-3-Clause | `50adf04cf3ec914b0b9905c9dde90c80fe74bfd701e331fc80a39c512c525278` |
 | `zstd-safe` | `7.4.1` | BSD-3-Clause | `498d94ad68720c89b4fbe41b9090850651e68cb2dd9210ce7ffbff3a94653819` |
