@@ -8,8 +8,11 @@ VERSION=${MELD_VERSION:-v0.2.0-rc.1}
 PREFIX=${MELD_PREFIX:-$HOME/.local}
 TARGET=${MELD_TARGET:-}
 VERIFY_SIGNATURES=${MELD_VERIFY_SIGNATURES:-auto}
-IDENTITY='https://github.com/enis1enis2/meld/.github/workflows/release.yml@refs/tags/.*'
 ISSUER='https://token.actions.githubusercontent.com'
+
+escape_regex() {
+    printf '%s' "$1" | sed -e 's/[][\.^$*+?(){}|]/\\&/g'
+}
 
 usage() {
     cat <<'EOF'
@@ -18,6 +21,9 @@ usage: install.sh [--version TAG] [--prefix DIR] [--target TRIPLE]
 
 Environment: MELD_VERSION, MELD_PREFIX, MELD_TARGET, MELD_REPO,
 MELD_VERIFY_SIGNATURES (auto|1|0), MELD_PACKS (extra pack roots, preserved).
+
+There is no published Linux aarch64 artifact; auto-detection fails clearly on
+that host. Only set MELD_TARGET explicitly for a target proven to be published.
 EOF
 }
 
@@ -33,19 +39,30 @@ while [ $# -gt 0 ]; do
 done
 
 case "$VERSION" in v*) TAG=$VERSION; VERSION_NO_V=${VERSION#v} ;; *) TAG=v$VERSION; VERSION_NO_V=$VERSION ;; esac
+IDENTITY=$(printf '^https://github\\.com/%s/\\.github/workflows/release\\.yml@refs/tags/%s$' \
+    "$(escape_regex "$REPO")" "$(escape_regex "$TAG")")
 
 if [ -z "$TARGET" ]; then
     os=$(uname -s)
     arch=$(uname -m)
     case "$os:$arch" in
         Linux:x86_64|Linux:amd64) TARGET=x86_64-unknown-linux-gnu ;;
-        Linux:aarch64|Linux:arm64) TARGET=aarch64-unknown-linux-gnu ;;
+        Linux:aarch64|Linux:arm64)
+            printf 'install.sh: no published Linux aarch64 release artifact; set MELD_TARGET only for a trusted published target\n' >&2
+            exit 1
+            ;;
         Darwin:x86_64) TARGET=x86_64-apple-darwin ;;
         Darwin:arm64|Darwin:aarch64) TARGET=aarch64-apple-darwin ;;
         *) printf 'install.sh: no release artifact mapping for %s/%s; set MELD_TARGET\n' "$os" "$arch" >&2; exit 1 ;;
     esac
 fi
-case "$TARGET" in *windows*) printf 'install.sh: use install.ps1 on Windows\n' >&2; exit 1 ;; esac
+case "$TARGET" in
+    aarch64-unknown-linux-gnu)
+        printf 'install.sh: aarch64-unknown-linux-gnu is not published by the release matrix\n' >&2
+        exit 1
+        ;;
+    *windows*) printf 'install.sh: use install.ps1 on Windows\n' >&2; exit 1 ;;
+esac
 
 BASE="https://github.com/$REPO/releases/download/$TAG"
 ARCHIVE="meld-lang-$VERSION_NO_V-$TARGET.tar.gz"

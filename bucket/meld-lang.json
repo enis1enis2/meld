@@ -16,7 +16,7 @@
     "bin/meld-lsp.exe",
     "bin/meld-pack.exe"
   ],
-  "env": {
+  "env_set": {
     "MELD_ROOT": "$dir\\share\\meld-lang"
   },
   "post_install": [
@@ -33,7 +33,8 @@
     }
   },
   "notes": [
-    "Replace TODO_VERIFY_SHA256 with the checksum from the cosign-signed v0.2.0-rc.1 release before publishing.",
+    "The checked-in hash must come from the signed release SHA256SUMS before this manifest is published; do not publish an unverified hash.",
+    "Autoupdate does not verify cosign signatures: configure a trusted hash source (or disable autoupdate) and review hash changes before merge.",
     "MELD_ROOT points at the bundled Lang Packs; no language runtime is installed."
   ]
 }

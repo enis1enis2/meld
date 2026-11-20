@@ -1,4 +1,8 @@
 # syntax=docker/dockerfile:1
+# This image is outside the signed release artifact set: release.yml attests
+# and signs archives, SHA256SUMS, SBOM and the manifest, not container images.
+# Base tags are floating today; future work should pin by digest and use the
+# reproducible BuildKit exporter before any image-signature claim is made.
 FROM rust:1.90-bookworm AS builder
 WORKDIR /src
 COPY . .

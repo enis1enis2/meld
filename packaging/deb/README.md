@@ -17,3 +17,7 @@ dpkg-buildpackage -us -uc -b
 
 The source package is deliberately named `meld-lang` so it does not collide
 with Debian's existing `meld` diff tool. No language runtime is a dependency.
+
+This is an unsigned local source-package build (`-us -uc -b`). It is not part
+of the signed release archive set; verify the corresponding upstream release
+artifacts separately before using this packaging.

@@ -12,6 +12,9 @@ $ErrorActionPreference = 'Stop'
 $tag = $Version
 if (-not $tag.StartsWith('v')) { $tag = "v$tag" }
 $plainVersion = $tag.TrimStart('v')
+# Anchor the Sigstore identity to this exact tag; no broad refs/tags/.* regex.
+$identity = '^https://github\.com/{0}/\.github/workflows/release\.yml@refs/tags/{1}$' -f `
+    ([regex]::Escape($Repository)), ([regex]::Escape($tag))
 $base = "https://github.com/$Repository/releases/download/$tag"
 $archiveName = "meld-lang-$plainVersion-$Target.zip"
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("meld-install-" + [guid]::NewGuid().ToString('N'))
@@ -20,11 +23,12 @@ New-Item -ItemType Directory -Path $tmp | Out-Null
 try {
     $archive = Join-Path $tmp $archiveName
     $sums = Join-Path $tmp 'SHA256SUMS'
+    $archivePattern = [regex]::Escape($archiveName)
     Write-Host "install.ps1: downloading $archiveName"
     Invoke-WebRequest -Uri "$base/$archiveName" -OutFile $archive -UseBasicParsing
     Invoke-WebRequest -Uri "$base/SHA256SUMS" -OutFile $sums -UseBasicParsing
 
-    $expected = (Get-Content $sums | Where-Object { $_ -match "  $archiveName$" } | Select-Object -First 1) -split '  ' | Select-Object -First 1
+    $expected = (Get-Content $sums | Where-Object { $_ -match "  $archivePattern$" } | Select-Object -First 1) -split '  ' | Select-Object -First 1
     if (-not $expected) { throw "$archiveName is not listed in SHA256SUMS" }
     $actual = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLowerInvariant()
     if ($actual -ne $expected.ToLowerInvariant()) {
@@ -36,7 +40,7 @@ try {
     if ($cosign -and -not $SkipSignatureVerification) {
         Invoke-WebRequest -Uri "$base/$archiveName.bundle" -OutFile "$archive.bundle" -UseBasicParsing
         & cosign verify-blob --bundle "$archive.bundle" `
-            --certificate-identity-regexp 'https://github.com/enis1enis2/meld/.github/workflows/release.yml@refs/tags/.*' `
+            --certificate-identity-regexp $identity `
             --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' `
             $archive
         if ($LASTEXITCODE -ne 0) { throw 'cosign signature verification failed' }

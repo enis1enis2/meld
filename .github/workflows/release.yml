@@ -14,50 +14,17 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  MELD_IDENTITY: 'https://github.com/enis1enis2/meld/.github/workflows/release.yml@refs/tags/.*'
   MELD_ISSUER: 'https://token.actions.githubusercontent.com'
+  MELD_REPOSITORY: 'enis1enis2/meld'
 
 jobs:
-  gates:
-    name: build and test gates
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
-        with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
-        with:
-          python-version: "3.12"
-      - name: Cargo gates
-        shell: bash
-        run: |
-          cargo fmt --all -- --check
-          cargo clippy --workspace --all-targets --locked -- -D warnings
-          cargo test --workspace --all-targets --locked
-          cargo doc --workspace --no-deps --locked
-      - name: Python, schema and reference gates
-        shell: bash
-        run: |
-          python3 -m unittest discover -s tools/tests -v
-          python3 tools/fuzz_splitter.py
-          python3 tools/meld_check_ref.py
-          python3 tools/highlight_ref.py
-          python3 tools/check_grammar_sources.py
-          python3 tools/check_schemas.py
-      - name: Verify every checked-in pack
-        shell: bash
-        run: |
-          status=0
-          for pack in packs/* tests/fixtures/pack-third-party; do
-            if [ -f "$pack/pack.toml" ]; then
-              python3 tools/packtool.py verify "$pack" || status=1
-            fi
-          done
-          exit "$status"
+  ci:
+    name: unified CI gates
+    uses: ./.github/workflows/ci.yml
+
+  docs:
+    name: docs and markdown gates
+    uses: ./.github/workflows/docs.yml
 
   audit:
     name: audit
@@ -71,13 +38,45 @@ jobs:
     name: fuzz
     uses: ./.github/workflows/fuzz.yml
 
+  release-gates:
+    name: release tag gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Grammar, schema and pack gates at the release tag
+        shell: bash
+        run: |
+          python3 tools/check_grammar_sources.py
+          python3 tools/check_schemas.py
+          status=0
+          for pack in packs/* tests/fixtures/pack-third-party; do
+            if [ -f "$pack/pack.toml" ]; then
+              python3 tools/packtool.py verify "$pack" || status=1
+            fi
+          done
+          exit "$status"
+
   native-matrix:
-    name: native build (${{ matrix.os }})
+    name: native build (${{ matrix.os }}, ${{ matrix.target }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macos-latest is ARM64; macos-15-intel is the current Intel label.
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -89,9 +88,15 @@ jobs:
           python-version: "3.12"
       - name: Set release variables
         shell: bash
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
         run: |
           target=$(rustc -vV | sed -n 's/^host: //p')
           [ -n "$target" ] || { echo 'could not determine host target' >&2; exit 1; }
+          [ "$target" = "$EXPECTED_TARGET" ] || {
+            echo "runner ${{ matrix.os }} produced $target, expected $EXPECTED_TARGET" >&2
+            exit 1
+          }
           echo "MELD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "MELD_TARGET=$target" >> "$GITHUB_ENV"
           echo "SOURCE_DATE_EPOCH=$(git -C . log -1 --format=%ct)" >> "$GITHUB_ENV"
@@ -156,17 +161,55 @@ jobs:
         with:
           pattern: repro-*
           path: dist/repro
-      - name: Compare every uploaded build pair
+      - name: Set expected release targets
         shell: bash
         run: |
-          count=0
+          echo "MELD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          # There is no standard Linux aarch64 GitHub-hosted runner. Do not
+          # claim that target; install.sh fails clearly on aarch64 Linux hosts.
+          echo "MELD_EXPECTED_TARGETS=x86_64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc" >> "$GITHUB_ENV"
+      - name: Compare every uploaded build pair and assert target coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          pair_count=0
+          actual_targets=()
           for a in dist/repro/repro-*/package-a; do
             [ -d "$a" ] || continue
             b=${a%/package-a}/package-b
             sh scripts/check_reproducibility.sh --compare "$a" "$b"
-            count=$((count + 1))
+            pair_count=$((pair_count + 1))
+            for archive in "$a"/*.tar.gz "$a"/*.zip; do
+              [ -f "$archive" ] || continue
+              name=${archive##*/}
+              target=${name#meld-lang-$MELD_VERSION-}
+              target=${target%.tar.gz}
+              target=${target%.zip}
+              actual_targets+=("$target")
+            done
           done
-          [ "$count" -eq 3 ] || { echo "expected 3 reproducible pairs, got $count" >&2; exit 1; }
+          expected_count=$(printf '%s\n' $MELD_EXPECTED_TARGETS | wc -l | tr -d ' ')
+          [ "$pair_count" -eq "$expected_count" ] || {
+            echo "expected $expected_count reproducible pairs, got $pair_count" >&2
+            exit 1
+          }
+          [ "${#actual_targets[@]}" -eq "$expected_count" ] || {
+            echo "expected $expected_count archive targets, got ${#actual_targets[@]}" >&2
+            exit 1
+          }
+          mapfile -t actual_sorted < <(printf '%s\n' "${actual_targets[@]}" | LC_ALL=C sort -u)
+          mapfile -t expected_sorted < <(printf '%s\n' $MELD_EXPECTED_TARGETS | LC_ALL=C sort -u)
+          [ "${#actual_sorted[@]}" -eq "$expected_count" ] || {
+            echo "duplicate or unexpected targets: ${actual_targets[*]}" >&2
+            exit 1
+          }
+          for i in "${!expected_sorted[@]}"; do
+            [ "${actual_sorted[$i]}" = "${expected_sorted[$i]}" ] || {
+              echo "expected target set [${expected_sorted[*]}], got [${actual_sorted[*]}]" >&2
+              exit 1
+            }
+          done
+          echo "reproducible target set verified: ${actual_sorted[*]}"
 
   sbom:
     name: CycloneDX SBOM
@@ -204,7 +247,7 @@ jobs:
 
   sign:
     name: sign and verify release artifacts
-    needs: [gates, audit, msrv, fuzz, native-matrix, reproducible, sbom]
+    needs: [ci, docs, release-gates, audit, msrv, fuzz, native-matrix, reproducible, sbom]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -235,33 +278,38 @@ jobs:
         with:
           name: sbom
           path: dist/release
-      - name: Generate checksums and release manifest
+      - name: Generate manifest, then strict checksums
         shell: bash
         run: |
-          sh scripts/generate_checksums.sh \
-            --dir dist/release \
-            --out dist/release/SHA256SUMS
           python3 scripts/generate_release_manifest.py \
             --version "$MELD_VERSION" \
             --artifacts-dir dist/release \
-            --checksums dist/release/SHA256SUMS \
             --sbom "dist/release/meld-lang-$MELD_VERSION-sbom.cdx.json" \
             --commit "$GIT_COMMIT" \
             --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --expected-target x86_64-unknown-linux-gnu \
+            --expected-target aarch64-apple-darwin \
+            --expected-target x86_64-apple-darwin \
+            --expected-target x86_64-pc-windows-msvc \
             --out "dist/release/meld-lang-$MELD_VERSION.release-manifest.json"
+          sh scripts/generate_checksums.sh \
+            --dir dist/release \
+            --out dist/release/SHA256SUMS
       - name: Keyless-sign and verify artifacts
         shell: bash
         run: |
           sh scripts/sign_artifacts.sh \
             --dir dist/release \
-            --identity-regexp "$MELD_IDENTITY" \
+            --repo "$MELD_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
             --issuer "$MELD_ISSUER"
       - name: Verify signed release locally in CI
         shell: bash
         run: |
           sh scripts/verify_artifacts.sh \
             --dir dist/release \
-            --identity-regexp "$MELD_IDENTITY" \
+            --repo "$MELD_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
             --issuer "$MELD_ISSUER"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
@@ -314,7 +362,7 @@ jobs:
 
   release:
     name: publish GitHub release
-    needs: [gates, audit, msrv, fuzz, native-matrix, reproducible, sbom, sign, provenance]
+    needs: [ci, docs, release-gates, audit, msrv, fuzz, native-matrix, reproducible, sbom, sign, provenance]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -338,8 +386,10 @@ jobs:
         run: |
           sh scripts/verify_artifacts.sh \
             --dir dist/release \
-            --identity-regexp "$MELD_IDENTITY" \
-            --issuer "$MELD_ISSUER"
+            --repo "$MELD_REPOSITORY" \
+            --tag "$GITHUB_REF_NAME" \
+            --issuer "$MELD_ISSUER" \
+            --attestation "dist/release/meld-lang-${GITHUB_REF_NAME#v}.intoto.jsonl"
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
