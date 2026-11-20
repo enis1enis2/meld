@@ -1,0 +1,9 @@
+# Configuration for cargo-audit. Advisories are never ignored by default; an
+# exception must include a linked rationale and a removal condition.
+[advisories]
+ignore = []
+
+[output]
+deny = ["warnings"]
+show_tree = true
+quiet = false

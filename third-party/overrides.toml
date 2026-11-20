@@ -1,0 +1,19 @@
+# Upstream substitutions and mechanical fixes applied to pinned grammars.
+# These mirror tools/sync_grammars.py and crates/meld-grammars/Cargo.toml.
+
+[crates]
+"tree-sitter-markdown" = "tree-sitter-md"
+"tree-sitter-sql" = "tree-sitter-sequel"
+
+[query_subdirs]
+"tree-sitter-md" = "tree-sitter-markdown"
+
+[deferred]
+tree-sitter-perl = "1.1.2 keeps tree-sitter 0.26 as a normal dependency, which conflicts with the core's 0.27 links library"
+
+[[fixups]]
+crate = "tree-sitter-solidity"
+file = "highlights.scm"
+from = "(struct_expression type: ((expression(identifier)) @type .))"
+to = "(struct_expression type: ((expression (identifier)) @type))"
+reason = "A trailing anchor inside a grouped capture is rejected by tree-sitter 0.27; the anchor is redundant for this single-child field."
