@@ -1,3 +1,4 @@
 # Grammar reference for html
 
-Pinned rev: `pinned:html-v1`
+Crate: `tree-sitter-html`
+Pinned rev: `0.23.2`

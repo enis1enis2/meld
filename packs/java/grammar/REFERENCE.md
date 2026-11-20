@@ -1,3 +1,4 @@
 # Grammar reference for java
 
-Pinned rev: `pinned:java-v1`
+Crate: `tree-sitter-java`
+Pinned rev: `0.23.5`

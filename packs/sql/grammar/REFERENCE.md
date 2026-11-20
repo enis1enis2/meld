@@ -1,3 +1,4 @@
 # Grammar reference for sql
 
-Pinned rev: `pinned:sql-v1`
+Crate: `tree-sitter-sequel`
+Pinned rev: `0.3.13`

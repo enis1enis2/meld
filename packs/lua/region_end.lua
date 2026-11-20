@@ -1,3 +1,4 @@
+-- Reference-only stub; never loaded by the host.
 -- End-scanner reference for plain `@lua { ... }` blocks.
 -- JUDGMENT CALL: the host uses the generic scanner until Wasm scanners land.
 function find_region_end(text, start, marker)

@@ -1,5 +1,5 @@
-# JUDGMENT CALL: no external language server is bundled for generated L0
-# packs. Keywords give the Meld LSP deterministic fallback completions while
+# JUDGMENT CALL: no external language server is bundled for this L1 pack.
+# Keywords give the Meld LSP deterministic fallback completions while
 # keeping the core free of language-id tables.
 [lsp]
 language_id = "bash"

@@ -1,3 +1,4 @@
+// Reference-only stub; never loaded by the host.
 // End-scanner reference for plain `@javascript { ... }` blocks.
 // JUDGMENT CALL: the host uses the generic balanced-brace scanner until Wasm
 // scanners are wired in Phase 4; this file records the pack-owned contract.

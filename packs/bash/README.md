@@ -20,8 +20,8 @@ the value bridge (`import`/`export`/`fetch`), so the manifest honestly declares
 - JSON/base64 protocol lines are encoded with the Python 3 standard library
   inside `worker.sh`. Python 3 is already required by the Meld tooling; the
   executed region itself still runs in `sh -c`.
-- `region_end.sh` is a scanning stub returning `-1`, so Meld uses the
-  deterministic raw-hash delimiter fallback. Source examples therefore use
+- `region_end.wat` is a reference-only WAT stub returning `-1`, so Meld uses
+  the deterministic raw-hash delimiter fallback. Source examples therefore use
   `@bash#"..." "#` blocks rather than relying on brace balancing.
 - No `formatter.toml` is shipped. `meld fmt` keeps the region body verbatim
   instead of guessing a formatter (spec/lang-pack.md §4.4).

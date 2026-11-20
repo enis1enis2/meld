@@ -1,3 +1,4 @@
 # Grammar reference for go
 
-Pinned rev: `pinned:go-v1`
+Crate: `tree-sitter-go`
+Pinned rev: `0.25.0`

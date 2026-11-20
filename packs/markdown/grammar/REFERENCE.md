@@ -1,3 +1,4 @@
 # Grammar reference for markdown
 
-Pinned rev: `pinned:markdown-v1`
+Crate: `tree-sitter-md`
+Pinned rev: `0.5.4`

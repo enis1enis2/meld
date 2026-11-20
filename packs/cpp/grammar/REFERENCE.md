@@ -1,3 +1,4 @@
 # Grammar reference for cpp
 
-Pinned rev: `pinned:cpp-v1`
+Crate: `tree-sitter-cpp`
+Pinned rev: `0.23.4`

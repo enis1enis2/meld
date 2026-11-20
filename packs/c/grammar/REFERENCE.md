@@ -1,3 +1,4 @@
 # Grammar reference for c
 
-Pinned rev: `pinned:c-v1`
+Crate: `tree-sitter-c`
+Pinned rev: `0.24.2`

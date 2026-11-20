@@ -1,3 +1,4 @@
 # Grammar reference for css
 
-Pinned rev: `pinned:css-v1`
+Crate: `tree-sitter-css`
+Pinned rev: `0.25.0`

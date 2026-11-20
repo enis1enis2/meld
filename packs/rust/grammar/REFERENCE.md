@@ -1,3 +1,4 @@
 # Grammar reference for rust
 
-Pinned rev: `pinned:rust-v1`
+Crate: `tree-sitter-rust`
+Pinned rev: `0.24.2`

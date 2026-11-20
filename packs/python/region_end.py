@@ -1,3 +1,4 @@
+# Reference-only stub; never loaded by the host.
 """End-scanner reference for plain `@python { ... }` blocks.
 
 JUDGMENT CALL: the Rust host currently wires the generic C-like balanced-brace

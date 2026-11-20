@@ -1,3 +1,4 @@
 # Grammar reference for json
 
-Pinned rev: `pinned:json-v1`
+Crate: `tree-sitter-json`
+Pinned rev: `0.24.8`
