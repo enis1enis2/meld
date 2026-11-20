@@ -279,6 +279,9 @@ Additional judgment calls (also inline in the affected specs/code):
     explicit allowlist. With a cleared environment, Node could not initialize
     its CSPRNG and aborted with `ncrypto::CSPRNG(nullptr, 0)`. These are OS
     locators, not secrets; all other host variables remain blocked.
+45. CI requests a floating Python 3.12 patch instead of 3.12.9, which is absent
+    from the Ubuntu 26.04 runner image (CI job 136453004450). The Python
+    dependency itself remains pinned in `requirements-ci.txt`.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
