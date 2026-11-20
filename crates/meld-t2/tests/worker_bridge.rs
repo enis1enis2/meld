@@ -62,11 +62,17 @@ fn export_and_import_round_trip_through_python_worker() {
         ],
         imports: vec![],
     };
-    let stdout = backend.run(&producer, &mut bridge).expect("producer executes");
+    let stdout = backend
+        .run(&producer, &mut bridge)
+        .expect("producer executes");
     assert!(stdout.is_empty());
     assert_eq!(
         bridge.values.get("nums"),
-        Some(&Value::List(vec![Value::int(1), Value::int(2), Value::int(3)])),
+        Some(&Value::List(vec![
+            Value::int(1),
+            Value::int(2),
+            Value::int(3)
+        ])),
     );
     assert_eq!(
         bridge.values.get("label"),
@@ -87,6 +93,8 @@ fn export_and_import_round_trip_through_python_worker() {
         exports: vec![],
         imports: vec![imp],
     };
-    let stdout = backend.run(&consumer, &mut bridge).expect("consumer executes");
+    let stdout = backend
+        .run(&consumer, &mut bridge)
+        .expect("consumer executes");
     assert_eq!(stdout, vec!["3".to_string()]);
 }

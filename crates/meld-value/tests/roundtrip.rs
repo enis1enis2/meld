@@ -27,7 +27,10 @@ fn scalar_roundtrip() {
 fn composite_roundtrip() {
     let mut rec = BTreeMap::new();
     rec.insert("a".to_string(), Value::int(7));
-    rec.insert("b".to_string(), Value::List(vec![Value::Bool(false), Value::Null]));
+    rec.insert(
+        "b".to_string(),
+        Value::List(vec![Value::Bool(false), Value::Null]),
+    );
     let v = Value::Record(rec);
     let j = v.to_json();
     assert_eq!(Value::from_json(&j).unwrap(), v);

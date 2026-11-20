@@ -99,11 +99,7 @@ pub fn execution_plan(doc: &SplitDocument, b: &Bindings) -> Result<Vec<String>> 
             .or_default()
             .push(imp.region_id.clone());
     }
-    let order: Vec<String> = doc
-        .regions
-        .iter()
-        .map(|r: &Region| r.id.clone())
-        .collect();
+    let order: Vec<String> = doc.regions.iter().map(|r: &Region| r.id.clone()).collect();
     let mut ready: Vec<String> = order
         .iter()
         .filter(|id| indegree.get(*id).copied().unwrap_or(0) == 0)

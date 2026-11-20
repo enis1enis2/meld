@@ -4,7 +4,9 @@ use meld_core::splitter::{self, BalancedBraceScanner};
 use std::collections::HashMap;
 
 fn next(seed: &mut u64) -> u64 {
-    *seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *seed = seed
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     *seed >> 33
 }
 
@@ -43,11 +45,19 @@ fn split_render_is_idempotent() {
         let rendered = splitter::render(&doc);
         assert_eq!(rendered, src, "seed {seed} changed source");
         let again = splitter::split(&rendered, &scanners()).unwrap();
-        assert_eq!(again.regions.len(), doc.regions.len(), "seed {seed} region count");
+        assert_eq!(
+            again.regions.len(),
+            doc.regions.len(),
+            "seed {seed} region count"
+        );
         for (a, b) in doc.regions.iter().zip(again.regions.iter()) {
             assert_eq!(a.lang, b.lang, "seed {seed} lang drift");
             assert_eq!(a.kind, b.kind, "seed {seed} kind drift");
-            assert_eq!(a.body(&rendered), b.body(&rendered), "seed {seed} body drift");
+            assert_eq!(
+                a.body(&rendered),
+                b.body(&rendered),
+                "seed {seed} body drift"
+            );
         }
     }
 }
@@ -56,6 +66,10 @@ fn split_render_is_idempotent() {
 fn closing_marker_inside_string_does_not_end_region() {
     let src = "@python { s = 'a } b'; print(s) }\ntail\n";
     let doc = splitter::split(src, &scanners()).unwrap();
-    let block = doc.regions.iter().find(|r| r.kind == splitter::RegionKind::Block).unwrap();
+    let block = doc
+        .regions
+        .iter()
+        .find(|r| r.kind == splitter::RegionKind::Block)
+        .unwrap();
     assert!(block.body(src).contains("a } b"));
 }

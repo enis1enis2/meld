@@ -59,7 +59,12 @@ impl<'a> SourceMap<'a> {
         Point { line, col }
     }
 
-    pub fn span(&self, region_id: &str, local_start: usize, local_end: usize) -> Option<SourceSpan> {
+    pub fn span(
+        &self,
+        region_id: &str,
+        local_start: usize,
+        local_end: usize,
+    ) -> Option<SourceSpan> {
         let r = self.region(region_id)?;
         let global = self.local_to_global(region_id, local_start)?;
         let p = self.point_at(global);

@@ -62,7 +62,13 @@ impl ExternalLsp {
         Ok(())
     }
 
-    pub fn did_open(&mut self, uri: &str, language_id: &str, version: i32, text: &str) -> Result<(), String> {
+    pub fn did_open(
+        &mut self,
+        uri: &str,
+        language_id: &str,
+        version: i32,
+        text: &str,
+    ) -> Result<(), String> {
         self.ensure_initialized()?;
         self.notify(
             "textDocument/didOpen",
@@ -102,7 +108,9 @@ impl ExternalLsp {
     fn request(&mut self, method: &str, params: Value) -> Result<Value, String> {
         let id = self.next_id;
         self.next_id += 1;
-        self.write_message(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))?;
+        self.write_message(
+            &json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }),
+        )?;
         loop {
             let msg = self.read_message()?;
             if msg.get("id").and_then(Value::as_i64) == Some(id) {
@@ -136,7 +144,10 @@ impl ExternalLsp {
         let mut length = None;
         loop {
             let mut line = String::new();
-            let n = self.stdout.read_line(&mut line).map_err(|e| e.to_string())?;
+            let n = self
+                .stdout
+                .read_line(&mut line)
+                .map_err(|e| e.to_string())?;
             if n == 0 {
                 return Err("language server closed stdout".to_string());
             }
@@ -150,7 +161,9 @@ impl ExternalLsp {
         }
         let len = length.ok_or("missing Content-Length")?;
         let mut buf = vec![0u8; len];
-        self.stdout.read_exact(&mut buf).map_err(|e| e.to_string())?;
+        self.stdout
+            .read_exact(&mut buf)
+            .map_err(|e| e.to_string())?;
         serde_json::from_slice(&buf).map_err(|e| format!("invalid LSP JSON: {e}"))
     }
 }

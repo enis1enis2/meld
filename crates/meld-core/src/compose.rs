@@ -97,11 +97,7 @@ fn glue_for(bindings: &Bindings, ids: &HashSet<String>) -> (Vec<Import>, Vec<Exp
 
 /// Turn an execution plan into runner units. Inline regions never appear as
 /// standalone units; they are rendered into the composite that owns them.
-pub fn build_units(
-    doc: &SplitDocument,
-    plan: &[String],
-    bindings: &Bindings,
-) -> Result<Vec<Unit>> {
+pub fn build_units(doc: &SplitDocument, plan: &[String], bindings: &Bindings) -> Result<Vec<Unit>> {
     let mut units = Vec::new();
     let mut i = 0usize;
     while i < plan.len() {
@@ -229,7 +225,9 @@ fn collect_inline_group(
             }));
             ids.insert(r.id.clone());
             j += 1;
-        } else if r.kind == RegionKind::Untagged && anchor.as_ref().is_some_and(|a| a.lang == r.lang) {
+        } else if r.kind == RegionKind::Untagged
+            && anchor.as_ref().is_some_and(|a| a.lang == r.lang)
+        {
             segments.push(Segment::Source(strip_glue(r.body(&doc.source))));
             ids.insert(r.id.clone());
             j += 1;

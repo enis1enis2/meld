@@ -36,7 +36,11 @@ impl VirtualDocument {
         // document must contain only the region body.
         let sanitized = sanitize_source(&doc.source, region);
         text.push_str(&sanitized[region.start..region.end]);
-        let ext = if extension.is_empty() { "txt" } else { extension };
+        let ext = if extension.is_empty() {
+            "txt"
+        } else {
+            extension
+        };
         Self {
             uri: format!("meld-virtual:///{}.{}", region.id, ext),
             language_id: language_id.to_string(),
@@ -139,7 +143,10 @@ mod tests {
 
     const SRC: &str = "#meld python\nconst setup = 1;\n@javascript as js {\n  console.l\n}\n";
 
-    fn region() -> (meld_core::splitter::SplitDocument, meld_core::splitter::Region) {
+    fn region() -> (
+        meld_core::splitter::SplitDocument,
+        meld_core::splitter::Region,
+    ) {
         let doc = split(SRC, &default_scanners()).unwrap();
         let r = doc
             .regions
@@ -154,7 +161,10 @@ mod tests {
     fn virtual_document_preserves_global_coordinates() {
         let (doc, r) = region();
         let vd = VirtualDocument::new(&doc, &r, "javascript", "js");
-        let global = Position { line: 3, character: 11 };
+        let global = Position {
+            line: 3,
+            character: 11,
+        };
         let local = vd.local_position(&doc.source, global);
         assert_eq!(local, global);
         assert_eq!(vd.global_position(&doc.source, local), global);
@@ -166,11 +176,21 @@ mod tests {
     fn utf16_columns_survive_a_multibyte_prefix() {
         let src = "#meld python\n⟦python: 'héllo'⟧\n";
         let doc = split(src, &default_scanners()).unwrap();
-        let r = doc.regions.iter().find(|r| r.kind == meld_core::splitter::RegionKind::Inline).unwrap();
+        let r = doc
+            .regions
+            .iter()
+            .find(|r| r.kind == meld_core::splitter::RegionKind::Inline)
+            .unwrap();
         let vd = VirtualDocument::new(&doc, r, "python", "py");
         // Character 12 is the `h` in `'héllo'`; LSP columns count `é` as one
         // UTF-16 unit, while Rust byte offsets need two bytes.
-        let p = Position { line: 1, character: 12 };
-        assert_eq!(vd.global_position(&doc.source, vd.local_position(&doc.source, p)), p);
+        let p = Position {
+            line: 1,
+            character: 12,
+        };
+        assert_eq!(
+            vd.global_position(&doc.source, vd.local_position(&doc.source, p)),
+            p
+        );
     }
 }

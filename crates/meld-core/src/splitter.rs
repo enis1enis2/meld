@@ -131,15 +131,10 @@ impl EndScanner for BalancedBraceScanner {
 
 fn take_id(b: &[u8], mut i: usize) -> (String, usize) {
     let start = i;
-    while i < b.len()
-        && (b[i].is_ascii_alphanumeric() || b[i] == b'_' || b[i] == b'-')
-    {
+    while i < b.len() && (b[i].is_ascii_alphanumeric() || b[i] == b'_' || b[i] == b'-') {
         i += 1;
     }
-    (
-        String::from_utf8_lossy(&b[start..i]).into_owned(),
-        i,
-    )
+    (String::from_utf8_lossy(&b[start..i]).into_owned(), i)
 }
 
 fn skip_spaces(b: &[u8], mut i: usize) -> usize {
@@ -226,16 +221,43 @@ fn block_head(source: &str, at: usize) -> Option<BlockHead> {
 pub fn default_scanners() -> std::collections::HashMap<String, Box<dyn EndScanner>> {
     let mut m = std::collections::HashMap::new();
     for lang in [
-        "python", "javascript", "lua", "rust", "go", "c", "cpp", "java", "json", "sql",
-        "html", "css", "markdown",
+        "python",
+        "javascript",
+        "lua",
+        "rust",
+        "go",
+        "c",
+        "cpp",
+        "java",
+        "json",
+        "sql",
+        "html",
+        "css",
+        "markdown",
         // JUDGMENT CALL (language expansion): every bundled L0 grammar shares
         // the generic brace fallback for plain `@lang { ... }` blocks. Languages
         // with indentation or template delimiters should still use raw hash
         // delimiters; registering them here only makes the fallback explicit.
-        "typescript", "tsx", "bash", "ruby", "php", "yaml", "toml", "csharp",
-        "haskell", "ocaml", "scala", "zig", "r", "dart", "solidity",
+        "typescript",
+        "tsx",
+        "bash",
+        "ruby",
+        "php",
+        "yaml",
+        "toml",
+        "csharp",
+        "haskell",
+        "ocaml",
+        "scala",
+        "zig",
+        "r",
+        "dart",
+        "solidity",
     ] {
-        m.insert(lang.to_string(), Box::new(BalancedBraceScanner) as Box<dyn EndScanner>);
+        m.insert(
+            lang.to_string(),
+            Box::new(BalancedBraceScanner) as Box<dyn EndScanner>,
+        );
     }
     m
 }
@@ -344,12 +366,12 @@ pub fn split(
             }
             let body_start = k + 1;
             let close_marker = "\n```".to_string();
-            let rel = source[body_start..].find(&close_marker).ok_or_else(|| {
-                MeldError::Split {
+            let rel = source[body_start..]
+                .find(&close_marker)
+                .ok_or_else(|| MeldError::Split {
                     byte_start: i,
                     message: "unterminated fence".to_string(),
-                }
-            })?;
+                })?;
             let body_end = body_start + rel;
             let mut full_end = body_end + close_marker.len();
             if full_end < b.len() && b[full_end] == b'\n' {
@@ -380,12 +402,12 @@ pub fn split(
         // Block.
         if let Some(head) = block_head(source, i) {
             let (body_end, full_end) = if head.hash > 0 {
-                let rel = source[head.body_start..]
-                    .find(&head.close)
-                    .ok_or_else(|| MeldError::Split {
+                let rel = source[head.body_start..].find(&head.close).ok_or_else(|| {
+                    MeldError::Split {
                         byte_start: i,
                         message: "unterminated raw block".to_string(),
-                    })?;
+                    }
+                })?;
                 let end = head.body_start + rel;
                 (end, end + head.close.len())
             } else {
@@ -393,12 +415,13 @@ pub fn split(
                     .get(&head.lang)
                     .map(|s| s.as_ref())
                     .unwrap_or(&default_scanner);
-                let end = scanner.find_end(source, head.body_start).ok_or_else(|| {
-                    MeldError::Split {
-                        byte_start: i,
-                        message: "unterminated block".to_string(),
-                    }
-                })?;
+                let end =
+                    scanner
+                        .find_end(source, head.body_start)
+                        .ok_or_else(|| MeldError::Split {
+                            byte_start: i,
+                            message: "unterminated block".to_string(),
+                        })?;
                 (end, end + 1)
             };
             let open_marker = source[i..head.body_start].to_string();
@@ -422,21 +445,19 @@ pub fn split(
         // Inline.
         if source[i..].starts_with('⟦') {
             let close = "⟧";
-            let colon = source[i + 3..]
-                .find(':')
-                .ok_or_else(|| MeldError::Split {
-                    byte_start: i,
-                    message: "inline region missing ':'".to_string(),
-                })?
-                + i + 3;
+            let colon = source[i + 3..].find(':').ok_or_else(|| MeldError::Split {
+                byte_start: i,
+                message: "inline region missing ':'".to_string(),
+            })? + i
+                + 3;
             let lang = source[i + 3..colon].trim().to_string();
             let body_start = colon + 1;
-            let rel = source[body_start..].find(close).ok_or_else(|| {
-                MeldError::Split {
+            let rel = source[body_start..]
+                .find(close)
+                .ok_or_else(|| MeldError::Split {
                     byte_start: i,
                     message: "unterminated inline region".to_string(),
-                }
-            })?;
+                })?;
             let body_end = body_start + rel;
             let full_end = body_end + close.len();
             regions.push(Region {

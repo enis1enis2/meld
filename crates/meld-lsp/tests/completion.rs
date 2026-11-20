@@ -14,7 +14,10 @@ fn as_value(response: tower_lsp_server::ls_types::CompletionResponse) -> Value {
 }
 
 fn labels(value: &Value) -> Vec<String> {
-    let items = value.as_array().or_else(|| value.get("items").and_then(Value::as_array)).unwrap();
+    let items = value
+        .as_array()
+        .or_else(|| value.get("items").and_then(Value::as_array))
+        .unwrap();
     items
         .iter()
         .map(|i| i.get("label").and_then(Value::as_str).unwrap().to_string())
@@ -25,9 +28,8 @@ fn labels(value: &Value) -> Vec<String> {
 async fn completion_inside_non_default_region_forwards_and_maps_back() {
     let root = root();
     let extra = vec![root.join("tests/fixtures/pack-lsp-mock")];
-    let (service, _socket) = LspService::new(|client| {
-        Backend::with_pack_roots(client, root.clone(), extra.clone())
-    });
+    let (service, _socket) =
+        LspService::new(|client| Backend::with_pack_roots(client, root.clone(), extra.clone()));
     let backend = service.inner();
     let source = "#meld python\nconst setup = 1;\n@mocklang as js {\n  console.l\n}\n";
 
@@ -62,8 +64,14 @@ async fn completion_inside_non_default_region_forwards_and_maps_back() {
     );
     // The mock echoed the virtual cursor. After mapping it must be the exact
     // original .meld position, not the padded virtual-file coordinate.
-    assert_eq!(items[0]["textEdit"]["range"]["start"], json!({"line": 3, "character": 11}));
-    assert_eq!(items[0]["textEdit"]["range"]["end"], json!({"line": 3, "character": 11}));
+    assert_eq!(
+        items[0]["textEdit"]["range"]["start"],
+        json!({"line": 3, "character": 11})
+    );
+    assert_eq!(
+        items[0]["textEdit"]["range"]["end"],
+        json!({"line": 3, "character": 11})
+    );
 }
 
 #[tokio::test]

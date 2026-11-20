@@ -1,7 +1,7 @@
 //! T2 worker host. Every language with a CLI can implement this protocol.
 use crate::protocol::{decode_response, encode, ErrorObject, Request, PROTOCOL};
-use meld_core::error::{MeldError, Result};
 use meld_core::binding::Import;
+use meld_core::error::{MeldError, Result};
 use meld_core::scheduler::{Backend, Bridge, Job};
 use meld_value::Value;
 use serde_json::{json, Value as Json};
@@ -119,7 +119,9 @@ impl T2Backend {
                     let callback_id = msg.get("id").cloned().unwrap_or(Json::Null);
                     let params = msg.get("params").cloned().unwrap_or(Json::Null);
                     let response = match self.handle_host_call(&params) {
-                        Ok(value) => json!({ "id": callback_id, "result": { "value": value.to_json() } }),
+                        Ok(value) => {
+                            json!({ "id": callback_id, "result": { "value": value.to_json() } })
+                        }
                         Err(e) => json!({
                             "id": callback_id,
                             "error": {
@@ -136,12 +138,11 @@ impl T2Backend {
             if let Ok(resp) = decode_response(&line) {
                 if resp.id == id {
                     if let Some(err) = resp.error {
-                        let e: ErrorObject = serde_json::from_value(err)
-                            .unwrap_or(ErrorObject {
-                                code: "E_PROTOCOL".to_string(),
-                                message: "malformed error".to_string(),
-                                source: None,
-                            });
+                        let e: ErrorObject = serde_json::from_value(err).unwrap_or(ErrorObject {
+                            code: "E_PROTOCOL".to_string(),
+                            message: "malformed error".to_string(),
+                            source: None,
+                        });
                         return Err(match e.code.as_str() {
                             "NumericOverflow" => MeldError::NumericOverflow(e.message),
                             "TypeMismatch" => MeldError::TypeMismatch(e.message),
@@ -169,14 +170,21 @@ impl T2Backend {
             "initialize",
             json!({ "protocol": PROTOCOL, "lang": lang, "caps": ["values", "stdout", "eval"] }),
         )?;
-        let got = result.get("protocol").and_then(|v| v.as_str()).unwrap_or("");
+        let got = result
+            .get("protocol")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
         if got != PROTOCOL {
             return Err(MeldError::WorkerCrashed("protocol mismatch".to_string()));
         }
         self.caps = result
             .get("caps")
             .and_then(|v| v.as_array())
-            .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+            .map(|xs| {
+                xs.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
             .unwrap_or_default();
         self.initialized = true;
         Ok(())
@@ -203,10 +211,7 @@ impl T2Backend {
                 "worker for {region_id} does not advertise eval"
             )));
         }
-        let result = self.call(
-            "eval",
-            json!({ "region_id": region_id, "code": code }),
-        )?;
+        let result = self.call("eval", json!({ "region_id": region_id, "code": code }))?;
         let value = result.get("value").cloned().unwrap_or(Json::Null);
         Value::from_json(&value).map_err(|e| MeldError::TypeMismatch(e.to_string()))
     }
@@ -243,18 +248,22 @@ impl Backend for T2Backend {
         let stdout: Vec<String> = result
             .get("stdout")
             .and_then(|v| v.as_array())
-            .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+            .map(|xs| {
+                xs.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect()
+            })
             .unwrap_or_default();
 
         if let Some(exports) = result.get("exports").and_then(|v| v.as_array()) {
             for e in exports {
-                if let (Some(name), Some(value)) = (
-                    e.get("name").and_then(|v| v.as_str()),
-                    e.get("value"),
-                ) {
+                if let (Some(name), Some(value)) =
+                    (e.get("name").and_then(|v| v.as_str()), e.get("value"))
+                {
                     bridge.values.insert(
                         name.to_string(),
-                        Value::from_json(value).map_err(|err| MeldError::TypeMismatch(err.to_string()))?,
+                        Value::from_json(value)
+                            .map_err(|err| MeldError::TypeMismatch(err.to_string()))?,
                     );
                 }
             }

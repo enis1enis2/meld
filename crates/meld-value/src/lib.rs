@@ -29,11 +29,18 @@ pub enum Value {
     List(Vec<Value>),
     Map(BTreeMap<String, Value>),
     Record(BTreeMap<String, Value>),
-    Variant { case: String, value: Box<Value> },
+    Variant {
+        case: String,
+        value: Box<Value>,
+    },
     Option(Option<Box<Value>>),
     ResultOk(Box<Value>),
     ResultErr(Box<Value>),
-    Handle { id: String, resource: String, borrow: bool },
+    Handle {
+        id: String,
+        resource: String,
+        borrow: bool,
+    },
     /// Reference to `region-id:export-name` (spec/value-model.md §1).
     Fn(String),
 }
@@ -93,7 +100,11 @@ impl Value {
             Value::Option(None) => J::Null,
             Value::ResultOk(v) => json!({ "$ok": v.to_json() }),
             Value::ResultErr(v) => json!({ "$err": v.to_json() }),
-            Value::Handle { id, resource, borrow } => {
+            Value::Handle {
+                id,
+                resource,
+                borrow,
+            } => {
                 json!({ "$handle": { "id": id, "resource": resource, "borrow": borrow } })
             }
             Value::Fn(target) => json!({ "$fn": target }),
@@ -120,11 +131,15 @@ impl Value {
             )),
             J::Object(o) => {
                 if let Some(v) = o.get("$bytes") {
-                    let s = v.as_str().ok_or_else(|| ValueError::InvalidTag("$bytes".to_string()))?;
+                    let s = v
+                        .as_str()
+                        .ok_or_else(|| ValueError::InvalidTag("$bytes".to_string()))?;
                     return Ok(Value::Bytes(unbase64(s)?));
                 }
                 if let Some(v) = o.get("$map") {
-                    let obj = v.as_object().ok_or_else(|| ValueError::InvalidTag("$map".to_string()))?;
+                    let obj = v
+                        .as_object()
+                        .ok_or_else(|| ValueError::InvalidTag("$map".to_string()))?;
                     let mut m = BTreeMap::new();
                     for (k, val) in obj {
                         m.insert(k.clone(), Value::from_json(val)?);
@@ -132,7 +147,9 @@ impl Value {
                     return Ok(Value::Map(m));
                 }
                 if let Some(v) = o.get("$variant") {
-                    let obj = v.as_object().ok_or_else(|| ValueError::InvalidTag("$variant".to_string()))?;
+                    let obj = v
+                        .as_object()
+                        .ok_or_else(|| ValueError::InvalidTag("$variant".to_string()))?;
                     let case = obj
                         .get("case")
                         .and_then(|x| x.as_str())
@@ -156,9 +173,15 @@ impl Value {
                     return Ok(Value::ResultErr(Box::new(Value::from_json(v)?)));
                 }
                 if let Some(v) = o.get("$handle") {
-                    let obj = v.as_object().ok_or_else(|| ValueError::InvalidTag("$handle".to_string()))?;
+                    let obj = v
+                        .as_object()
+                        .ok_or_else(|| ValueError::InvalidTag("$handle".to_string()))?;
                     return Ok(Value::Handle {
-                        id: obj.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                        id: obj
+                            .get("id")
+                            .and_then(|x| x.as_str())
+                            .unwrap_or("")
+                            .to_string(),
                         resource: obj
                             .get("resource")
                             .and_then(|x| x.as_str())
@@ -363,8 +386,16 @@ fn base64(bytes: &[u8]) -> String {
             | chunk.get(2).copied().unwrap_or(0) as u32;
         out.push(T[((n >> 18) & 63) as usize] as char);
         out.push(T[((n >> 12) & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { T[((n >> 6) & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            T[((n >> 6) & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[(n & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }

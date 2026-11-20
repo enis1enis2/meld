@@ -65,8 +65,8 @@ fn every_bundled_grammar_parses_a_real_snippet_without_errors() {
         ("solidity", "pragma solidity ^0.8.0;\ncontract Meld {\n  function twice(uint256 x) public pure returns (uint256) { return x * 2; }\n}"),
     ];
     for (lang, code) in cases {
-        let info = parse(lang, code)
-            .unwrap_or_else(|e| panic!("{lang}: grammar rejected snippet: {e}"));
+        let info =
+            parse(lang, code).unwrap_or_else(|e| panic!("{lang}: grammar rejected snippet: {e}"));
         assert!(!info.has_error, "{lang}: ERROR/MISSING node in {code:?}");
         assert!(info.named_nodes > 0, "{lang}: no named nodes");
     }

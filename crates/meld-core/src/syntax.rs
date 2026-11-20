@@ -40,10 +40,12 @@ impl SyntaxLayer {
         })?;
 
         let mut parser = Parser::new();
-        parser.set_language(language).map_err(|e| MeldError::Parse {
-            region_id: region.id.clone(),
-            message: format!("set_language: {e}"),
-        })?;
+        parser
+            .set_language(language)
+            .map_err(|e| MeldError::Parse {
+                region_id: region.id.clone(),
+                message: format!("set_language: {e}"),
+            })?;
         // JUDGMENT CALL: included ranges are expressed against the *whole*
         // .meld source, so their points must be real source coordinates.
         // The earlier placeholder (row 0 / row=byte-length) produced wrong
@@ -74,10 +76,12 @@ impl SyntaxLayer {
                 region_id: region.id.clone(),
                 message: format!("set_included_ranges: {e}"),
             })?;
-        let tree = parser.parse(&parse_source, None).ok_or_else(|| MeldError::Parse {
-            region_id: region.id.clone(),
-            message: "tree-sitter returned no tree".to_string(),
-        })?;
+        let tree = parser
+            .parse(&parse_source, None)
+            .ok_or_else(|| MeldError::Parse {
+                region_id: region.id.clone(),
+                message: "tree-sitter returned no tree".to_string(),
+            })?;
         let root = tree.root_node();
         Ok(SyntaxInfo {
             region_id: region.id.clone(),

@@ -9,11 +9,8 @@ use std::path::Path;
 
 #[test]
 fn python_meld_call_reaches_rust_wit_component() -> meld_core::error::Result<()> {
-    let worker = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../packs/python/worker.py");
-    let worker = worker
-        .to_str()
-        .expect("worker path is UTF-8");
+    let worker = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packs/python/worker.py");
+    let worker = worker.to_str().expect("worker path is UTF-8");
     let mut backend = T2Backend::spawn("python3", &["-u", worker])?;
     let t3 = T3Backend::demo()?;
     backend.set_host_call(move |name, args| t3.call_value(name, args));

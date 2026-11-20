@@ -112,7 +112,12 @@ pub struct T5Backend {
 static T5_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 impl T5Backend {
-    pub fn new(lang: impl Into<String>, build: Vec<String>, run: Vec<String>, cwd: PathBuf) -> Self {
+    pub fn new(
+        lang: impl Into<String>,
+        build: Vec<String>,
+        run: Vec<String>,
+        cwd: PathBuf,
+    ) -> Self {
         Self {
             lang: lang.into(),
             build,
@@ -153,7 +158,11 @@ impl T5Backend {
     /// is parsed as a JSON Meld Value; everything else is ordinary stdout.
     /// **JUDGMENT CALL:** this keeps T5 output compatible with T2's ordered
     /// stdout contract while giving compiled regions a typed return path.
-    pub fn compile_and_run(&self, code: &str, args: &[Value]) -> Result<(Vec<String>, Option<Value>)> {
+    pub fn compile_and_run(
+        &self,
+        code: &str,
+        args: &[Value],
+    ) -> Result<(Vec<String>, Option<Value>)> {
         let seq = T5_COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir().join(format!("meld-t5-{}-{seq}", self.lang));
         fs::create_dir_all(&dir)?;
@@ -182,9 +191,10 @@ impl T5Backend {
         if let Some(last) = lines.last() {
             if let Some(json) = last.strip_prefix("@meld ") {
                 value = Some(
-                    Value::from_json(&serde_json::from_str(json).map_err(|e| {
-                        MeldError::Wasm(format!("T5 result JSON: {e}"))
-                    })?)
+                    Value::from_json(
+                        &serde_json::from_str(json)
+                            .map_err(|e| MeldError::Wasm(format!("T5 result JSON: {e}")))?,
+                    )
                     .map_err(|e| MeldError::TypeMismatch(e.to_string()))?,
                 );
                 lines.pop();

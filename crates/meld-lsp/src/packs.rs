@@ -19,7 +19,12 @@ pub struct LspSpec {
 /// keeps working without a core edit (project.md §7, spec/registry.md §6).
 pub fn discover(root: &Path) -> HashMap<String, LspSpec> {
     let extra: Vec<PathBuf> = std::env::var("MELD_PACKS")
-        .map(|v| v.split(':').filter(|p| !p.is_empty()).map(PathBuf::from).collect())
+        .map(|v| {
+            v.split(':')
+                .filter(|p| !p.is_empty())
+                .map(PathBuf::from)
+                .collect()
+        })
         .unwrap_or_default();
     discover_with(root, &extra)
 }
@@ -49,14 +54,19 @@ pub fn discover_with(root: &Path, extra: &[PathBuf]) -> HashMap<String, LspSpec>
 }
 
 fn load(root: &Path, dir: &Path) -> Option<(LspSpec, Vec<String>)> {
-    let manifest: toml::Value = toml::from_str(&std::fs::read_to_string(dir.join("pack.toml")).ok()?).ok()?;
+    let manifest: toml::Value =
+        toml::from_str(&std::fs::read_to_string(dir.join("pack.toml")).ok()?).ok()?;
     let id = manifest.get("id")?.as_str()?.to_string();
     let mut names = vec![id.clone()];
     names.extend(
         manifest
             .get("aliases")
             .and_then(toml::Value::as_array)
-            .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect::<Vec<_>>())
+            .map(|xs| {
+                xs.iter()
+                    .filter_map(|x| x.as_str().map(str::to_string))
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default(),
     );
 
@@ -85,7 +95,11 @@ fn load(root: &Path, dir: &Path) -> Option<(LspSpec, Vec<String>)> {
     let keywords = section
         .and_then(|v| v.get("keywords"))
         .and_then(toml::Value::as_array)
-        .map(|xs| xs.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+        .map(|xs| {
+            xs.iter()
+                .filter_map(|x| x.as_str().map(str::to_string))
+                .collect()
+        })
         .unwrap_or_default();
     let spec = LspSpec {
         language_id: str_field("language_id").unwrap_or(id),

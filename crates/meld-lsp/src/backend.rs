@@ -68,13 +68,18 @@ impl Backend {
     }
 
     fn parse(&self, text: String, version: i32) -> DocumentState {
-        let split = splitter::split(&text, &splitter::default_scanners())
-            .unwrap_or_else(|_| splitter::SplitDocument {
+        let split = splitter::split(&text, &splitter::default_scanners()).unwrap_or_else(|_| {
+            splitter::SplitDocument {
                 source: text.clone(),
                 default_lang: String::new(),
                 regions: Vec::new(),
-            });
-        DocumentState { text, version, split }
+            }
+        });
+        DocumentState {
+            text,
+            version,
+            split,
+        }
     }
 
     fn diagnostics(&self, state: &DocumentState) -> Vec<Diagnostic> {
@@ -104,7 +109,10 @@ impl Backend {
                     out.push(Diagnostic {
                         range: Range::new(p, Position::new(p.line, p.character + 1)),
                         severity: Some(DiagnosticSeverity::WARNING),
-                        message: format!("meld: syntax error in {} region {}", region.lang, region.id),
+                        message: format!(
+                            "meld: syntax error in {} region {}",
+                            region.lang, region.id
+                        ),
                         source: Some("meld".to_string()),
                         ..Default::default()
                     });
@@ -165,7 +173,9 @@ impl LanguageServer for Backend {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
                 completion_provider: Some(CompletionOptions::default()),
-                text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+                text_document_sync: Some(TextDocumentSyncCapability::Kind(
+                    TextDocumentSyncKind::FULL,
+                )),
                 ..Default::default()
             },
             ..Default::default()
@@ -197,7 +207,10 @@ impl LanguageServer for Backend {
         };
         let state = self.parse(text, params.text_document.version);
         let diagnostics = self.diagnostics(&state);
-        self.documents.write().unwrap().insert(uri.clone(), state.clone());
+        self.documents
+            .write()
+            .unwrap()
+            .insert(uri.clone(), state.clone());
         self.client
             .publish_diagnostics(
                 params.text_document.uri,
@@ -217,18 +230,18 @@ impl LanguageServer for Backend {
             .map(|(lang, _)| lang.clone())
             .collect();
         for lang in opened_langs {
-            let Some(spec) = self.specs.get(&lang) else { continue };
-            let Some(ext) = self.external.read().unwrap().get(&lang).cloned() else { continue };
+            let Some(spec) = self.specs.get(&lang) else {
+                continue;
+            };
+            let Some(ext) = self.external.read().unwrap().get(&lang).cloned() else {
+                continue;
+            };
             for region in &state.split.regions {
                 if region.lang != lang || region.kind == splitter::RegionKind::Header {
                     continue;
                 }
-                let vd = VirtualDocument::new(
-                    &state.split,
-                    region,
-                    &spec.language_id,
-                    &spec.extension,
-                );
+                let vd =
+                    VirtualDocument::new(&state.split, region, &spec.language_id, &spec.extension);
                 let version = state.version;
                 let text = vd.text.clone();
                 let uri = vd.uri.clone();
@@ -244,11 +257,7 @@ impl LanguageServer for Backend {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        let uri = params
-            .text_document_position
-            .text_document
-            .uri
-            .to_string();
+        let uri = params.text_document_position.text_document.uri.to_string();
         let target = params.text_document_position.position;
         let state = {
             let documents = self.documents.read().unwrap();
@@ -267,15 +276,12 @@ impl LanguageServer for Backend {
         let Some(spec) = self.specs.get(&region.lang) else {
             return Ok(None);
         };
-        let vd = VirtualDocument::new(
-            &state.split,
-            &region,
-            &spec.language_id,
-            &spec.extension,
-        );
+        let vd = VirtualDocument::new(&state.split, &region, &spec.language_id, &spec.extension);
 
         if spec.command.is_none() {
-            return Ok(Some(CompletionResponse::Array(self.fallback_items(&state, spec))));
+            return Ok(Some(CompletionResponse::Array(
+                self.fallback_items(&state, spec),
+            )));
         }
 
         let ext = self.external_client(&region.lang, spec)?;
@@ -324,7 +330,10 @@ impl LanguageServer for Backend {
         let mut result = result;
         map_response_ranges(&mut result, &vd, &state.text);
         serde_json::from_value(result).map(Some).map_err(|e| {
-            Self::rpc_error(format!("invalid completion response from {}: {e}", region.lang))
+            Self::rpc_error(format!(
+                "invalid completion response from {}: {e}",
+                region.lang
+            ))
         })
     }
 }
@@ -336,7 +345,10 @@ fn map_response_ranges(value: &mut serde_json::Value, vd: &VirtualDocument, sour
         for item in items {
             map_item(item, vd, source);
         }
-    } else if let Some(items) = value.get_mut("items").and_then(serde_json::Value::as_array_mut) {
+    } else if let Some(items) = value
+        .get_mut("items")
+        .and_then(serde_json::Value::as_array_mut)
+    {
         for item in items {
             map_item(item, vd, source);
         }
