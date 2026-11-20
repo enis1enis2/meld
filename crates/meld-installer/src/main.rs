@@ -12,7 +12,8 @@
 //! still forbidden (`project.md` §9); this tool installs language *libraries*.
 use meld_lib::{
     canonical_json, discover_imported, installed_dir, read_library_manifest, read_pack_facts,
-    validate_library_dir, verify_pack, InstalledEntry, InstalledIndex, ProjectLock, LIBRARY_API,
+    validate_library_dir_with_policy, verify_pack, InstalledEntry, InstalledIndex, ProjectLock,
+    VerificationPolicy, LIBRARY_API,
 };
 use std::env;
 use std::fs;
@@ -54,7 +55,8 @@ Options:
   --source <repo>        GitHub owner/repo, full URL, or local git repo path
                          (default: enis1enis2/meld; env: MELD_PACK_SOURCE)
   --ref <ref>            branch, tag or fetchable commit (default: main; env: MELD_PACK_REF)
-  --key <path>           HMAC key for authenticated verification (env: MELD_PACK_KEY)
+  --trust-roots <path>  Ed25519 public trust roots (env: MELD_PACK_TRUST_ROOTS)
+  --revocations <path>  revoked key ids (env: MELD_PACK_REVOCATIONS)
   --root <dir>           library root (default: ~/.local/share/meld/libraries; env: MELD_LIB_ROOT)
   --project <dir>        project root containing meld.lock (default: MELD_ROOT or cwd ancestor)
                           temporary clones use TMPDIR or MELD_PACK_TMP if set
@@ -67,7 +69,7 @@ Options:
 
 Examples:
   meld-pack install bash typescript
-  meld-pack install shell --source enis1enis2/meld --ref main --key ./private.key
+  meld-pack install shell --source enis1enis2/meld --ref main --trust-roots ./trust-roots.toml
   meld-pack list
   meld-pack remove ts
   meld-pack self-install
@@ -90,12 +92,14 @@ struct Options {
     project: Option<PathBuf>,
     source: Option<String>,
     reference: Option<String>,
-    key: Option<PathBuf>,
+    trust_roots: Option<PathBuf>,
+    revocations: Option<PathBuf>,
     bin_dir: Option<PathBuf>,
     force: bool,
     no_import: bool,
     keep_import: bool,
     json: bool,
+    removed_hmac_key: bool,
 }
 
 fn option_value(
@@ -143,7 +147,13 @@ fn parse_options(args: &[String]) -> AppResult<(Vec<String>, Options)> {
             }
             "--source" => opts.source = Some(option_value(args, &mut i, flag, inline)?),
             "--ref" => opts.reference = Some(option_value(args, &mut i, flag, inline)?),
-            "--key" => opts.key = Some(PathBuf::from(option_value(args, &mut i, flag, inline)?)),
+            "--trust-roots" => {
+                opts.trust_roots = Some(PathBuf::from(option_value(args, &mut i, flag, inline)?))
+            }
+            "--revocations" => {
+                opts.revocations = Some(PathBuf::from(option_value(args, &mut i, flag, inline)?))
+            }
+            "--key" => opts.removed_hmac_key = true,
             "--bin-dir" => {
                 opts.bin_dir = Some(PathBuf::from(option_value(args, &mut i, flag, inline)?))
             }
@@ -169,6 +179,11 @@ fn run(args: Vec<String>) -> AppResult {
         return usage_fail("missing command");
     };
     let (names, opts) = parse_options(&args[1..])?;
+    if opts.removed_hmac_key {
+        return usage_fail(
+            "--key was removed with HMAC; use --trust-roots for Ed25519 verification",
+        );
+    }
     match command.as_str() {
         "install" => cmd_install(&names, &opts),
         "remove" => cmd_remove(&names, &opts),
@@ -203,9 +218,18 @@ fn project_root(opts: &Options) -> PathBuf {
         .to_path_buf()
 }
 
-fn key_path(opts: &Options) -> Option<PathBuf> {
-    opts.key.clone().or_else(|| {
-        env::var("MELD_PACK_KEY")
+fn trust_roots_path(opts: &Options) -> Option<PathBuf> {
+    opts.trust_roots.clone().or_else(|| {
+        env::var("MELD_PACK_TRUST_ROOTS")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+    })
+}
+
+fn revocations_path(opts: &Options) -> Option<PathBuf> {
+    opts.revocations.clone().or_else(|| {
+        env::var("MELD_PACK_REVOCATIONS")
             .ok()
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)
@@ -526,6 +550,32 @@ fn checksums_bytes(dir: &Path) -> AppResult<Vec<u8>> {
     })
 }
 
+/// Remote installs require a verified Ed25519 signature by default. Trust
+/// roots and revocations come from the fetched tree unless explicitly pinned.
+fn install_policy(opts: &Options, clone_dir: &Path) -> AppResult<VerificationPolicy> {
+    let trust_roots =
+        trust_roots_path(opts).unwrap_or_else(|| clone_dir.join("packs/registry/trust-roots.toml"));
+    if !trust_roots.is_file() {
+        return fail(format!(
+            "remote source has no trust roots at {}; pass --trust-roots",
+            trust_roots.display()
+        ));
+    }
+    let revocations =
+        revocations_path(opts).unwrap_or_else(|| clone_dir.join("packs/registry/revocations.json"));
+    if !revocations.is_file() {
+        return fail(format!(
+            "remote source has no revocations at {}; pass --revocations",
+            revocations.display()
+        ));
+    }
+    Ok(VerificationPolicy {
+        trust_roots: Some(trust_roots),
+        revocations: Some(revocations),
+        require_trusted: true,
+    })
+}
+
 fn cmd_install(names: &[String], opts: &Options) -> AppResult {
     if names.is_empty() {
         return usage_fail("install needs at least one library name");
@@ -536,7 +586,7 @@ fn cmd_install(names: &[String], opts: &Options) -> AppResult {
     let selected = select_remote(&libraries, names)?;
     let root = library_root(opts);
     let project = project_root(opts);
-    let key = key_path(opts);
+    let policy = install_policy(opts, &clone.dir)?;
     let mut index = InstalledIndex::load(&root).map_err(|e| (1, e))?;
     let mut lock = if opts.no_import {
         None
@@ -548,10 +598,9 @@ fn cmd_install(names: &[String], opts: &Options) -> AppResult {
         // JUDGMENT CALL: every selected pack is verified in the clone *and* in
         // its final destination. The second check catches copy-time corruption
         // and keeps the installed bytes authoritative for later runs.
-        let manifest = validate_library_dir(&lib.dir)
+        let manifest = validate_library_dir_with_policy(&lib.dir, &policy)
             .map_err(|e| (1, format!("{}: {e}", lib.dir.display())))?;
-        verify_pack(&lib.dir, key.as_deref())
-            .map_err(|e| (1, format!("{}: {e}", lib.dir.display())))?;
+        verify_pack(&lib.dir, &policy).map_err(|e| (1, format!("{}: {e}", lib.dir.display())))?;
         let dest = installed_dir(&root, &manifest.id, &manifest.version);
         if dest.exists() {
             if checksums_bytes(&dest).ok().as_deref() == checksums_bytes(&lib.dir).ok().as_deref() {
@@ -573,7 +622,7 @@ fn cmd_install(names: &[String], opts: &Options) -> AppResult {
         if !dest.exists() {
             meld_lib::copy_dir(&lib.dir, &dest).map_err(|e| (1, e))?;
         }
-        verify_pack(&dest, key.as_deref()).map_err(|e| (1, format!("{}: {e}", dest.display())))?;
+        verify_pack(&dest, &policy).map_err(|e| (1, format!("{}: {e}", dest.display())))?;
         let (tier, level, _) = read_pack_facts(&dest).map_err(|e| (1, e))?;
         index.upsert(InstalledEntry {
             id: manifest.id.clone(),
@@ -750,9 +799,13 @@ fn cmd_verify(names: &[String], opts: &Options) -> AppResult {
         return usage_fail("verify needs a library directory");
     };
     let path = PathBuf::from(dir);
-    let key = key_path(opts);
-    let manifest = validate_library_dir(&path).map_err(|e| (1, e))?;
-    let result = verify_pack(&path, key.as_deref()).map_err(|e| (1, e))?;
+    let policy = VerificationPolicy {
+        trust_roots: trust_roots_path(opts),
+        revocations: revocations_path(opts),
+        require_trusted: false,
+    };
+    let manifest = validate_library_dir_with_policy(&path, &policy).map_err(|e| (1, e))?;
+    let result = verify_pack(&path, &policy).map_err(|e| (1, e))?;
     let (tier, level, _) = read_pack_facts(&path).map_err(|e| (1, e))?;
     println!("library: {} {}", manifest.id, manifest.version);
     println!("name: {}", manifest.name);
@@ -763,7 +816,7 @@ fn cmd_verify(names: &[String], opts: &Options) -> AppResult {
     match result.signature.as_str() {
         "absent" => println!("signature: absent"),
         "present-unverified" => println!(
-            "signature: present (key-id {}) but not verified; pass --key for MAC check",
+            "signature: present (key-id {}) but not verified; pass --trust-roots for Ed25519 check",
             result.key_id.unwrap_or_default()
         ),
         _ => println!(
