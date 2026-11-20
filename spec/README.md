@@ -314,6 +314,11 @@ Additional judgment calls (also inline in the affected specs/code):
     Windows otherwise rewrites `checksums.sha256` and `signature.ed25519` to
     CRLF, making the verifier parse paths with a trailing `\r` and report signed
     files as missing. Pack bytes are signed, so no host may normalize them.
+52. The installer test fixture repository also sets `core.autocrlf=false` before
+    `git add`. `packtool` signs the working-tree bytes; Git normalization on
+    commit changed CRLF fixtures to LF in the object store, so a byte-preserving
+    clone produced checksum and signature mismatches. Both sides now preserve
+    exactly the bytes that were signed.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

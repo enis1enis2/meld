@@ -238,6 +238,13 @@ fn make_repo(base: &Path, name: &str, private: &Path, public: &Path) -> Repo {
 
     let init = git(&repo, &["init", "-q", "-b", "main"]);
     assert!(init.status.success(), "{}", text(&init));
+    // JUDGMENT CALL 52: packtool signs the working-tree bytes. Git for Windows
+    // would otherwise normalize CRLF on `git add`, so the committed payload
+    // would no longer match its checksums or signature after a byte-preserving
+    // clone. Store exactly what was signed; production clones already set
+    // `core.autocrlf=false` (judgment call 51).
+    let autocrlf = git(&repo, &["config", "core.autocrlf", "false"]);
+    assert!(autocrlf.status.success(), "{}", text(&autocrlf));
     commit(&repo, "fixture");
     Repo {
         path: repo,
