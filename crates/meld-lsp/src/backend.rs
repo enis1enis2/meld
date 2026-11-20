@@ -68,13 +68,12 @@ impl Backend {
     }
 
     fn parse(&self, text: String, version: i32) -> DocumentState {
-        let split = splitter::split(&text, &splitter::default_scanners()).unwrap_or_else(|_| {
-            splitter::SplitDocument {
+        let split = splitter::split(&text, &splitter::ScannerRegistry::default_registry())
+            .unwrap_or_else(|_| splitter::SplitDocument {
                 source: text.clone(),
                 default_lang: String::new(),
                 regions: Vec::new(),
-            }
-        });
+            });
         DocumentState {
             text,
             version,

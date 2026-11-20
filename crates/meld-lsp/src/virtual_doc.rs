@@ -139,7 +139,7 @@ fn utf16_len(s: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use meld_core::splitter::{default_scanners, split};
+    use meld_core::splitter::{split, ScannerRegistry};
 
     const SRC: &str = "#meld python\nconst setup = 1;\n@javascript as js {\n  console.l\n}\n";
 
@@ -147,7 +147,7 @@ mod tests {
         meld_core::splitter::SplitDocument,
         meld_core::splitter::Region,
     ) {
-        let doc = split(SRC, &default_scanners()).unwrap();
+        let doc = split(SRC, &ScannerRegistry::default_registry()).unwrap();
         let r = doc
             .regions
             .iter()
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn utf16_columns_survive_a_multibyte_prefix() {
         let src = "#meld python\n⟦python: 'héllo'⟧\n";
-        let doc = split(src, &default_scanners()).unwrap();
+        let doc = split(src, &ScannerRegistry::default_registry()).unwrap();
         let r = doc
             .regions
             .iter()

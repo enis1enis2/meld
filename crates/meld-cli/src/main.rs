@@ -253,7 +253,7 @@ fn cmd_check(path: Option<&str>) -> i32 {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let doc = match splitter::split(&src, &splitter::default_scanners()) {
+    let doc = match splitter::split(&src, &splitter::ScannerRegistry::default_registry()) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{}", e);
@@ -416,7 +416,7 @@ fn cmd_run(path: Option<&str>) -> i32 {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let doc = match splitter::split(&src, &splitter::default_scanners()) {
+    let doc = match splitter::split(&src, &splitter::ScannerRegistry::default_registry()) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");
@@ -639,7 +639,7 @@ fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
         Ok(v) => v,
         Err(c) => return c,
     };
-    let doc = match splitter::split(&src, &splitter::default_scanners()) {
+    let doc = match splitter::split(&src, &splitter::ScannerRegistry::default_registry()) {
         Ok(d) => d,
         Err(e) => {
             eprintln!("{e}");

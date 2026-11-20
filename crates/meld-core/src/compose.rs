@@ -258,12 +258,12 @@ where
 mod tests {
     use super::*;
     use crate::binding;
-    use crate::splitter::{default_scanners, split};
+    use crate::splitter::{split, ScannerRegistry};
 
     #[test]
     fn stitches_adjacent_fragments_around_an_inline_island() {
         let src = "#meld python\nprint(⟦python: 2 + 3⟧)\n";
-        let doc = split(src, &default_scanners()).unwrap();
+        let doc = split(src, &ScannerRegistry::default_registry()).unwrap();
         let bindings = binding::resolve(&doc).unwrap();
         let plan = binding::execution_plan(&doc, &bindings).unwrap();
         let units = build_units(&doc, &plan, &bindings).unwrap();

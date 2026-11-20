@@ -3,6 +3,7 @@ pub mod binding;
 pub mod compose;
 pub mod error;
 pub mod scheduler;
+pub mod scanners;
 pub mod source_map;
 pub mod splitter;
 pub mod syntax;

@@ -1,7 +1,7 @@
 //! Splitter fuzz suite (project.md §8). Deterministic LCG so failures are
 //! reproducible without an external property-testing dependency.
-use meld_core::splitter::{self, BalancedBraceScanner};
-use std::collections::HashMap;
+use meld_core::splitter::{self, BalancedBraceScanner, ScannerRegistry};
+use std::sync::Arc;
 
 fn next(seed: &mut u64) -> u64 {
     *seed = seed
@@ -10,11 +10,11 @@ fn next(seed: &mut u64) -> u64 {
     *seed >> 33
 }
 
-fn scanners() -> HashMap<String, Box<dyn splitter::EndScanner>> {
-    let mut m: HashMap<String, Box<dyn splitter::EndScanner>> = HashMap::new();
-    m.insert("python".to_string(), Box::new(BalancedBraceScanner));
-    m.insert("javascript".to_string(), Box::new(BalancedBraceScanner));
-    m
+fn scanners() -> ScannerRegistry {
+    let mut registry = ScannerRegistry::empty();
+    let brace: Arc<dyn splitter::EndScanner> = Arc::new(BalancedBraceScanner);
+    registry.register(["python", "javascript"], brace);
+    registry
 }
 
 fn generate(seed: u64) -> String {
