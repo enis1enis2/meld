@@ -1,6 +1,8 @@
 # License policy shared by cargo-about and tools/generate_third_party_notices.py.
 # Every license observed in Cargo.lock must appear in this accepted list or the
 # notice generator fails with an explicit unknown-license error.
+# Keep this accepted list identical to `[licenses].allow` in deny.toml: both
+# tools must enforce the same license policy.
 accepted = [
     "0BSD",
     "Apache-2.0",

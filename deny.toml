@@ -20,6 +20,8 @@ ignore = []
 version = 2
 unused-allowed-license = "allow"
 confidence-threshold = 0.8
+# Keep this allow list identical to `accepted` in about.toml: cargo-deny and
+# the third-party notices generator must enforce the same license policy.
 allow = [
     "0BSD",
     "Apache-2.0",

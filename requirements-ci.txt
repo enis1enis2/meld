@@ -1,3 +1,4 @@
-# Exact pins for Python code exercised by CI. Keep this in sync with the
-# setup-python version in .github/workflows/ci.yml.
+# Exact pins for Python dependencies exercised by CI, not the interpreter
+# version. CI floats the setup-python patch within 3.12 in .github/workflows/ci.yml;
+# keep these dependency pins in sync with the packages CI installs.
 cryptography==50.0.2
