@@ -276,7 +276,10 @@ impl SandboxBackend for WindowsBackend {
         let hook_job = Arc::clone(&job);
         Ok(
             SpawnedProcess::new(child, stdout, stderr, IoPolicy::from_limits(&policy.limits))?
-                .with_kill_hook(move || hook_job.terminate())
+                .with_kill_hook(move || {
+                    hook_job.terminate();
+                    Ok(())
+                })
                 .with_keep_alive(job),
         )
     }

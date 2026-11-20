@@ -33,7 +33,7 @@ pub mod process;
 pub mod linux;
 #[cfg(target_os = "macos")]
 pub mod macos;
-#[cfg(feature = "oci")]
+#[cfg(all(target_os = "linux", feature = "oci"))]
 pub mod oci;
 #[cfg(target_os = "windows")]
 pub mod windows;
@@ -58,7 +58,7 @@ pub use process::{
 pub use linux::LinuxBackend;
 #[cfg(target_os = "macos")]
 pub use macos::MacosBackend;
-#[cfg(feature = "oci")]
+#[cfg(all(target_os = "linux", feature = "oci"))]
 pub use oci::{find_runc as find_oci_runtime, OciBackend};
 #[cfg(target_os = "windows")]
 pub use windows::WindowsBackend;

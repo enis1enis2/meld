@@ -251,6 +251,20 @@ Additional judgment calls (also inline in the affected specs/code):
     on Windows instead of running unsandboxed. Job Objects still provide real
     resource limits and process-tree teardown, and the debug-only unsandboxed
     test switch is unchanged.
+41. The OCI fallback is a privileged runtime boundary. `runc` is accepted only
+    from an absolute `MELD_OCI_RUNC` path; PATH lookup is removed. The probe
+    independently checks seccomp, each required namespace, cgroup v2
+    cpu/memory/pids controllers, and that `runc kill --all` is advertised, and
+    it fails closed if any check is missing. The generated spec now declares
+    namespaces explicitly and runs at the caller's uid/gid instead of root.
+    Bundles use random 0700 exclusive-create directories; every runc invocation
+    is bounded; teardown deletes the container before removing the bundle and
+    returns failures through `SpawnedProcess::kill_tree`; all spawn error paths
+    attempt cleanup. Privileged runtime tests assert a distinct network
+    namespace, empty `CapEff`, active seccomp (`Seccomp: 2`), and invisibility
+    of an ungranted host file. Linux CI gates the `oci` feature with Clippy and
+    tests. These checks remain ignored in ordinary CI because they need a
+    privileged host.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

@@ -88,7 +88,7 @@ fn supports_unprivileged_userns() -> bool {
     }
 }
 
-fn seccomp_supported() -> bool {
+pub(crate) fn seccomp_supported() -> bool {
     // SAFETY: PR_GET_SECCOMP only reads the calling thread's mode.
     let result = unsafe { libc::prctl(libc::PR_GET_SECCOMP, 0, 0, 0, 0) };
     result >= 0
@@ -284,11 +284,12 @@ fn path_to_cstring(path: &Path) -> Result<std::ffi::CString> {
         .map_err(|_| SandboxError::Invalid(format!("path has NUL byte: {}", path.display())))
 }
 
-fn rule_map(policy: &SandboxPolicy) -> Result<BTreeMap<i64, Vec<seccompiler::SeccompRule>>> {
-    let mut rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> = BTreeMap::new();
-    // Minimal startup/runtime baseline. Deliberately does not include
-    // network, process creation, ptrace, keyctl, mount or module syscalls.
-    let baseline: &[libc::c_long] = &[
+/// Minimal startup/runtime syscall baseline shared by the native seccomp
+/// backend and the OCI fallback. Deliberately does not include network,
+/// process creation, ptrace, keyctl, mount or module syscalls.
+pub(crate) fn baseline_syscalls() -> Vec<i64> {
+    #[allow(unused_mut)]
+    let mut syscalls = vec![
         libc::SYS_read,
         libc::SYS_write,
         libc::SYS_writev,
@@ -325,8 +326,15 @@ fn rule_map(policy: &SandboxPolicy) -> Result<BTreeMap<i64, Vec<seccompiler::Sec
         // additionally blocked by pids cgroup/rlimits and by omitting clone.
         libc::SYS_execve,
     ];
-    for syscall in baseline {
-        rules.insert(*syscall, Vec::new());
+    #[cfg(target_arch = "x86_64")]
+    syscalls.push(libc::SYS_arch_prctl);
+    syscalls
+}
+
+fn rule_map(policy: &SandboxPolicy) -> Result<BTreeMap<i64, Vec<seccompiler::SeccompRule>>> {
+    let mut rules: BTreeMap<i64, Vec<seccompiler::SeccompRule>> = BTreeMap::new();
+    for syscall in baseline_syscalls() {
+        rules.insert(syscall, Vec::new());
     }
     for syscall in network_syscalls(policy) {
         rules.insert(syscall, Vec::new());

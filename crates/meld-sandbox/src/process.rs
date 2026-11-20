@@ -240,7 +240,7 @@ pub struct SpawnedProcess {
     stderr_text: String,
     lines_seen: usize,
     /// Extra backend-specific teardown (e.g. Windows Job Object termination).
-    kill_hooks: Vec<Arc<dyn Fn() + Send + Sync>>,
+    kill_hooks: Vec<Arc<dyn Fn() -> crate::error::Result<()> + Send + Sync>>,
     /// Backend resources (Job Objects, AppContainer profiles) kept alive until
     /// the child is reaped.
     keep_alive: Vec<Box<dyn Send + Sync>>,
@@ -277,8 +277,13 @@ impl SpawnedProcess {
     }
 
     /// Attach a backend teardown hook. It runs on every `kill_tree` call and
-    /// on drop, including the Windows Job Object terminator.
-    pub fn with_kill_hook(mut self, hook: impl Fn() + Send + Sync + 'static) -> Self {
+    /// on drop, including the Windows Job Object terminator. Errors are
+    /// returned by `kill_tree` so fail-closed teardown cannot be silently
+    /// ignored; `Drop` still attempts every hook and discards its own errors.
+    pub fn with_kill_hook(
+        mut self,
+        hook: impl Fn() -> crate::error::Result<()> + Send + Sync + 'static,
+    ) -> Self {
         self.kill_hooks.push(Arc::new(hook));
         self
     }
@@ -392,9 +397,13 @@ impl SpawnedProcess {
     }
 
     pub fn kill_tree(&mut self) -> Result<()> {
-        let result = self.guard.kill_tree();
+        let mut result = self.guard.kill_tree();
         for hook in &self.kill_hooks {
-            hook();
+            if let Err(error) = hook() {
+                if result.is_ok() {
+                    result = Err(error);
+                }
+            }
         }
         result
     }
@@ -446,5 +455,23 @@ mod tests {
         assert_eq!(spec.argv(), vec!["/bin/echo", "hello world", "$(id)"]);
         let cmd = spec.to_command();
         assert_eq!(cmd.get_args().collect::<Vec<_>>().len(), 2);
+    }
+
+    #[test]
+    fn kill_hook_errors_are_surfaced() {
+        let mut command = CommandSpec::new("/bin/true", Vec::<String>::new()).to_command();
+        let mut child = command.spawn().unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let mut spawned = SpawnedProcess::new(
+            child,
+            stdout,
+            stderr,
+            IoPolicy::from_limits(&Default::default()),
+        )
+        .unwrap()
+        .with_kill_hook(|| Err(SandboxError::Denied("hook failed".to_string())));
+        let error = spawned.kill_tree().unwrap_err();
+        assert!(error.to_string().contains("hook failed"));
     }
 }
