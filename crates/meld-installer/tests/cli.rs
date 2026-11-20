@@ -34,7 +34,10 @@ fn temp_dir(name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_nanos();
-    let dir = PathBuf::from("/mnt/data/opencode/tmp/opencode").join(format!(
+    let base = std::env::var("MELD_TEST_TMP")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let dir = base.join(format!(
         "meld-installer-{name}-{}-{nanos}",
         std::process::id()
     ));

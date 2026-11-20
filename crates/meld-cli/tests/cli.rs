@@ -34,6 +34,11 @@ fn run_with_env(
     cmd.args(args)
         .current_dir(root())
         .env("MELD_ROOT", root())
+        // JUDGMENT CALL: CI hosts cannot guarantee user namespaces or cgroup v2.
+        // This opt-in is compiled out of release builds and only affects debug
+        // binaries used by these fixtures; production launches always fail
+        // closed when OS enforcement is unavailable.
+        .env("MELD_TEST_UNSANDBOXED", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     for (key, value) in env {
@@ -62,8 +67,10 @@ fn run(args: &[&str], stdin: Option<&str>, packs: Option<&Path>) -> Output {
 }
 
 fn temp_dir(name: &str) -> PathBuf {
-    let dir = PathBuf::from("/mnt/data/opencode/tmp/opencode")
-        .join(format!("meld-cli-{name}-{}", std::process::id()));
+    let base = std::env::var("MELD_TEST_TMP")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let dir = base.join(format!("meld-cli-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir

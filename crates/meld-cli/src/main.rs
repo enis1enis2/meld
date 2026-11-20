@@ -6,10 +6,14 @@ use meld_core::region_end_spec::RegionEndSpec;
 use meld_core::scheduler::{Backend, Bridge, Job};
 use meld_core::splitter;
 use meld_core::syntax::SyntaxLayer;
+use meld_sandbox::{
+    effective_policy, parse_grant, parse_pack, parse_runner, platform_backend, Access, Capability,
+    CommandSpec, Grant, SafeRoot, SandboxError, SandboxPolicy,
+};
 use meld_value::SourceStyle;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
@@ -49,6 +53,7 @@ fn main() {
 struct RunnerSpec {
     program: String,
     args: Vec<String>,
+    cwd: PathBuf,
 }
 
 #[derive(Clone, Debug)]
@@ -62,6 +67,13 @@ struct PackInfo {
     inline_style: Option<SourceStyle>,
     /// Data-only scanner profile; never a command or Wasm module to execute.
     region_end: RegionEndSpec,
+    /// Pack maximum and runner constraints. The CLI intersects these with the
+    /// file default and any region grant before spawning a worker.
+    pack_policy: SandboxPolicy,
+    runner_policy: SandboxPolicy,
+    /// Unreadable or inconsistent security manifests are retained as an error
+    /// and surfaced at launch; they must never be treated as a weaker policy.
+    policy_error: Option<String>,
 }
 
 impl PackInfo {
@@ -71,8 +83,13 @@ impl PackInfo {
 }
 
 fn project_root() -> PathBuf {
+    // JUDGMENT CALL: manifest paths are validated as declarative paths, so the
+    // root itself must be canonical before it is passed to the policy parser.
+    // `MELD_ROOT` normally contains `..` in test harnesses because it is
+    // derived from CARGO_MANIFEST_DIR plus a relative parent.
+    let canonical = |path: PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
     if let Ok(root) = std::env::var("MELD_ROOT") {
-        return PathBuf::from(root);
+        return canonical(PathBuf::from(root));
     }
     std::env::current_dir()
         .ok()
@@ -81,7 +98,8 @@ fn project_root() -> PathBuf {
                 .find(|p| p.join("project.md").is_file() || p.join("Cargo.toml").is_file())
                 .map(Path::to_path_buf)
         })
-        .unwrap_or_else(|| PathBuf::from("."))
+        .map(canonical)
+        .unwrap_or_else(|| canonical(PathBuf::from(".")))
 }
 
 fn rebase_arg(arg: &str, root: &Path, pack_dir: &Path) -> String {
@@ -135,30 +153,60 @@ fn load_pack_dir(root: &Path, pack_dir: &Path) -> Option<PackInfo> {
         .unwrap_or("L0")
         .to_string();
 
-    let runner = std::fs::read_to_string(pack_dir.join("runner.toml"))
-        .ok()
-        .and_then(|text| toml::from_str::<toml::Value>(&text).ok())
-        .and_then(|runner| {
-            if runner.get("tier").and_then(toml::Value::as_str) != Some("T2")
-                || runner.get("protocol").and_then(toml::Value::as_str) != Some("meld-t2/1")
-            {
-                return None;
-            }
-            let program = runner.get("command")?.as_str()?.to_string();
-            let args: Vec<String> = runner
-                .get("args")
-                .and_then(toml::Value::as_array)
-                .map(|xs| {
-                    xs.iter()
-                        .filter_map(|x| x.as_str().map(str::to_string))
-                        .collect()
+    // JUDGMENT CALL: an unreadable or inconsistent security manifest is kept as
+    // an explicit launch error. Falling back to a weaker policy would turn a
+    // malformed pack into extra host authority.
+    let mut policy_error = None;
+    let pack_policy = match parse_pack(&manifest_text, root) {
+        Ok(policy) => policy,
+        Err(e) => {
+            policy_error = Some(format!("{}: {e}", manifest_path.display()));
+            SandboxPolicy::deny_all("pack(invalid)")
+        }
+    };
+
+    let runner_path = pack_dir.join("runner.toml");
+    let runner_text = std::fs::read_to_string(&runner_path).ok();
+    let (runner, runner_policy) = match runner_text.as_deref() {
+        Some(text) => {
+            let policy = match parse_runner(text, root) {
+                Ok(policy) => policy,
+                Err(e) => {
+                    policy_error = Some(format!("{}: {e}", runner_path.display()));
+                    SandboxPolicy::deny_all("runner(invalid)")
+                }
+            };
+            let spec = toml::from_str::<toml::Value>(text).ok().and_then(|runner| {
+                if runner.get("tier").and_then(toml::Value::as_str) != Some("T2")
+                    || runner.get("protocol").and_then(toml::Value::as_str) != Some("meld-t2/1")
+                {
+                    return None;
+                }
+                let program = runner.get("command")?.as_str()?.to_string();
+                let args: Vec<String> = runner
+                    .get("args")
+                    .and_then(toml::Value::as_array)
+                    .map(|xs| {
+                        xs.iter()
+                            .filter_map(|x| x.as_str().map(str::to_string))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let cwd_text = runner
+                    .get("cwd")
+                    .and_then(toml::Value::as_str)
+                    .unwrap_or("project");
+                let cwd = resolve_runner_cwd(root, cwd_text).ok()?;
+                Some(RunnerSpec {
+                    program: rebase_arg(&program, root, pack_dir),
+                    args: args.iter().map(|a| rebase_arg(a, root, pack_dir)).collect(),
+                    cwd,
                 })
-                .unwrap_or_default();
-            Some(RunnerSpec {
-                program: rebase_arg(&program, root, pack_dir),
-                args: args.iter().map(|a| rebase_arg(a, root, pack_dir)).collect(),
-            })
-        });
+            });
+            (spec, policy)
+        }
+        None => (None, SandboxPolicy::deny_all("runner(missing)")),
+    };
 
     let inline_style = std::fs::read_to_string(pack_dir.join("inline.toml"))
         .ok()
@@ -179,6 +227,9 @@ fn load_pack_dir(root: &Path, pack_dir: &Path) -> Option<PackInfo> {
         runner,
         inline_style,
         region_end: RegionEndSpec::from_dir(pack_dir).unwrap_or_default(),
+        pack_policy,
+        runner_policy,
+        policy_error,
     })
 }
 
@@ -364,16 +415,218 @@ fn cmd_check(path: Option<&str>) -> i32 {
     }
 }
 
+fn sandbox_error(error: SandboxError) -> MeldError {
+    match error {
+        SandboxError::Denied(message) | SandboxError::Unsupported(message) => {
+            MeldError::SandboxDenied(message)
+        }
+        other => MeldError::UnknownLang(format!("invalid sandbox policy: {other}")),
+    }
+}
+
+/// `cwd = "project"` means the discovered project root. Any other value must be
+/// a relative path inside it; absolute paths and `..` are hard errors.
+fn resolve_runner_cwd(root: &Path, text: &str) -> Result<PathBuf, MeldError> {
+    if text == "project" {
+        return root
+            .canonicalize()
+            .map_err(|e| MeldError::UnknownLang(format!("cannot resolve project root: {e}")));
+    }
+    let candidate = Path::new(text);
+    if candidate.components().any(|part| {
+        matches!(
+            part,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return Err(MeldError::SandboxDenied(format!(
+            "runner cwd escapes the project: {text}"
+        )));
+    }
+    root.join(candidate)
+        .canonicalize()
+        .map_err(|e| MeldError::UnknownLang(format!("cannot resolve runner cwd {text}: {e}")))
+}
+
+/// The file default is the project working tree: readable and writable by the
+/// worker, never networked. Pack and runner manifests can only narrow it.
+fn file_default_policy(root: &Path) -> Result<SandboxPolicy, MeldError> {
+    let root = root
+        .canonicalize()
+        .map_err(|e| MeldError::UnknownLang(format!("cannot resolve project root: {e}")))?;
+    let mut policy = SandboxPolicy::deny_all("file-default");
+    policy
+        .fs
+        .add_root(SafeRoot::new("project", &root).map_err(sandbox_error)?)
+        .map_err(sandbox_error)?;
+    policy
+        .fs
+        .grant("project", "**", Access::Read)
+        .map_err(sandbox_error)?;
+    policy
+        .fs
+        .grant("project", "**", Access::Write)
+        .map_err(sandbox_error)?;
+    for capability in [Capability::FsRead, Capability::FsWrite, Capability::Stdio] {
+        policy.capabilities.allow(capability);
+    }
+    policy.validate().map_err(sandbox_error)?;
+    Ok(policy)
+}
+
+/// Extract `grant(...)` calls from header and glue text only. Native region
+/// bodies are skipped so code strings cannot be mistaken for policy, and an
+/// unterminated or malformed grant is a hard error.
+fn grant_calls(text: &str) -> Result<Vec<String>, MeldError> {
+    let bytes = text.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i + 6 <= bytes.len() {
+        if &bytes[i..i + 6] != b"grant(" {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut j = i + 6;
+        let mut depth = 1usize;
+        let mut quote: Option<u8> = None;
+        let mut escaped = false;
+        while j < bytes.len() && depth > 0 {
+            let byte = bytes[j];
+            match quote {
+                Some(q) => {
+                    if escaped {
+                        escaped = false;
+                    } else if byte == b'\\' {
+                        escaped = true;
+                    } else if byte == q {
+                        quote = None;
+                    }
+                }
+                None => match byte {
+                    b'"' | b'\'' => quote = Some(byte),
+                    b'(' => depth += 1,
+                    b')' => depth -= 1,
+                    _ => {}
+                },
+            }
+            j += 1;
+        }
+        if depth != 0 {
+            return Err(MeldError::SandboxDenied(
+                "unterminated grant(...) in Meld source".to_string(),
+            ));
+        }
+        out.push(text[start..j].to_string());
+        i = j;
+    }
+    Ok(out)
+}
+
+fn source_grants(src: &str, doc: &splitter::SplitDocument) -> Result<Vec<Grant>, MeldError> {
+    let mut skipped: Vec<(usize, usize)> = doc
+        .regions
+        .iter()
+        .filter(|r| {
+            !matches!(
+                r.kind,
+                splitter::RegionKind::Header | splitter::RegionKind::Untagged
+            )
+        })
+        .map(|r| (r.full_start, r.full_end))
+        .collect();
+    skipped.sort_unstable();
+    let mut calls = Vec::new();
+    let mut cursor = 0;
+    for (start, end) in skipped {
+        if start > cursor {
+            if let Some(segment) = src.get(cursor..start) {
+                calls.extend(grant_calls(segment)?);
+            }
+        }
+        cursor = cursor.max(end);
+    }
+    if cursor < src.len() {
+        if let Some(segment) = src.get(cursor..) {
+            calls.extend(grant_calls(segment)?);
+        }
+    }
+    calls
+        .iter()
+        .map(|call| parse_grant(call).map_err(sandbox_error))
+        .collect()
+}
+
+/// Environment variables passed to a worker are an explicit allowlist. The
+/// sandbox clears the rest of the host environment before exec.
+fn worker_environment(spec: &mut CommandSpec) {
+    for key in [
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "LANG",
+        "LC_ALL",
+        "PYTHONPATH",
+        "NODE_PATH",
+        "LUA_PATH",
+    ] {
+        if let Ok(value) = std::env::var(key) {
+            spec.env.insert(key.to_string(), value);
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn test_unsandboxing_enabled() -> bool {
+    std::env::var("MELD_TEST_UNSANDBOXED").as_deref() == Ok("1")
+}
+
+#[cfg(not(debug_assertions))]
+fn test_unsandboxing_enabled() -> bool {
+    false
+}
+
 fn spawn_worker(
     pack: &PackInfo,
     t3: &Arc<meld_t3::T3Backend>,
+    grants: &[Grant],
 ) -> meld_core::error::Result<meld_t2::T2Backend> {
+    if let Some(error) = &pack.policy_error {
+        return Err(MeldError::SandboxDenied(format!("{}: {error}", pack.id)));
+    }
     let runner = pack
         .runner
         .as_ref()
         .ok_or_else(|| MeldError::UnknownLang(format!("{} has no T2 runner.toml", pack.id)))?;
-    let args: Vec<&str> = runner.args.iter().map(String::as_str).collect();
-    let mut backend = meld_t2::T2Backend::spawn(&runner.program, &args)?;
+    let root = project_root();
+    let file_default = file_default_policy(&root)?;
+    let mut effective =
+        effective_policy(&pack.pack_policy, &pack.runner_policy, &file_default, None)
+            .map_err(sandbox_error)?;
+    for grant in grants {
+        effective = effective.apply_grant(grant).map_err(sandbox_error)?;
+    }
+    effective.validate().map_err(sandbox_error)?;
+
+    let mut spec =
+        CommandSpec::new(&runner.program, runner.args.iter().cloned()).with_cwd(&runner.cwd);
+    worker_environment(&mut spec);
+
+    // JUDGMENT CALL: this switch exists only in debug test binaries so fixtures
+    // can run on hosts without namespace/cgroup privileges. It warns loudly,
+    // is compiled out of release builds, and never affects production launch.
+    let mut backend = if test_unsandboxing_enabled() {
+        eprintln!(
+            "meld: warning: MELD_TEST_UNSANDBOXED is set; T2 worker for {} is NOT OS-confined",
+            pack.id
+        );
+        meld_t2::T2Backend::spawn_with_spec(&spec)?
+    } else {
+        let backend = platform_backend();
+        let probe = backend.probe();
+        probe.require(&effective).map_err(sandbox_error)?;
+        meld_t2::T2Backend::spawn_sandboxed(&backend, &spec, &effective)?
+    };
     let t3 = Arc::clone(t3);
     backend.set_host_call(move |name, values| t3.call_value(name, values));
     Ok(backend)
@@ -381,18 +634,29 @@ fn spawn_worker(
 
 type WorkerCache = HashMap<String, meld_t2::T2Backend>;
 
+/// Immutable inputs shared by every inline expression in one composite region.
+/// Grouping them keeps `render_inline` under the lint's argument limit without
+/// changing ownership: the worker cache remains exclusively mutable.
+struct InlineContext<'a> {
+    packs: &'a HashMap<String, PackInfo>,
+    bridge: &'a Bridge,
+    t3: &'a Arc<meld_t3::T3Backend>,
+    grants: &'a [Grant],
+}
+
 fn backend_for<'a>(
     cache: &'a mut WorkerCache,
     packs: &HashMap<String, PackInfo>,
     t3: &Arc<meld_t3::T3Backend>,
     lang: &str,
+    grants: &[Grant],
 ) -> Result<&'a mut meld_t2::T2Backend, i32> {
     if !cache.contains_key(lang) {
         let pack = packs.get(lang).ok_or_else(|| {
             eprintln!("no lang pack for '{lang}'");
             1
         })?;
-        let backend = spawn_worker(pack, t3).map_err(|e| {
+        let backend = spawn_worker(pack, t3, grants).map_err(|e| {
             eprintln!("failed to spawn worker for {lang}: {e}");
             1
         })?;
@@ -419,14 +683,12 @@ fn should_skip(region: &meld_core::splitter::Region, packs: &HashMap<String, Pac
 fn render_inline(
     expr: &compose::InlineExpr,
     style: SourceStyle,
-    packs: &HashMap<String, PackInfo>,
+    ctx: &InlineContext<'_>,
     imports: &[Import],
     cache: &mut WorkerCache,
-    bridge: &Bridge,
-    t3: &Arc<meld_t3::T3Backend>,
 ) -> Result<String, i32> {
-    let backend = backend_for(cache, packs, t3, &expr.lang)?;
-    backend.apply_imports(imports, bridge).map_err(|e| {
+    let backend = backend_for(cache, ctx.packs, ctx.t3, &expr.lang, ctx.grants)?;
+    backend.apply_imports(imports, ctx.bridge).map_err(|e| {
         eprintln!("{e}");
         1
     })?;
@@ -449,6 +711,13 @@ fn cmd_run(path: Option<&str>) -> i32 {
     let registry = scanner_registry(&packs);
     let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
+        Err(e) => {
+            eprintln!("{e}");
+            return 1;
+        }
+    };
+    let grants = match source_grants(&src, &doc) {
+        Ok(g) => g,
         Err(e) => {
             eprintln!("{e}");
             return 1;
@@ -511,6 +780,12 @@ fn cmd_run(path: Option<&str>) -> i32 {
                     eprintln!("pack '{}' has no inline.toml style", pack.id);
                     return 1;
                 };
+                let inline_ctx = InlineContext {
+                    packs: &packs,
+                    bridge: &bridge,
+                    t3: &t3,
+                    grants: &grants,
+                };
                 let code = compose::render_segments(&segments, |expr| {
                     let inline_imports = bindings
                         .imports
@@ -518,15 +793,7 @@ fn cmd_run(path: Option<&str>) -> i32 {
                         .filter(|i| i.region_id == expr.id)
                         .cloned()
                         .collect::<Vec<_>>();
-                    render_inline(
-                        expr,
-                        style,
-                        &packs,
-                        &inline_imports,
-                        &mut cache,
-                        &bridge,
-                        &t3,
-                    )
+                    render_inline(expr, style, &inline_ctx, &inline_imports, &mut cache)
                 });
                 let code = match code {
                     Ok(v) => v,
@@ -538,7 +805,7 @@ fn cmd_run(path: Option<&str>) -> i32 {
         if should_skip(&region, &packs) || code.trim().is_empty() {
             continue;
         }
-        let backend = match backend_for(&mut cache, &packs, &t3, &region.lang) {
+        let backend = match backend_for(&mut cache, &packs, &t3, &region.lang, &grants) {
             Ok(v) => v,
             Err(c) => return c,
         };
@@ -769,7 +1036,7 @@ fn cmd_repl() -> i32 {
         }
         eprint!("meld[{lang}]> ");
         let _ = io::stderr().flush();
-        let backend = match backend_for(&mut cache, &packs, &t3, &lang) {
+        let backend = match backend_for(&mut cache, &packs, &t3, &lang, &[]) {
             Ok(v) => v,
             Err(c) => return c,
         };
@@ -822,6 +1089,25 @@ fn cmd_doctor() -> i32 {
                 "MISSING (report only; never auto-installed)"
             }
         );
+    }
+    let backend = platform_backend();
+    let probe = backend.probe();
+    println!("sandbox backend: {}", probe.kind);
+    println!(
+        "sandbox available: {}",
+        if probe.available { "ok" } else { "NO" }
+    );
+    for note in &probe.notes {
+        println!("sandbox note: {note}");
+    }
+    match file_default_policy(&project_root()).and_then(|policy| {
+        probe
+            .require(&policy)
+            .map_err(sandbox_error)
+            .map(|_| policy.fingerprint())
+    }) {
+        Ok(fingerprint) => println!("sandbox default policy: {fingerprint}"),
+        Err(e) => println!("sandbox default policy: ENFORCEMENT UNAVAILABLE ({e})"),
     }
     let packs = discover_packs(&project_root());
     let mut ids: Vec<_> = packs
