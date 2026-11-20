@@ -15,6 +15,13 @@ fn root() -> PathBuf {
 }
 
 fn pydeps() -> PathBuf {
+    // JUDGMENT CALL: test key generation needs `cryptography`, but this
+    // workspace can be checked out anywhere. MELD_PYDEPS lets local and CI
+    // environments point at an extracted dependency directory without baking
+    // an absolute host path into the test suite.
+    if let Ok(value) = std::env::var("MELD_PYDEPS") {
+        return PathBuf::from(value);
+    }
     fs::canonicalize(root())
         .expect("canonical workspace root")
         .parent()
