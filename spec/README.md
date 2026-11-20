@@ -338,9 +338,13 @@ Additional judgment calls (also inline in the affected specs/code):
     installed by every CI job (`python` on Windows, `python3` elsewhere), so the
     test still performs a real build/run round trip through an external
     toolchain without host-specific shell behavior. The previous hardcoded shell
-    path stayed latent only because
-    earlier failing test binaries stopped the run before this test executed.
-
+    path stayed latent only because earlier failing test binaries stopped the
+    run before this test executed.
+56. Checked-in pack trees are marked `-text` in `.gitattributes`. Signatures and
+    checksums cover exact bytes, but a Windows checkout with `core.autocrlf=true`
+    rewrote every payload file to CRLF and made the fixture pack fail with all
+    digests mismatched. A repository attribute travels with the code and applies
+    to contributors as well as CI; relying on runner-local Git config did not.
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
 `rust-version 1.85` and are not yanked; Python `cryptography 50.0.2` supports

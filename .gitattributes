@@ -1,0 +1,6 @@
+# JUDGMENT CALL 56: pack checksums and Ed25519 signatures cover exact bytes.
+# Git for Windows otherwise converts LF to CRLF on checkout, which makes every
+# checked-in pack fail verification. Keep these trees byte-for-byte identical
+# to the committed and signed blobs on every host.
+/packs/** -text
+/tests/fixtures/pack-third-party/** -text
