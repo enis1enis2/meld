@@ -559,6 +559,11 @@ fn source_grants(src: &str, doc: &splitter::SplitDocument) -> Result<Vec<Grant>,
 /// Environment variables passed to a worker are an explicit allowlist. The
 /// sandbox clears the rest of the host environment before exec.
 fn worker_environment(spec: &mut CommandSpec) {
+    // JUDGMENT CALL 44: Windows runtimes locate the crypto provider through
+    // SystemRoot and scratch storage through TEMP/TMP. Without these OS
+    // locators, Node aborts during startup with `ncrypto::CSPRNG(nullptr, 0)`
+    // after the sandbox clears the environment. They are not secrets; every
+    // other host variable stays blocked.
     for key in [
         "PATH",
         "HOME",
@@ -568,6 +573,12 @@ fn worker_environment(spec: &mut CommandSpec) {
         "PYTHONPATH",
         "NODE_PATH",
         "LUA_PATH",
+        #[cfg(windows)]
+        "SYSTEMROOT",
+        #[cfg(windows)]
+        "TEMP",
+        #[cfg(windows)]
+        "TMP",
     ] {
         if let Ok(value) = std::env::var(key) {
             spec.env.insert(key.to_string(), value);

@@ -275,6 +275,10 @@ Additional judgment calls (also inline in the affected specs/code):
     fixture pack in `%TEMP%` on `C:` was searched on `D:` and its scanner
     metadata was silently ignored (CI job 136453004332). The LSP discovery path
     uses the same parser.
+44. Windows worker environments retain `SYSTEMROOT`, `TEMP` and `TMP` from the
+    explicit allowlist. With a cleared environment, Node could not initialize
+    its CSPRNG and aborted with `ncrypto::CSPRNG(nullptr, 0)`. These are OS
+    locators, not secrets; all other host variables remain blocked.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
