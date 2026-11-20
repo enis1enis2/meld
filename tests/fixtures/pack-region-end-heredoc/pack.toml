@@ -1,0 +1,7 @@
+id = "heredoc-fixture"
+aliases = ["ruby-fixture"]
+version = "0.1.0"
+tier = "L0"
+level = "L0"
+capabilities = ["syntax"]
+strict = false

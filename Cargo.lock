@@ -860,6 +860,7 @@ dependencies = [
  "meld-value",
  "serde_json",
  "thiserror 1.0.69",
+ "toml",
  "tree-sitter",
 ]
 
