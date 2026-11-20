@@ -138,19 +138,28 @@ the repository (`/mnt/data/supervisor/share/.git-home/.git-credentials`, mode
 
 GitHub API
 `GET /repos/enis1enis2/meld/actions/runs?branch=production%2Fsecurity-from-baseline`
-returned `status=200`, `total_count: 5`. At the time of the check all five runs
-were `in_progress` (conclusions pending):
+returned `status=200`, `total_count: 10` after two pushes: the first branch
+push (`4cac452`) and the evidence-commit push (`2d9b39d`). The second set is
+authoritative for the final tree. Last observed statuses:
 
-| Run ID | Workflow | Status at check | Link |
-|---|---|---|---|
-| 44769509918 | Supply-chain audit | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509918 |
-| 44769509948 | Fuzz | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509948 |
-| 44769509968 | CI | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509968 |
-| 44769510069 | Docs | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769510069 |
-| 44769510130 | MSRV | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769510130 |
+| Run ID | Workflow | Head | Status at check | Link |
+|---|---|---|---|---|
+| 44769866834 | Supply-chain audit | `2d9b39d` | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769866834 |
+| 44769866967 | Docs | `2d9b39d` | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769866967 |
+| 44769866981 | CI | `2d9b39d` | `queued` | https://github.com/enis1enis2/meld/actions/runs/44769866981 |
+| 44769867252 | Fuzz | `2d9b39d` | `queued` | https://github.com/enis1enis2/meld/actions/runs/44769867252 |
+| 44769867360 | MSRV | `2d9b39d` | `queued` | https://github.com/enis1enis2/meld/actions/runs/44769867360 |
+| 44769509918 | Supply-chain audit | `4cac452` | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509918 |
+| 44769509948 | Fuzz | `4cac452` | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509948 |
+| 44769509968 | CI | `4cac452` | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509968 |
+| 44769510069 | Docs | `4cac452` | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769510069 |
+| 44769510130 | MSRV | `4cac452` | `completed` / `success` | https://github.com/enis1enis2/meld/actions/runs/44769510130 |
 
-No green result is claimed here; native platform runs must finish before §2
-platform gaps can be closed.
+This evidence commit itself retriggers the five workflows; the resulting run
+IDs are recorded in session rather than committed, to avoid an evidence loop.
+Only the MSRV run for the first push has concluded successfully so far. No
+overall green result is claimed here; native platform runs on the final commit
+must finish before §2 platform gaps can be closed.
 
 ## 2. Security
 
