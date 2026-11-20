@@ -17,9 +17,56 @@ use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+const HELP: &str = r#"Manage and run Meld documents.
+
+Usage:
+  meld <command> [options] [file]
+
+Commands:
+  check [file]          Check splitting, syntax and bindings without running regions
+  run <file>            Execute a Meld document
+  fmt [--check] [file]  Format regions; --check reports needed changes without writing
+  repl                  Start the interactive REPL
+  doctor                Report toolchain, sandbox and pack health (never installs)
+  lib | library         Show installed and imported language libraries
+  pack new <lang>       Create a new pack scaffold under packs/<lang>
+
+Options:
+  -h, --help            Print this help text
+  -V, --version         Print the meld version
+
+Environment:
+  MELD_ROOT             Override the detected project root
+  MELD_PACKS            OS path-list of additional pack directories
+  MELD_LIB_ROOT         Override the installed library root
+
+Run 'meld <command>' with no file to see command-specific usage where available."#;
+
+fn print_help() {
+    println!("meld {VERSION}");
+    println!("{HELP}");
+}
+
+fn diagnostic_warn(message: impl std::fmt::Display) {
+    eprintln!("meld: warning: {message}");
+}
+
+fn diagnostic_error(message: impl std::fmt::Display) {
+    eprintln!("meld: error: {message}");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match args.first().map(String::as_str) {
+        Some("-h") | Some("--help") => {
+            print_help();
+            0
+        }
+        Some("-V") | Some("--version") => {
+            println!("meld {VERSION}");
+            0
+        }
         Some("check") => cmd_check(args.get(1).map(String::as_str)),
         Some("run") => cmd_run(args.get(1).map(String::as_str)),
         Some("doctor") => cmd_doctor(),
@@ -38,7 +85,10 @@ fn main() {
             cmd_pack_new(args.get(2).map(String::as_str))
         }
         _ => {
-            eprintln!("usage: meld <check|run|fmt [--check]|repl|doctor|lib|pack> [file|lang]");
+            let command = args.first().map(String::as_str).unwrap_or("<none>");
+            diagnostic_error(format!(
+                "unknown command '{command}'; run 'meld --help' for usage"
+            ));
             2
         }
     };
@@ -279,7 +329,10 @@ fn discover_packs(root: &Path) -> HashMap<String, PackInfo> {
                 insert_pack(&mut out, root, &dir);
             }
         }
-        Err(e) => eprintln!("meld: warning: cannot read {}: {e}", meld_lib::LOCK_FILE),
+        Err(e) => diagnostic_warn(format!(
+            "cannot read {} ({e}); run 'meld-pack list' for lock details",
+            meld_lib::LOCK_FILE
+        )),
     }
     out
 }
@@ -311,14 +364,14 @@ fn read_file(path: Option<&str>) -> Result<(PathBuf, String), i32> {
     let path = match path {
         Some(p) => PathBuf::from(p),
         None => {
-            eprintln!("meld: missing file argument");
+            diagnostic_error("missing file argument; pass a .meld file to check, run or fmt");
             return Err(2);
         }
     };
     let src = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("meld: {e}");
+            diagnostic_error(format!("cannot read '{}': {e}", path.display()));
             return Err(1);
         }
     };
@@ -335,7 +388,7 @@ fn cmd_check(path: Option<&str>) -> i32 {
     let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("{}", e);
+            diagnostic_error(format!("cannot split '{}': {e}", p.display()));
             return 1;
         }
     };
@@ -349,17 +402,21 @@ fn cmd_check(path: Option<&str>) -> i32 {
     let mut problems = 0;
     for r in &doc.regions {
         if r.confidence < 0.75 {
-            eprintln!(
-                "{}:{}: low detection confidence ({:.2}) in region {} — pass --assume-detected to run",
+            diagnostic_warn(format!(
+                "{}:{}: low detection confidence ({:.2}) in region {}; review region markers or pack metadata",
                 p.display(),
                 r.full_start,
                 r.confidence,
                 r.id
-            );
+            ));
             problems += 1;
         }
         if r.kind != splitter::RegionKind::Header && r.start > r.end {
-            eprintln!("{}: invalid region span {}", p.display(), r.id);
+            diagnostic_error(format!(
+                "{}: invalid region span {}; fix the region markers before running",
+                p.display(),
+                r.id
+            ));
             problems += 1;
         }
         // JUDGMENT CALL: untagged regions are prose or partial fragments
@@ -378,13 +435,22 @@ fn cmd_check(path: Option<&str>) -> i32 {
                     r.id, r.lang, info.root_kind, info.named_nodes
                 );
                 if info.has_error {
-                    eprintln!("{}: syntax ERROR in region {}", p.display(), r.id);
+                    diagnostic_error(format!(
+                        "{}: syntax error in region {}; fix the {} source and re-run check",
+                        p.display(),
+                        r.id,
+                        r.lang
+                    ));
                     problems += 1;
                 }
             }
             Err(MeldError::UnknownLang(_)) => {}
             Err(e) => {
-                eprintln!("{e}");
+                diagnostic_error(format!(
+                    "{}: cannot parse region {}: {e}",
+                    p.display(),
+                    r.id
+                ));
                 problems += 1;
             }
         }
@@ -398,12 +464,18 @@ fn cmd_check(path: Option<&str>) -> i32 {
                 plan.join(" → ")
             ),
             Err(e) => {
-                eprintln!("{e}");
+                diagnostic_error(format!(
+                    "{}: invalid execution plan: {e}; fix imports/exports and re-run check",
+                    p.display()
+                ));
                 problems += 1;
             }
         },
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!(
+                "{}: binding resolution failed: {e}; fix imports/exports and re-run check",
+                p.display()
+            ));
             problems += 1;
         }
     }
@@ -626,10 +698,10 @@ fn spawn_worker(
     // can run on hosts without namespace/cgroup privileges. It warns loudly,
     // is compiled out of release builds, and never affects production launch.
     let mut backend = if test_unsandboxing_enabled() {
-        eprintln!(
-            "meld: warning: MELD_TEST_UNSANDBOXED is set; T2 worker for {} is NOT OS-confined",
+        diagnostic_warn(format!(
+            "MELD_TEST_UNSANDBOXED is set; T2 worker for {} is NOT OS-confined (debug builds only)",
             pack.id
-        );
+        ));
         meld_t2::T2Backend::spawn_with_spec(&spec)?
     } else {
         let backend = platform_backend();
@@ -663,18 +735,22 @@ fn backend_for<'a>(
 ) -> Result<&'a mut meld_t2::T2Backend, i32> {
     if !cache.contains_key(lang) {
         let pack = packs.get(lang).ok_or_else(|| {
-            eprintln!("no lang pack for '{lang}'");
+            diagnostic_error(format!(
+                "no lang pack for '{lang}'; install or import it with 'meld-pack install {lang}'"
+            ));
             1
         })?;
         let backend = spawn_worker(pack, t3, grants).map_err(|e| {
-            eprintln!("failed to spawn worker for {lang}: {e}");
+            diagnostic_error(format!(
+                "failed to spawn worker for {lang}: {e}; check packs with 'meld doctor'"
+            ));
             1
         })?;
         cache.insert(lang.to_string(), backend);
     }
     let backend = cache.get_mut(lang).expect("worker inserted");
     backend.ensure_initialized(lang).map_err(|e| {
-        eprintln!("{e}");
+        diagnostic_error(format!("worker for {lang} failed to initialize: {e}"));
         1
     })?;
     Ok(backend)
@@ -699,15 +775,18 @@ fn render_inline(
 ) -> Result<String, i32> {
     let backend = backend_for(cache, ctx.packs, ctx.t3, &expr.lang, ctx.grants)?;
     backend.apply_imports(imports, ctx.bridge).map_err(|e| {
-        eprintln!("{e}");
+        diagnostic_error(format!("cannot apply imports for inline {}: {e}", expr.id));
         1
     })?;
     let value = backend.eval(&expr.id, &expr.code).map_err(|e| {
-        eprintln!("{e}");
+        diagnostic_error(format!("inline {} failed: {e}", expr.id));
         1
     })?;
     value.to_source_literal(style).map_err(|e| {
-        eprintln!("inline value cannot be rendered: {e}");
+        diagnostic_error(format!(
+            "inline {} value cannot be rendered as {style:?}: {e}",
+            expr.id
+        ));
         1
     })
 }
@@ -722,35 +801,41 @@ fn cmd_run(path: Option<&str>) -> i32 {
     let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!("cannot split '{}': {e}", _p.display()));
             return 1;
         }
     };
     let grants = match source_grants(&src, &doc) {
         Ok(g) => g,
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!("invalid grant in '{}': {e}", _p.display()));
             return 1;
         }
     };
     let bindings = match binding::resolve(&doc) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!(
+                "binding resolution failed in '{}': {e}",
+                _p.display()
+            ));
             return 1;
         }
     };
     let plan = match binding::execution_plan(&doc, &bindings) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!("invalid execution plan in '{}': {e}", _p.display()));
             return 1;
         }
     };
     let units = match compose::build_units(&doc, &plan, &bindings) {
         Ok(u) => u,
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!(
+                "cannot build execution units for '{}': {e}",
+                _p.display()
+            ));
             return 1;
         }
     };
@@ -760,7 +845,7 @@ fn cmd_run(path: Option<&str>) -> i32 {
     let t3 = match meld_t3::T3Backend::demo() {
         Ok(v) => Arc::new(v),
         Err(e) => {
-            eprintln!("failed to load T3 demo component: {e}");
+            diagnostic_error(format!("failed to load T3 demo component: {e}"));
             return 1;
         }
     };
@@ -783,11 +868,17 @@ fn cmd_run(path: Option<&str>) -> i32 {
                 exports,
             } => {
                 let Some(pack) = packs.get(&anchor.lang) else {
-                    eprintln!("no lang pack for containing region '{}'", anchor.lang);
+                    diagnostic_error(format!(
+                        "no lang pack for containing region '{}'; check 'meld doctor'",
+                        anchor.lang
+                    ));
                     return 1;
                 };
                 let Some(style) = pack.inline_style else {
-                    eprintln!("pack '{}' has no inline.toml style", pack.id);
+                    diagnostic_error(format!(
+                        "pack '{}' has no inline.toml style; add one before running composites",
+                        pack.id
+                    ));
                     return 1;
                 };
                 let inline_ctx = InlineContext {
@@ -828,7 +919,7 @@ fn cmd_run(path: Option<&str>) -> i32 {
         match backend.run(&job, &mut bridge) {
             Ok(lines) => stdout.extend(lines),
             Err(e) => {
-                eprintln!("{e}");
+                diagnostic_error(format!("region {} failed: {e}", job.region.id));
                 return 1;
             }
         }
@@ -951,7 +1042,7 @@ fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
     let doc = match splitter::split(&src, &registry) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!("cannot split '{}': {e}", p.display()));
             return 1;
         }
     };
@@ -967,7 +1058,11 @@ fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
         return 0;
     }
     if check {
-        eprintln!("{}: needs formatting", p.display());
+        diagnostic_error(format!(
+            "{}: needs formatting; run 'meld fmt {}' to apply changes",
+            p.display(),
+            p.display()
+        ));
         return 1;
     }
     match std::fs::write(&p, out) {
@@ -976,7 +1071,7 @@ fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
             0
         }
         Err(e) => {
-            eprintln!("{e}");
+            diagnostic_error(format!("cannot write '{}': {e}", p.display()));
             1
         }
     }
@@ -987,7 +1082,7 @@ fn cmd_repl() -> i32 {
     let t3 = match meld_t3::T3Backend::demo() {
         Ok(v) => Arc::new(v),
         Err(e) => {
-            eprintln!("failed to load T3 demo component: {e}");
+            diagnostic_error(format!("failed to load T3 demo component: {e}"));
             return 1;
         }
     };
@@ -1009,7 +1104,7 @@ fn cmd_repl() -> i32 {
         let line = match line {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("{e}");
+                diagnostic_error(format!("cannot read REPL input: {e}"));
                 return 1;
             }
         };
@@ -1024,12 +1119,15 @@ fn cmd_repl() -> i32 {
             println!(":lang <id>   switch the active language");
             println!(":bridge      list bridge values");
             println!(":exit        leave the REPL");
+            println!(":quit        leave the REPL");
             continue;
         }
         if let Some(next) = trimmed.strip_prefix(":lang ") {
             let next = next.trim().to_string();
             if !packs.contains_key(&next) {
-                eprintln!("unknown pack '{next}'");
+                diagnostic_warn(format!(
+                    "unknown pack '{next}'; run 'meld lib' to list installed packs"
+                ));
                 continue;
             }
             lang = next;
@@ -1075,7 +1173,7 @@ fn cmd_repl() -> i32 {
                     println!("{text}");
                 }
             }
-            Err(e) => eprintln!("{e}"),
+            Err(e) => diagnostic_error(format!("REPL evaluation failed: {e}")),
         }
     }
     0
@@ -1144,7 +1242,9 @@ fn cmd_doctor() -> i32 {
                 );
             }
         }
-        Err(e) => eprintln!("meld: warning: invalid library index: {e}"),
+        Err(e) => diagnostic_warn(format!(
+            "invalid library index: {e}; run 'meld-pack list' for details"
+        )),
     }
     match meld_lib::ProjectLock::load(&project_root()) {
         Ok(lock) => {
@@ -1152,7 +1252,10 @@ fn cmd_doctor() -> i32 {
                 println!("import {id}: {version}");
             }
         }
-        Err(e) => eprintln!("meld: warning: invalid {}: {e}", meld_lib::LOCK_FILE),
+        Err(e) => diagnostic_warn(format!(
+            "invalid {}: {e}; run 'meld-pack list' to inspect imports",
+            meld_lib::LOCK_FILE
+        )),
     }
     0
 }
@@ -1165,14 +1268,19 @@ fn cmd_library() -> i32 {
     let index = match meld_lib::InstalledIndex::load(&root) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("meld: {e}");
+            diagnostic_error(format!(
+                "cannot read installed library index: {e}; run 'meld-pack list' for details"
+            ));
             return 1;
         }
     };
     let lock = match meld_lib::ProjectLock::load(&project) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("meld: {e}");
+            diagnostic_error(format!(
+                "cannot read {}: {e}; repair the lock with 'meld-pack import'",
+                meld_lib::LOCK_FILE
+            ));
             return 1;
         }
     };
@@ -1204,17 +1312,23 @@ fn cmd_pack_new(lang: Option<&str>) -> i32 {
     let lang = match lang {
         Some(l) => l,
         None => {
-            eprintln!("usage: meld pack new <lang>");
+            diagnostic_error("missing pack name; usage: meld pack new <lang>");
             return 2;
         }
     };
     let dir = Path::new("packs").join(lang);
     if dir.exists() {
-        eprintln!("pack already exists: {}", dir.display());
+        diagnostic_error(format!(
+            "pack already exists: {}; choose a different language id",
+            dir.display()
+        ));
         return 1;
     }
     if let Err(e) = std::fs::create_dir_all(&dir) {
-        eprintln!("{e}");
+        diagnostic_error(format!(
+            "cannot create pack directory '{}': {e}",
+            dir.display()
+        ));
         return 1;
     }
     let manifest = format!(

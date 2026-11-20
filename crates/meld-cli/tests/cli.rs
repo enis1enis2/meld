@@ -342,3 +342,68 @@ fn imported_library_overrides_a_same_named_builtin_pack() {
 
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn help_and_version_are_available_without_a_project() {
+    let help = run(&["--help"], None, None);
+    assert!(
+        help.status.success(),
+        "{}",
+        String::from_utf8_lossy(&help.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&help.stdout);
+    for command in [
+        "check",
+        "run",
+        "fmt [--check]",
+        "repl",
+        "doctor",
+        "lib | library",
+        "pack new <lang>",
+        "-h, --help",
+        "-V, --version",
+    ] {
+        assert!(stdout.contains(command), "missing {command:?} in {stdout}");
+    }
+
+    let short_help = run(&["-h"], None, None);
+    assert!(short_help.status.success());
+    assert_eq!(String::from_utf8_lossy(&short_help.stdout), stdout);
+
+    let version = run(&["-V"], None, None);
+    assert!(version.status.success());
+    let version_text = String::from_utf8_lossy(&version.stdout);
+    assert!(version_text.starts_with("meld "), "{version_text}");
+    assert_eq!(
+        version_text.trim(),
+        String::from_utf8_lossy(&run(&["--version"], None, None).stdout).trim()
+    );
+}
+
+#[test]
+fn unknown_command_and_missing_file_use_prefixed_diagnostics() {
+    let unknown = run(&["not-a-command"], None, None);
+    assert_eq!(unknown.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&unknown.stderr);
+    assert!(stderr.starts_with("meld: error: "), "{stderr}");
+    assert!(stderr.contains("--help"), "{stderr}");
+
+    let missing = run(&["run"], None, None);
+    assert_eq!(missing.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&missing.stderr);
+    assert!(stderr.starts_with("meld: error: "), "{stderr}");
+    assert!(stderr.contains("missing file argument"), "{stderr}");
+}
+
+#[test]
+fn repl_help_lists_both_exit_aliases() {
+    let output = run(&["repl"], Some(":help\n:quit\n"), None);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains(":exit        leave the REPL"), "{stdout}");
+    assert!(stdout.contains(":quit        leave the REPL"), "{stdout}");
+}
