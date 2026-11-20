@@ -459,7 +459,16 @@ mod tests {
 
     #[test]
     fn kill_hook_errors_are_surfaced() {
-        let mut command = CommandSpec::new("/bin/true", Vec::<String>::new()).to_command();
+        // JUDGMENT CALL 47: spawn a known-present executable instead of a
+        // Unix-only `/bin/true`. macOS keeps `true` under /usr/bin, and Windows
+        // has no /bin at all; this test previously never reached Windows CI
+        // because an earlier binary aborted the run first. `--list` makes the
+        // test binary itself exit immediately without running any tests.
+        let mut command = CommandSpec::new(
+            std::env::current_exe().expect("current test executable"),
+            ["--list"],
+        )
+        .to_command();
         let mut child = command.spawn().unwrap();
         let stdout = child.stdout.take().unwrap();
         let stderr = child.stderr.take().unwrap();

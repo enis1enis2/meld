@@ -288,6 +288,11 @@ Additional judgment calls (also inline in the affected specs/code):
     unmaintained `fxhash` advisory even though `deny.toml` is unchanged; the
     pinned version honours the config and passes. No advisory exception was
     added and `--deny warnings` stays in force.
+47. The process kill-hook test spawns the current test executable with `--list`
+    rather than `/bin/true`. macOS keeps `true` under `/usr/bin` and Windows has
+    no `/bin`; because CI aborts at the first failing test binary, this test had
+    never actually run on Windows. Using `current_exe()` makes it portable and
+    still exercises fail-closed teardown.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
