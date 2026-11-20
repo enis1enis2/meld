@@ -17,7 +17,7 @@ the Phase 7 done-when criterion in `project.md` §11.
 | `tests/conformance.json` | Data-driven behavioral cases (no code in the manifest) |
 | `tests/feed.meld` | Mixed-language feeder fixture |
 | `tests/run_conformance.py` | Explicit developer harness that replays the JSON cases |
-| `checksums.sha256`, `signature.hmac` | Integrity metadata for registry tooling |
+| `checksums.sha256`, `signature.ed25519` | Integrity metadata for registry tooling |
 
 ## Why `shell`, and why L1
 
@@ -44,22 +44,29 @@ no runnable CLI would be L0 instead (project.md §5 honesty note).
   `packtool install` is a pure data copy and does not rewrite it; the future
   `runner.toml` discovery code must rebase it when the pack is installed
   elsewhere.
-- **Signature key:** `signature.hmac` was produced with a local demo HMAC key
-  that is intentionally **not distributed** with the fixture. To re-sign after
-  editing files, run:
+- **Signature key:** `signature.ed25519` is produced with a private key that is
+  intentionally **not distributed** with the fixture. Only its public key is in
+  `packs/registry/trust-roots.toml`. To re-sign after editing files, run:
   ```
-  python3 tools/packtool.py sign tests/fixtures/pack-third-party --key <your-private-key>
+  python3 tools/packtool.py sign tests/fixtures/pack-third-party \
+    --private-key /path/to/ed25519-private.pem
   ```
   and regenerate `checksums.sha256` first if payloads changed. Verification
-  without `--key` checks signature presence only (see `spec/registry.md`).
+  without `--trust-roots` checks signature presence only; passing the public
+  trust roots authenticates the exact signed message (see `spec/registry.md`).
+  HMAC `--key` was removed.
 
 ## Use
 
 From the project root:
 
 ```
-python3 tools/packtool.py verify tests/fixtures/pack-third-party
+python3 tools/packtool.py verify tests/fixtures/pack-third-party \
+  --trust-roots packs/registry/trust-roots.toml \
+  --revocations packs/registry/revocations.json
 python3 tests/fixtures/pack-third-party/tests/run_conformance.py
-python3 tools/packtool.py publish tests/fixtures/pack-third-party --registry packs/registry
-python3 tools/packtool.py install shell --registry packs/registry --into /tmp/meld-packs
+python3 tools/packtool.py verify-registry packs/registry --verify-packs
+python3 tools/packtool.py install shell --registry packs/registry \
+  --into /tmp/meld-packs --trust-roots packs/registry/trust-roots.toml \
+  --revocations packs/registry/revocations.json --require-trusted
 ```

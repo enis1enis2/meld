@@ -18,7 +18,7 @@ packs/<lang-id>/
   lsp.toml           # editor metadata: language id, extension, LSP command
   formatter.toml     # optional pack-owned formatter command
   checksums.sha256   # Phase 7 registry integrity
-  signature.hmac     # Phase 7 registry integrity (required when strict)
+  signature.ed25519  # Phase 7 registry integrity (required when strict)
   tests/             # conformance cases
 ```
 
@@ -163,8 +163,9 @@ emits `generated-placeholder` and `strict = false`.
   `marshal` (project.md §4).
 - No implicit network/filesystem. `sandbox` in manifest is deny-by-default.
 - Signing and registry are Phase 7 (`spec/registry.md`): `checksums.sha256`
-  covers every payload file and `signature.hmac` authenticates it. A strict
-  pack refuses to publish or install without both files.
+  covers every payload file and `signature.ed25519` authenticates it against a
+  public trust root. A strict pack refuses to publish or install without both
+  files; the private key stays outside the repository.
 - Installation and import are the Lang Library layer (`spec/libraries.md`):
   `meld-pack` verifies data in the git checkout and at the destination, copies
   no symlinks, executes no pack code, and records exact versions in

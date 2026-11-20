@@ -1,5 +1,7 @@
 //! CLI-level Phase 5/7 checks: pack-owned formatter, REPL language switching,
 //! and end-to-end execution of an installed third-party pack.
+//! HMAC was removed; temporary packs are re-signed with Ed25519 keys generated
+//! outside the repository after checksums are refreshed.
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -65,6 +67,37 @@ fn temp_dir(name: &str) -> PathBuf {
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     dir
+}
+
+fn pydeps() -> PathBuf {
+    std::fs::canonicalize(root())
+        .expect("canonical workspace root")
+        .parent()
+        .expect("workspace parent")
+        .join("pydeps")
+}
+
+fn key_pair(base: &Path) -> PathBuf {
+    let private = base.join("temporary.private.pem");
+    let public = base.join("temporary.public.pem");
+    let output = Command::new("python3")
+        .arg(root().join("tools/packtool.py"))
+        .args([
+            "keygen",
+            "--private-key",
+            private.to_str().unwrap(),
+            "--public-key",
+            public.to_str().unwrap(),
+        ])
+        .env("PYTHONPATH", pydeps())
+        .output()
+        .expect("generate Ed25519 key pair");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    private
 }
 
 #[test]
@@ -150,13 +183,13 @@ fn imported_library_overrides_a_same_named_builtin_pack() {
     assert_ne!(original, patched, "fixture worker line changed");
     std::fs::write(&worker, patched).unwrap();
 
-    let key = dir.join("override.key");
-    std::fs::write(&key, b"k".repeat(32)).unwrap();
+    let private_key = key_pair(&dir);
     let checksums = Command::new("python3")
         .arg("-c")
         .arg("import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import packtool; packtool.write_checksums(Path(sys.argv[2]))")
         .arg(root().join("tools"))
         .arg(&imported)
+        .env("PYTHONPATH", pydeps())
         .output()
         .expect("regenerate checksums");
     assert!(
@@ -169,9 +202,10 @@ fn imported_library_overrides_a_same_named_builtin_pack() {
             root().join("tools/packtool.py").to_string_lossy().as_ref(),
             "sign",
             imported.to_string_lossy().as_ref(),
-            "--key",
-            key.to_string_lossy().as_ref(),
+            "--private-key",
+            private_key.to_string_lossy().as_ref(),
         ])
+        .env("PYTHONPATH", pydeps())
         .output()
         .expect("sign library");
     assert!(

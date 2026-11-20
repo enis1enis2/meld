@@ -20,7 +20,7 @@ packs/<lang-id>/
   library.toml       # install/import manifest (this document)
   ...                # grammar reference, queries, runner, worker, tests
   checksums.sha256   # registry.md §1.1
-  signature.hmac     # registry.md §1.2, required when pack.toml has strict = true
+  signature.ed25519  # registry.md §1.2, required when pack.toml has strict = true
 ```
 
 **JUDGMENT CALL:** "library" uses the package-manager sense from `project.md`
@@ -70,12 +70,15 @@ Validation performed by `meld_lib::validate_library_dir`:
    any copy is made (`project.md` §9).
 5. The pack passes `registry.md` §1 verification: canonical checksums, no
    unexpected/missing files, no symlinks, and a signature when `strict = true`.
-   With `--key`, the HMAC is checked as well.
+   With `--trust-roots`, the Ed25519 signature is authenticated against a
+   public key and a revoked key-id is rejected; without them it is only
+   reported as present. Remote installs set `require_trusted`, so an absent,
+   unknown or unverified signature is a hard failure there.
 
 `tools/gen_pack.py` emits this manifest for every generated pack.
 `tools/make_libraries.py` derives it from existing `pack.toml` files, refreshes
 `checksums.sha256`, and deliberately leaves signing as a separate explicit step
-so the HMAC key never enters the repository.
+so the private key never enters the repository.
 
 ## 3. Installed state
 
@@ -162,21 +165,23 @@ dependency.
 
 ```
 meld-pack remote-list [--source <repo>] [--ref <ref>]
-meld-pack install <lang>... [--source <repo>] [--ref <ref>] [--key <path>]
+meld-pack install <lang>... [--source <repo>] [--ref <ref>]
+                            [--trust-roots <file>] [--revocations <file>]
                             [--root <dir>] [--project <dir>] [--force] [--no-import]
 meld-pack remove <lang>... [--root <dir>] [--project <dir>] [--keep-import]
 meld-pack import <lang>... [--root <dir>] [--project <dir>]
 meld-pack unimport <lang>... [--root <dir>] [--project <dir>]
 meld-pack list [--root <dir>] [--json]
-meld-pack verify <dir> [--key <path>]
+meld-pack verify <dir> [--trust-roots <file>] [--revocations <file>]
 meld-pack self-install [--bin-dir <dir>]
 meld-pack self-uninstall [--bin-dir <dir>]
 ```
 
-Environment fallbacks: `MELD_PACK_SOURCE`, `MELD_PACK_REF`, `MELD_PACK_KEY`,
-`MELD_LIB_ROOT`, `MELD_ROOT`, and `TMPDIR`/`MELD_PACK_TMP` for temporary git
-checkouts. Exit codes are `0` success, `1` validation/integrity failure, and
-`2` usage error.
+Environment fallbacks: `MELD_PACK_SOURCE`, `MELD_PACK_REF`,
+`MELD_PACK_TRUST_ROOTS`, `MELD_PACK_REVOCATIONS`, `MELD_LIB_ROOT`, `MELD_ROOT`,
+and `TMPDIR`/`MELD_PACK_TMP` for temporary git checkouts. `--key` was removed
+with HMAC and exits with a migration error. Exit codes are `0` success,
+`1` validation/integrity failure, and `2` usage error.
 
 ### 4.1 Source selection
 
@@ -212,7 +217,12 @@ silently take a different code path.
   copies it to `<root>/<id>/<version>`, and verifies the copy again. The second
   check catches copy-time corruption and makes installed bytes authoritative.
   An identical existing install is a no-op; different bytes at the same
-  coordinates require `--force`.
+  coordinates require `--force`. **JUDGMENT CALL:** remote installs require a
+  verified Ed25519 signature by default. Trust roots and revocations are read
+  from the fetched tree (`packs/registry/trust-roots.toml` and
+  `packs/registry/revocations.json`) unless `--trust-roots`/`--revocations`
+  pin an out-of-band copy. Missing files are a hard error, not a silent
+  presence-only check.
 - After a successful copy, the index is upserted and, unless `--no-import`, the
   exact version is written to `meld.lock`. Imports are saved after each library
   so a multi-name install leaves a consistent prefix on failure.
@@ -222,7 +232,7 @@ silently take a different code path.
   are pruned.
 - `verify` prints the manifest identity, tier/level, strictness, verified file
   count, and whether a signature is absent, present-unverified, or verified
-  with the supplied key.
+  with the supplied trust roots.
 - `self-install` copies the running `meld-pack` binary to
   `--bin-dir`, `XDG_BIN_HOME`, or `~/.local/bin` and sets mode `0755` on Unix.
   `self-uninstall` uses the same resolution, including `--bin-dir`. Both are
@@ -260,12 +270,14 @@ Hard rules inherited from `project.md` §9 and `registry.md` §4:
 - All manifest and index paths are relative and traversal-checked.
 - Canonical JSON/checksum encoding has no timestamps, making repeated output
   byte-for-byte reproducible.
-- HMAC keys must be at least 16 bytes and distributed out of band; they are
-  never written into a pack or the repository. HMAC is symmetric: anyone who
-  can verify can also forge, so authenticity depends on key custody.
-- Unauthenticated installs are allowed for local development, but strict packs
-  always need a signature file and keyed verification is available with
-  `--key`/`MELD_PACK_KEY`.
+- Public trust roots are distributed with the registry; private keys stay
+  outside the repository and never enter a pack. Ed25519 lets verifiers check
+  provenance without gaining the ability to forge. Revoked key ids are rejected
+  before signature verification.
+- Local `verify` may report a well-formed signature as `present-unverified`,
+  but strict packs always need a signature file and **remote installs** require
+  a verified one. Pass `--trust-roots`/`MELD_PACK_TRUST_ROOTS` (and optionally
+  revocations) for local authenticity checks.
 
 | Condition | Result |
 |---|---|
@@ -274,8 +286,11 @@ Hard rules inherited from `project.md` §9 and `registry.md` §4:
 | `library.toml` disagrees with `pack.toml` id/version/aliases | consistency error |
 | Unsafe or missing `exports` path | manifest validation error |
 | Checksum mismatch, added/removed file, symlink | pack verification error |
-| `strict = true` without signature | `strict pack requires signature.hmac` |
-| Wrong HMAC key or modified checksums | key-id or signature mismatch |
+| `strict = true` without signature | `strict pack requires signature.ed25519` |
+| Unknown key-id | `is not in the trust roots` |
+| Revoked key-id | `is revoked` |
+| Modified checksums, id or version | `signature mismatch` |
+| Missing trust roots on a remote install | `no trust roots; pass --trust-roots` |
 | Alias used by two installed/remote libraries | ambiguous alias error |
 | Different bytes at installed coordinates | bump version or pass `--force` |
 | Missing imported directory at runtime | entry skipped; reported as `MISSING` |
@@ -284,12 +299,14 @@ Hard rules inherited from `project.md` §9 and `registry.md` §4:
 
 ## 7. Implementation note
 
-`meld_lib::verify_pack` mirrors `tools/packtool.py` with hand-written SHA-256
-and HMAC-SHA256 over canonical checksum bytes. `sha2 0.11.1` was re-verified on
-2026-11-20 as the current stable release (crates.io `max_stable_version`), with
-`rust-version 1.88`, which fits the workspace's `rust-version 1.90`. The RFC
-4231 HMAC vector is a unit test, so a dependency upgrade cannot silently change
-the integrity format.
+`meld_lib::verify_pack` mirrors `tools/packtool.py`: canonical checksums are
+hashed with `sha2 0.11.1`, and the signature is checked with
+`ed25519-dalek = "=3.0.0"` using `verify_strict`. `ed25519-dalek 3.0.0` declares
+`rust-version 1.85`, which fits the workspace's `rust-version 1.90`. A unit test
+pins the exact signed byte sequence
+(`meld-pack/ed25519/v1\n<id>\n<version>\n<checksums bytes>`), so a dependency
+upgrade cannot silently change the integrity format. HMAC code and tests were
+removed; only a migration note remains.
 
 ## 8. Judgment call index
 
@@ -305,8 +322,9 @@ the integrity format.
    for changed bytes (§4.2).
 6. Missing imports are skipped, and imported libraries are discovered last so
    the project lock wins over built-ins (§5).
-7. HMAC remains symmetric and key-based; strict packs require a signature file,
-   and keyed verification is optional but checked against a key-id first (§6).
+7. Ed25519 replaced HMAC so public trust roots can authenticate a pack without
+   making every verifier a signer. Strict packs require a signature file;
+   remote installs require it to verify, and revoked key ids fail first (§6).
 8. Temp clones honor `TMPDIR`/`MELD_PACK_TMP` and are checked for visibility
    after checkout, so a chrooted git cannot silently produce an empty catalog
    (§4.1/§6).

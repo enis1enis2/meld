@@ -1,4 +1,476 @@
 {
-  "packs": [],
+  "packs": [
+    {
+      "aliases": [
+        "posix-sh",
+        "sh",
+        "shell"
+      ],
+      "checksums_sha256": "1e8559b4338f668859627ba74c3844bc8d314a844d19e42e7a215b28ecf649cd",
+      "id": "bash",
+      "level": "L1",
+      "path": "../bash",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "8cf1d7570200762c426468bdf156d39d6ed9360763e50dd6addb22b1634b88ac7617f22dbb669451781e07268654806a776658cd2f3797cc4934893470c80804"
+      },
+      "strict": true,
+      "tier": "T2",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "db459c1ebb0681dc939d6be32f098c35e29791a795038302867de0bf03885a88",
+      "id": "c",
+      "level": "L0",
+      "path": "../c",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "5a081466e1b3a67e7fa6da861c260f5b60c2f4c799713d8f9e85d579e58ec447a699c70b610cdd17934d799531c306d907a6377d40cc2b1f989d2d7df6b2490d"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "77229b4e712ea960485002f792ce478bb3b34ced8e8b5a3bbe3f786cf3d491a9",
+      "id": "cpp",
+      "level": "L0",
+      "path": "../cpp",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "184f0cf38ba2cec24527f2a298692e72f2e294eee34a9705f1d069458205e9eff6d8046f230b5d920f8d8e7905cf5f49eb11d2a9de4c41885fe2155edf21100e"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "cs",
+        "dotnet-csharp"
+      ],
+      "checksums_sha256": "3cd852f272ac7453cab83859ea32bc5625a665b6893de75e5dfc0c42eda53804",
+      "id": "csharp",
+      "level": "L0",
+      "path": "../csharp",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "53d5670e1d0153b878e7023c864a58c0d418b217e123368c00b503b17a146742ef2b0a070725e8db1236427655d4421290799234c1a788dec102d7b957638a08"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "f942554c4400303c46e1a7995b12f1359dfa5716cf5bc39a48c783c6ae52be1a",
+      "id": "css",
+      "level": "L0",
+      "path": "../css",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "6a884e5550d25b6df17f768857d06a88a0fe447c8ae84d2f618b6b74d0f1b886874cf4a6fdd84f55d2966ab6dfd4b4ca38417663336a28ebba74b229dde87500"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "46de0d8b8b109e19a8c057dd9adad09a04a85845ae94cb928feae8890a6f1819",
+      "id": "dart",
+      "level": "L0",
+      "path": "../dart",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "bfb40e32ff048cdca48c6d24c7c752ef341d65004134d38d9c5e76c2ff7f95da53c011f3b2c9f2f71106249afc760d1156965c4a7973447b4864d98530783004"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "68a97dbce617620ec0dfa0e201baeafa8c59f807c880f8828df0f4037f5dfa06",
+      "id": "go",
+      "level": "L0",
+      "path": "../go",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "346fdfcfb2ce0f7296866d9470dffb8e2b244bef827a5f5d6c28614dcd681a0562c27047238fd18bc02659601222780c89356e98f040229a98cc6c9e516d3806"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "hs"
+      ],
+      "checksums_sha256": "ce710d0e68de7bbd7dfe4da7dadfde6cf1f8872a2e4f048e7db9a2e7b08aebe8",
+      "id": "haskell",
+      "level": "L0",
+      "path": "../haskell",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "9a85cf5c6931bb214072500320ad835308a9b9ee7c625f5ed9cf22c5b16bf1b9566cdf9514afe4a2259cdfc1a20837080cdf48505e74a35f83cf52defbe1a307"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "cf52b25e7f3e0018ae3065b9472130bb590876dc97ef143a88de4d963aa2d43f",
+      "id": "html",
+      "level": "L0",
+      "path": "../html",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "fb802427fc6d45290e2bc86e20d15e8d48df8fc4092191a29decc9354e6f1bd280133bf7c17bd1c984704cb2951f5d73f453b7827bd82613aed935e9600adc0c"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "551dc56e779221d36222c25eb3c0f77c74dc0bc4e7d85f679d7bcab933b4368a",
+      "id": "java",
+      "level": "L0",
+      "path": "../java",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "9ce67f1322a11e96f47679f8e2776f76d521b7b7eb7cd2e67a6965853e178a55ca86d9235dfc28d275c80f7cee7d646242b5813455ea09bdcc9ddf1751272702"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "js",
+        "node"
+      ],
+      "checksums_sha256": "de2f2a9742e05cb026daf84de5e536a9bcd4da1b2fe7e12a7cc313065d677e53",
+      "id": "javascript",
+      "level": "L2",
+      "path": "../javascript",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "8b22bb966affcdc231a9d703890d7d01bdc5addb93adb48394ed069b0576f7959b1307902ed2f9977435dd85484f241080072af16fb431e7ab2129150ec13d04"
+      },
+      "strict": true,
+      "tier": "T2",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "0bcc5aa375776647fc81d0067775f75daa79c45884ba42b77bd3e5f91740b878",
+      "id": "json",
+      "level": "L0",
+      "path": "../json",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "be3ab56643d07f70513e9cc0c8ffc975e02bfdf15da6c378b8c83b05fd6f6df1555ed659f0cb936e90e5b3719838ddde775e1bef6e5f07e7e7cf2ac6be700108"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "lua5.4"
+      ],
+      "checksums_sha256": "bd989cbe41486d54dac1db6a4972bd03f6517d74e3e2a0e01e42e47cdc2d5ac6",
+      "id": "lua",
+      "level": "L2",
+      "path": "../lua",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "715f7ebbf2acb5dcf2a35a2a8bd36f5c6821bac144dfda22ce74d957e54029ea0e921808d394f5071e1a3d4412325f8baa936a9dcdf8c2fe85b789d03e71520b"
+      },
+      "strict": true,
+      "tier": "T2",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "03747bf0e46aaf2286ffb803ee1d86fc611d8df79091b809f53706dc1f37e2e4",
+      "id": "markdown",
+      "level": "L0",
+      "path": "../markdown",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "b4b099331838fe81c7122d2a25bee4b10c62369bde90ddb3d1dbaa410f936a13008ad76d6ac363b5d24c7fa7ebc9172306235fd470560b36cd968c5d5cd2e605"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "ml"
+      ],
+      "checksums_sha256": "c1e7ae1281d37077db895db08caa40e16562b9a204785fbf01aa51aa35852a84",
+      "id": "ocaml",
+      "level": "L0",
+      "path": "../ocaml",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "080a77d94a8c10cbb5fe034dcd55f50cfac8b52426cff3a52fe66670c5c164cf9a068bedd09a4e54bbb103929b6b15bd30df62e60977503e88ab92b2cd3b9000"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "62113e2df8d221a74cccc52196c239181f9d4ad179646bcf0f8f37004e9cc08d",
+      "id": "php",
+      "level": "L0",
+      "path": "../php",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "b34fa44aa98dba7835c1bdcecdfebfa127fabf9bc6880ef46a4917017aec24dd0503a26251c1afc02670089349433dadb594da0ad08ffcdfe9567e3707344501"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "py",
+        "python3"
+      ],
+      "checksums_sha256": "b9bbdee6806cb46fe73d072ad4925478748233f40b0b3b15195b86055c4977b1",
+      "id": "python",
+      "level": "L2",
+      "path": "../python",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "d0eda0285dcb21fe906a64dd9e6f35913571afa25ffd875004fb871446509f6ef758ff06466cc459f6ddfc05c32ddc10d9da90321319457ed2d85f84e29d8808"
+      },
+      "strict": true,
+      "tier": "T2",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "rscript"
+      ],
+      "checksums_sha256": "308e4bf18055cb08d33b9b91a8e33c2ea893f0f3aa8646b3927abf3d78f05dd8",
+      "id": "r",
+      "level": "L0",
+      "path": "../r",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "eedfeaee847ea3e125ffa04cc3227974f11787211bbd7577df03fcdd5636a9bc322dbbdb5b637dddd49f2a383db9d38524d9fd1e0a26af12ad1024fb8d2c050b"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "rb"
+      ],
+      "checksums_sha256": "ad93fbe4c66a0ee5eaac4002f6011c4b9988799601abebcad5e04acff8f44538",
+      "id": "ruby",
+      "level": "L0",
+      "path": "../ruby",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "dfb67e7d591d1e7589b5376274735b73f30a187b3f7873e9525584ddd8fffda958570a509d549d7c753c2b06cae3eff0d26cb9cbf6aabff020c760b4d4b3dd04"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "e453e464b681a9e1a933e59c8c813f85e48ee261a3c5de1c00110486265ddc1d",
+      "id": "rust",
+      "level": "L0",
+      "path": "../rust",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "73e70f43eef2c2bb35a3cc2d9ab30cc0cb065156191b24e4f277e0da4c2d27bd5bbe286abc5e85e1435eafd7e93f78b33bb8d8d30c8ae6942da33cf912a77e02"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "sc"
+      ],
+      "checksums_sha256": "695f12e8d1183e3e1aa50383ba618ada74d3a468c56264d8a4dc563f87dbe5d0",
+      "id": "scala",
+      "level": "L0",
+      "path": "../scala",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "66bcd653309ce1909c9c40646f0b422ffbbdd03495304fced959e6642f83cd6ba906aa27dabe2f39e69a314704a979b9f80c122f32eb363a15e4414360a3c609"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "posix-sh",
+        "sh"
+      ],
+      "checksums_sha256": "d3f7110ac83a042fc87e979a6f84927874abcfa57d1db636273dffa386fc63fd",
+      "id": "shell",
+      "level": "L1",
+      "path": "../../tests/fixtures/pack-third-party",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "08a1b1b44301fe74dbf7525ab44942e20f642b683512fd6941cd635bb2ff6a80765b45b25b531d132a1d774e1ff33b4be2074465716a318854e191021eee3b04"
+      },
+      "strict": true,
+      "tier": "T2",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "sol"
+      ],
+      "checksums_sha256": "8bdb8ebd5358787b76f41b9dc47b4e2f6d66f2cf9e54648a3b51ed27c57795ca",
+      "id": "solidity",
+      "level": "L0",
+      "path": "../solidity",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "92f8d552bcc34e01a1ef8ea3e45e2299cad4ed68f776c07d7b754ecbd91920ec172c7836e026c4772d2ada71744dabf88f07990e32b0de9d3a33b05b66433706"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "5fd87a931c141dc9bfd8b3f76802b54bfe201eb540f3c63ee18b46485712e07e",
+      "id": "sql",
+      "level": "L0",
+      "path": "../sql",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "3a05a1aac14f54348ce05556e451eb7c4390becd380762b9338c1c50e327c0f45a394290a80bc24a8462d21bd62f66fcd6de3a63f4084d82a221ec3edcbc0b03"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "7bb62d5bcab4e4e4a18c40a87070695ad023f33711d8866de07d8228a6eef71c",
+      "id": "toml",
+      "level": "L0",
+      "path": "../toml",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "23fa7f2925c457fdad0f37d743370e31abc0f65a1e98731610443b14af929c4bc048b96966271940428d15c37e5a811cbe88be1d867a9890eb671f2302b5a60c"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "react-tsx"
+      ],
+      "checksums_sha256": "36fefbc47f03fc5534d664c04264c970e6eb20a28d97e79c7fe0023170b2be7d",
+      "id": "tsx",
+      "level": "L0",
+      "path": "../tsx",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "ad56df5a6b804ea6629e34d80643e20661e3dafd34dd518b44c5ca422c3aec9f346d13e9470f1e597a72276b71b9080b787eab3f26e242e11f9c6986cd5f1909"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "ts"
+      ],
+      "checksums_sha256": "f0755c72a06365c0408a42dd681c5087c64f1af2070fd727ff518e01a67255e9",
+      "id": "typescript",
+      "level": "L0",
+      "path": "../typescript",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "61d89b082cf8eb3b8a791b12e37d677fdadfe213a93c8d2033304a4439614d42a62bbc96b83b93a61315a91ce0050fefe740d08cbc2ec045cb71082c6fd61b0d"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [
+        "yml"
+      ],
+      "checksums_sha256": "bd7d2451bb3fcb1b2996916263e3123069a73d76d0b7a8dea3029f1a5fb61b4a",
+      "id": "yaml",
+      "level": "L0",
+      "path": "../yaml",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "cfeb69f1f7ad892a39342e0eddebd2e87ad66c34ba02a0fd4fba5c243bf19eb1a3fb47399bbbc5086d8c6c94fd1f346650baf94884fed5de3e089ab8d7fd3800"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    },
+    {
+      "aliases": [],
+      "checksums_sha256": "139bf7af93ea098485217ce51bbfc701dc0a38a7c93264e0bc85bcc09254514e",
+      "id": "zig",
+      "level": "L0",
+      "path": "../zig",
+      "signature": {
+        "key_id": "8ec9528bf1f0e31f",
+        "scheme": "meld-pack/ed25519/v1",
+        "signature": "7fe1a73ca6d6adc326622bc39fceccf8a2c13edc81794015deb1b44d91a66f9a87e258c1d6a52e4ab5178868dc3fa86ac0aa4d950f81914cb3b40a7bccb43109"
+      },
+      "strict": true,
+      "tier": "L0",
+      "version": "0.1.0"
+    }
+  ],
   "schema": "meld-pack-registry/1"
 }

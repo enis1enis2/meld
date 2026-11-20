@@ -9,9 +9,15 @@
 //! downloaded code and is outside the trust model in `project.md` §9. This
 //! crate provides the shared on-disk format, integrity verification and
 //! discovery used by both the CLI and the terminal installer.
+//!
+//! JUDGMENT CALL (signing): HMAC was replaced by Ed25519 because a symmetric
+//! key cannot be a public trust root. Signatures are verified against explicit
+//! trust roots and rejected when their key-id is revoked. Private keys stay
+//! outside the repository; this crate only ever handles public key bytes.
+use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -21,7 +27,10 @@ pub const LOCK_SCHEMA: &str = "meld-project-libraries/1";
 pub const MANIFEST_FILE: &str = "library.toml";
 pub const PACK_MANIFEST: &str = "pack.toml";
 pub const CHECKSUM_FILE: &str = "checksums.sha256";
-pub const SIGNATURE_FILE: &str = "signature.hmac";
+pub const SIGNATURE_FILE: &str = "signature.ed25519";
+pub const SIGNATURE_SCHEME: &str = "meld-pack/ed25519/v1";
+pub const TRUST_ROOTS_SCHEMA: &str = "meld-trust-roots/1";
+pub const REVOCATIONS_SCHEMA: &str = "meld-revocations/1";
 pub const LOCK_FILE: &str = "meld.lock";
 
 const SKIP_DIRS: [&str; 5] = [
@@ -31,7 +40,6 @@ const SKIP_DIRS: [&str; 5] = [
     ".pytest_cache",
     "target",
 ];
-const MIN_KEY_BYTES: usize = 16;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryManifest {
@@ -81,8 +89,22 @@ pub struct Verification {
     pub version: String,
     pub strict: bool,
     pub file_count: usize,
+    /// "absent", "present-unverified", or "verified".
     pub signature: String,
     pub key_id: Option<String>,
+}
+
+/// Public-key inputs to pack verification. No private key belongs here.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct VerificationPolicy {
+    /// TOML file with `meld-trust-roots/1` public keys. `None` means presence
+    /// only: a signature can be reported as present but not authenticated.
+    pub trust_roots: Option<PathBuf>,
+    /// JSON file with `meld-revocations/1` key ids that must be rejected.
+    pub revocations: Option<PathBuf>,
+    /// Remote installs set this so an absent/unknown/unverified signature is
+    /// a hard failure instead of a presence-only report.
+    pub require_trusted: bool,
 }
 
 impl InstalledIndex {
@@ -323,12 +345,16 @@ pub fn read_library_manifest(pack_dir: &Path) -> Result<LibraryManifest, String>
     Ok(manifest)
 }
 
-/// Check that a library manifest and its underlying Lang Pack agree. This is
-/// the single consistency rule the installer needs before copying data.
-pub fn validate_library_dir(pack_dir: &Path) -> Result<LibraryManifest, String> {
+/// Check that a library manifest and its underlying Lang Pack agree, using an
+/// explicit verification policy. Remote installs pass trust roots and require a
+/// verified signature; local read-only checks may use the default policy.
+pub fn validate_library_dir_with_policy(
+    pack_dir: &Path,
+    policy: &VerificationPolicy,
+) -> Result<LibraryManifest, String> {
     let manifest = read_library_manifest(pack_dir)?;
     let (tier, level, pack_aliases) = read_pack_facts(pack_dir)?;
-    let verification = verify_pack(pack_dir, None)?;
+    let verification = verify_pack(pack_dir, policy)?;
     if verification.pack_id != manifest.id {
         return Err(format!(
             "library id {:?} does not match pack id {:?}",
@@ -362,6 +388,12 @@ pub fn validate_library_dir(pack_dir: &Path) -> Result<LibraryManifest, String> 
     Ok(manifest)
 }
 
+/// Presence-only compatibility wrapper: use [`validate_library_dir_with_policy`]
+/// whenever provenance matters.
+pub fn validate_library_dir(pack_dir: &Path) -> Result<LibraryManifest, String> {
+    validate_library_dir_with_policy(pack_dir, &VerificationPolicy::default())
+}
+
 /// Read tier/level/aliases from the underlying Lang Pack manifest.
 pub fn read_pack_facts(pack_dir: &Path) -> Result<(String, String, Vec<String>), String> {
     let path = pack_dir.join(PACK_MANIFEST);
@@ -387,9 +419,12 @@ pub fn read_pack_facts(pack_dir: &Path) -> Result<(String, String, Vec<String>),
 }
 
 /// Verify a Lang Library using the same canonical rules as `packtool`.
-/// `key` enables MAC verification; without it only checksums and signature
-/// presence are checked, matching `spec/registry.md` §4.
-pub fn verify_pack(pack_dir: &Path, key: Option<&Path>) -> Result<Verification, String> {
+///
+/// Without trust roots this reports a well-formed signature as
+/// `present-unverified`; with trust roots it verifies the exact Ed25519
+/// message and rejects unknown or revoked key ids. `policy.require_trusted`
+/// turns an unauthenticated result into a hard error for remote installs.
+pub fn verify_pack(pack_dir: &Path, policy: &VerificationPolicy) -> Result<Verification, String> {
     let (tier, level, _aliases) = read_pack_facts(pack_dir)?;
     let _ = (tier, level);
     let manifest_text = fs::read_to_string(pack_dir.join(PACK_MANIFEST))
@@ -404,6 +439,11 @@ pub fn verify_pack(pack_dir: &Path, key: Option<&Path>) -> Result<Verification, 
         .get("id")
         .and_then(toml::Value::as_str)
         .ok_or_else(|| "pack.toml: missing id".to_string())?
+        .to_string();
+    let version = manifest
+        .get("version")
+        .and_then(toml::Value::as_str)
+        .unwrap_or("0.0.0")
         .to_string();
 
     let checksum_path = pack_dir.join(CHECKSUM_FILE);
@@ -436,32 +476,40 @@ pub fn verify_pack(pack_dir: &Path, key: Option<&Path>) -> Result<Verification, 
     }
     let mut signature_state = "absent".to_string();
     let mut signature_key_id = None;
-    if let Some((key_id, digest)) = signature {
+    if let Some((key_id, signature_bytes)) = signature {
         signature_key_id = Some(key_id.clone());
         signature_state = "present-unverified".to_string();
-        if let Some(key_path) = key {
-            let key = fs::read(key_path).map_err(|e| format!("{}: {e}", key_path.display()))?;
-            if key.len() < MIN_KEY_BYTES {
-                return Err(format!("key must be at least {MIN_KEY_BYTES} bytes"));
+        if let Some(roots_path) = &policy.trust_roots {
+            let roots = load_trust_roots(roots_path)?;
+            let revoked = match &policy.revocations {
+                Some(path) => load_revocations(path)?,
+                None => BTreeSet::new(),
+            };
+            if revoked.contains(&key_id) {
+                return Err(format!("signature key-id {key_id} is revoked"));
             }
-            if key_id != hex(&sha256(&key)[..8]) {
-                return Err("signature key-id does not match the supplied key".to_string());
-            }
-            let want = hex(&hmac_sha256(&key, &checksum_bytes));
-            if !constant_eq(&digest, &want) {
-                return Err(
-                    "signature mismatch: checksums were modified or the key is wrong".to_string(),
-                );
-            }
+            let public = roots.get(&key_id).ok_or_else(|| {
+                format!(
+                    "signature key-id {key_id} is not in the trust roots; rotate trust roots \
+                     for a new key instead of accepting an unknown signer"
+                )
+            })?;
+            let verifying_key = VerifyingKey::from_bytes(public)
+                .map_err(|e| format!("invalid trust root public key for {key_id}: {e}"))?;
+            let signature = Signature::from_bytes(&signature_bytes);
+            let message = pack_message(&pack_id, &version, &checksum_bytes);
+            verifying_key.verify_strict(&message, &signature).map_err(|_| {
+                "signature mismatch: checksums, pack id, version or signer were modified".to_string()
+            })?;
             signature_state = "verified".to_string();
         }
     }
-
-    let version = manifest
-        .get("version")
-        .and_then(toml::Value::as_str)
-        .unwrap_or("0.0.0")
-        .to_string();
+    if policy.require_trusted && signature_state != "verified" {
+        if signature_state == "absent" {
+            return Err("trusted Ed25519 signature required but none is present".to_string());
+        }
+        return Err("trusted Ed25519 signature required; pass --trust-roots".to_string());
+    }
     Ok(Verification {
         pack_id,
         version,
@@ -470,6 +518,150 @@ pub fn verify_pack(pack_dir: &Path, key: Option<&Path>) -> Result<Verification, 
         signature: signature_state,
         key_id: signature_key_id,
     })
+}
+
+/// Exact bytes signed by `packtool sign`; keep in sync with Python.
+pub fn pack_message(pack_id: &str, version: &str, checksum_bytes: &[u8]) -> Vec<u8> {
+    let mut message = SIGNATURE_SCHEME.as_bytes().to_vec();
+    message.push(b'\n');
+    message.extend_from_slice(pack_id.as_bytes());
+    message.push(b'\n');
+    message.extend_from_slice(version.as_bytes());
+    message.push(b'\n');
+    message.extend_from_slice(checksum_bytes);
+    message
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrustRootsFile {
+    schema: String,
+    keys: Vec<TrustRoot>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrustRoot {
+    key_id: String,
+    public_key: String,
+    label: String,
+    created: String,
+}
+
+/// Load `meld-trust-roots/1` as key-id -> 32-byte Ed25519 public key.
+pub fn load_trust_roots(path: &Path) -> Result<BTreeMap<String, [u8; 32]>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let file: TrustRootsFile =
+        toml::from_str(&text).map_err(|e| format!("invalid trust roots {}: {e}", path.display()))?;
+    if file.schema != TRUST_ROOTS_SCHEMA {
+        return Err(format!(
+            "unsupported trust-root schema in {} (expected {TRUST_ROOTS_SCHEMA})",
+            path.display()
+        ));
+    }
+    let mut roots = BTreeMap::new();
+    for entry in file.keys {
+        if entry.label.trim().is_empty() {
+            return Err("invalid trust root label".to_string());
+        }
+        if entry.created.len() != 10
+            || !entry.created.bytes().enumerate().all(|(i, b)| {
+                if i == 4 || i == 7 {
+                    b == b'-'
+                } else {
+                    b.is_ascii_digit()
+                }
+            })
+        {
+            return Err(format!("invalid trust root created date {:?}", entry.created));
+        }
+        let public = decode_hex(&entry.public_key, 32, "public_key")?;
+        let expected_id = hex(&sha256(&public)[..8]);
+        if entry.key_id != expected_id {
+            return Err(format!(
+                "trust root key-id {} does not match public key (expected {expected_id})",
+                entry.key_id
+            ));
+        }
+        if roots
+            .insert(entry.key_id.clone(), public_as_array(&public))
+            .is_some()
+        {
+            return Err(format!("duplicate trust root {}", entry.key_id));
+        }
+    }
+    Ok(roots)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RevocationsFile {
+    schema: String,
+    revoked: Vec<Revocation>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Revocation {
+    key_id: String,
+    reason: String,
+    revoked: String,
+}
+
+/// Load the revoked key ids from `meld-revocations/1`.
+pub fn load_revocations(path: &Path) -> Result<BTreeSet<String>, String> {
+    let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let file: RevocationsFile = serde_json::from_str(&text)
+        .map_err(|e| format!("invalid revocations {}: {e}", path.display()))?;
+    if file.schema != REVOCATIONS_SCHEMA {
+        return Err(format!(
+            "unsupported revocations schema in {} (expected {REVOCATIONS_SCHEMA})",
+            path.display()
+        ));
+    }
+    let mut revoked = BTreeSet::new();
+    for entry in file.revoked {
+        if entry.reason.trim().is_empty() {
+            return Err("invalid revocation reason".to_string());
+        }
+        if entry.revoked.len() != 10
+            || !entry.revoked.bytes().enumerate().all(|(i, b)| {
+                if i == 4 || i == 7 {
+                    b == b'-'
+                } else {
+                    b.is_ascii_digit()
+                }
+            })
+        {
+            return Err(format!("invalid revocation date {:?}", entry.revoked));
+        }
+        decode_hex(&entry.key_id, 8, "key_id")?;
+        if !revoked.insert(entry.key_id.clone()) {
+            return Err(format!("duplicate revocation {}", entry.key_id));
+        }
+    }
+    Ok(revoked)
+}
+
+fn decode_hex(text: &str, bytes: usize, field: &str) -> Result<Vec<u8>, String> {
+    if text.len() != bytes * 2 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("invalid {field}: expected {bytes} bytes of lowercase hex"));
+    }
+    if text.to_ascii_lowercase() != text {
+        return Err(format!("invalid {field}: hex must be lowercase"));
+    }
+    Ok((0..bytes)
+        .map(|i| {
+            u8::from_str_radix(&text[i * 2..i * 2 + 2], 16)
+                .map_err(|e| format!("invalid {field}: {e}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?)
+}
+
+fn public_as_array(bytes: &[u8]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out.copy_from_slice(bytes);
+    out
 }
 
 fn parse_checksums(bytes: &[u8]) -> Result<BTreeMap<String, String>, String> {
@@ -572,20 +764,24 @@ fn collect_files(
     Ok(())
 }
 
-fn parse_signature(text: &str) -> Result<(String, String), String> {
-    let parts: Vec<_> = text.split_whitespace().collect();
-    if parts.len() != 3 || parts[0] != "hmac-sha256" || parts[1].len() != 16 || parts[2].len() != 64
-    {
-        return Err(
-            "malformed signature.hmac (expected 'hmac-sha256 <key-id> <digest>')".to_string(),
-        );
+fn parse_signature(text: &str) -> Result<(String, [u8; 64]), String> {
+    if !text.ends_with('\n') || text.match_indices('\n').count() != 1 {
+        return Err(format!(
+            "malformed {SIGNATURE_FILE} (expected one LF-terminated line)"
+        ));
     }
-    if !parts[1].bytes().all(|b| b.is_ascii_hexdigit())
-        || !parts[2].bytes().all(|b| b.is_ascii_hexdigit())
-    {
-        return Err("malformed signature.hmac (non-hex field)".to_string());
+    let parts: Vec<_> = text.trim_end_matches('\n').split_whitespace().collect();
+    if parts.len() != 3 || parts[0] != SIGNATURE_SCHEME {
+        return Err(format!(
+            "malformed {SIGNATURE_FILE} (expected '{SIGNATURE_SCHEME} <key-id> <128 hex chars>')"
+        ));
     }
-    Ok((parts[1].to_string(), parts[2].to_string()))
+    let key_id = decode_hex(parts[1], 8, "key-id")?;
+    let key_id = hex(&key_id);
+    let sig_bytes = decode_hex(parts[2], 64, "signature")?;
+    let mut signature = [0u8; 64];
+    signature.copy_from_slice(&sig_bytes);
+    Ok((key_id, signature))
 }
 
 /// Recursively copy a verified pack. Symlinks are rejected so a source tree
@@ -659,50 +855,40 @@ fn hex(bytes: &[u8]) -> String {
     out
 }
 
-fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
-    let key = if key.len() > 64 {
-        sha256(key).to_vec()
-    } else {
-        key.to_vec()
-    };
-    let mut block = [0u8; 64];
-    block[..key.len()].copy_from_slice(&key);
-    let inner: Vec<u8> = block
-        .iter()
-        .map(|b| b ^ 0x36)
-        .chain(data.iter().copied())
-        .collect();
-    let inner_hash = sha256(&inner);
-    let outer: Vec<u8> = block
-        .iter()
-        .map(|b| b ^ 0x5c)
-        .chain(inner_hash.iter().copied())
-        .collect();
-    sha256(&outer)
-}
-
-fn constant_eq(a: &str, b: &str) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    a.bytes()
-        .zip(b.bytes())
-        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
-        == 0
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn hmac_matches_rfc_4231_vector() {
-        let key = vec![0x0b; 20];
-        let mac = hmac_sha256(&key, b"Hi There");
+    fn hmac_is_removed() {
+        // HMAC signatures cannot be a public trust root, so the old line is
+        // rejected outright instead of being silently accepted as a MAC.
+        let old = format!("hmac-sha256 {} {}\n", "a".repeat(16), "b".repeat(64));
+        assert!(parse_signature(&old).is_err());
+        assert!(parse_signature(&format!("{} {} {}\n", SIGNATURE_SCHEME, "a".repeat(16), "b".repeat(128))).is_ok());
+    }
+
+    #[test]
+    fn pack_message_is_exact_and_unambiguous() {
+        let message = pack_message("demo", "0.1.0", b"digest  file\n");
         assert_eq!(
-            hex(&mac),
-            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7"
+            message,
+            b"meld-pack/ed25519/v1\ndemo\n0.1.0\ndigest  file\n"
         );
+    }
+
+    #[test]
+    fn malformed_trust_roots_are_rejected() {
+        let root = std::env::temp_dir().join(format!("meld-lib-roots-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("trust-roots.toml");
+        fs::write(
+            &path,
+            "[keys]\nkey_id = \"0000000000000000\"\npublic_key = \"00\"\nlabel = \"x\"\ncreated = \"2026-11-20\"\n",
+        )
+        .unwrap();
+        assert!(load_trust_roots(&path).is_err());
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
