@@ -350,6 +350,12 @@ Additional judgment calls (also inline in the affected specs/code):
     rejected test fixtures before the intended checksum/attestation assertions
     could run. Writing the same canonical bytes as the production tool keeps the
     test about verification behavior, not host newline policy.
+58. `SpawnedProcess::drain_stderr` waits up to a fixed 50 ms grace for the I/O
+    pump's `Data`/`Eof` packets after a worker is reaped. The previous
+    `try_recv` loop raced the pump and intermittently omitted the stderr tail
+    from crash reports (observed as a Windows-only failure in
+    `stderr_tail_is_included_in_crash_report`). The wait is bounded, so error
+    reporting remains non-blocking within a fixed budget.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

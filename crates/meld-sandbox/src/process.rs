@@ -402,15 +402,35 @@ impl SpawnedProcess {
         }
     }
 
-    /// Best-effort, bounded look at captured stderr. It never blocks.
+    /// Best-effort, bounded look at captured stderr.
+    ///
+    /// JUDGMENT CALL 58: `try_recv` raced the stderr pump. A crashed worker can
+    /// exit and be reaped before the pump publishes its final `Data`/`Eof`
+    /// packets, so crash reports intermittently omitted the stderr tail. Wait
+    /// up to a short fixed grace after the process is gone, then stop; this
+    /// preserves the bounded/no-deadlock contract while making the diagnostic
+    /// deterministic.
     pub fn drain_stderr(&mut self) -> String {
-        while let Ok(Packet::Data(bytes)) = self.stderr.rx.try_recv() {
-            if self.stderr_seen < self.io.max_stderr_bytes {
-                let room = (self.io.max_stderr_bytes - self.stderr_seen) as usize;
-                let take = room.min(bytes.len());
-                self.stderr_text
-                    .push_str(&String::from_utf8_lossy(&bytes[..take]));
-                self.stderr_seen += take as u64;
+        const STDERR_DRAIN_GRACE: Duration = Duration::from_millis(50);
+        let deadline = Instant::now() + STDERR_DRAIN_GRACE;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            match self.stderr.rx.recv_timeout(remaining) {
+                Ok(Packet::Data(bytes)) => {
+                    if self.stderr_seen < self.io.max_stderr_bytes {
+                        let room = (self.io.max_stderr_bytes - self.stderr_seen) as usize;
+                        let take = room.min(bytes.len());
+                        self.stderr_text
+                            .push_str(&String::from_utf8_lossy(&bytes[..take]));
+                        self.stderr_seen += take as u64;
+                    }
+                }
+                Ok(Packet::Eof) | Ok(Packet::Error(_)) => break,
+                Err(mpsc::RecvTimeoutError::Timeout)
+                | Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
         }
         self.stderr_text.clone()
