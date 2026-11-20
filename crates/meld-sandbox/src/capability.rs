@@ -383,26 +383,26 @@ pub fn reject_parent_components(path: &Path) -> Result<()> {
 /// Walk every existing component and refuse symlinks. For a not-yet-created
 /// final component we validate its nearest existing ancestor; the caller must
 /// re-check after creating files (see `SafeRoot::resolve`).
+///
+/// JUDGMENT CALL 39: on Windows, canonical paths start with a verbatim volume
+/// prefix such as `\\?\D:`. That prefix is a device object, not a directory;
+/// `symlink_metadata` opens it and `GetFileInformationByHandle` fails with
+/// `ERROR_INVALID_FUNCTION` (raw OS error 1). Skipping only the prefix and root
+/// components preserves the check on every real directory component, so a
+/// junction or symlink in the path is still rejected. Other I/O errors still
+/// fail closed.
 pub fn reject_symlinks_in_path(path: &Path) -> Result<()> {
-    eprintln!("MELDDBG symlink-walk path={path:?}");
     let mut current = PathBuf::new();
     for component in path.components() {
         current.push(component.as_os_str());
-        eprintln!(
-            "MELDDBG symlink-walk current={current:?} comp={:?}",
-            component.as_os_str()
-        );
+        #[cfg(windows)]
+        if matches!(component, Component::Prefix(_) | Component::RootDir) {
+            continue;
+        }
         let meta = match std::fs::symlink_metadata(&current) {
             Ok(meta) => meta,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => break,
-            Err(e) => {
-                eprintln!(
-                    "MELDDBG symlink-walk FAIL current={current:?} raw={:?} kind={:?}",
-                    e.raw_os_error(),
-                    e.kind()
-                );
-                return Err(SandboxError::Io(e));
-            }
+            Err(e) => return Err(SandboxError::Io(e)),
         };
         if meta.file_type().is_symlink() {
             return Err(escape(path, "symlink component"));
@@ -803,5 +803,13 @@ mod tests {
         assert_eq!(c.memory_bytes, Some(64));
         assert_eq!(c.wall_time_ms, Some(2000));
         assert_eq!(c.max_line_bytes, Some(16));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn canonical_windows_path_does_not_probe_volume_device() {
+        let path = std::fs::canonicalize(".").unwrap();
+        assert!(path.to_string_lossy().starts_with("\\\\?\\"));
+        reject_symlinks_in_path(&path).unwrap();
     }
 }

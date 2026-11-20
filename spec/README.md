@@ -237,6 +237,13 @@ Additional judgment calls (also inline in the affected specs/code):
     pinned `wasmtime 36.0.23 -> fxprof-processed-profile 0.6.0` path. The ignore
     is removed when that pin changes or a runtime-validated dependency update
     eliminates the crate.
+39. Windows canonical paths start with a verbatim volume prefix such as
+    `\\?\D:`. That prefix is a device object, so `symlink_metadata` on it fails
+    with `ERROR_INVALID_FUNCTION` (raw OS error 1). The safe-root walk now skips
+    only the `Prefix` and `RootDir` components and still checks every real
+    directory component for junctions/symlinks; all other I/O errors remain
+    hard errors. This was confirmed from Windows diagnostic job
+    136448518092 (workflow run 44782478274).
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
