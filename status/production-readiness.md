@@ -63,6 +63,27 @@ Finished `dev` profile [unoptimized + debuginfo] target(s)
 
 CI run links: pending first push of `production/baseline`.
 
+### 1.1 Production reruns (interim evidence)
+
+The following commands were rerun in the current production worktree before
+merging the hardening branches. These are real, local results and are not a
+claim that the final gate has passed.
+
+| Command | Observed result |
+|---|---|
+| `cargo fmt --all -- --check` | PASS after `a573999` applied rustfmt across the workspace. |
+| `cargo clippy --workspace --all-targets -- -D warnings` | PASS in the current environment. |
+| `cargo install cargo-audit cargo-deny --locked` | PASS: `cargo-audit 0.23.0` and `cargo-deny 0.22.0` installed. |
+| `cargo audit` | PASS after restoring DNS for the advisory database: loaded 1550 advisories, scanned 250 crate dependencies, no findings, exit 0. |
+| `cargo deny check` | `advisories ok, bans FAILED, licenses ok, sources ok`. The failure is from `wildcards = "deny"` treating private workspace path dependencies as wildcards. `deny.toml` now sets `allow-wildcard-paths = true`; a final rerun is still required after workspace crates are confirmed private. |
+| `cargo test --workspace` | Initial rerun exposed local tool wrappers missing `cc`/`ar`, `node`, and a chroot-visible `TMPDIR`. After adding those wrappers, CLI tests pass; the installer integration test is being rerun with `TMPDIR` under `/mnt/data`. Final result pending. |
+
+A local compiler wrapper was required because this environment has no native
+linker on `PATH`: `/mnt/data/opencode/bin/cc` and `ar` invoke the isolated
+Debian chroot toolchain while preserving the caller's working directory. Node
+and Lua wrappers were added for the same reason. These wrappers are host
+configuration only and are not committed to the repository.
+
 ## 2. Security
 
 Status: NOT STARTED.
