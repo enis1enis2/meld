@@ -1,0 +1,41 @@
+#meld text
+
+```rust
+fn main() { let x = 1; }
+```
+
+```go
+package main
+```
+
+```c
+int main(void) { return 0; }
+```
+
+```cpp
+auto x = 1;
+```
+
+```java
+class A {}
+```
+
+```json
+{"a": 1}
+```
+
+```markdown
+# heading
+```
+
+```sql
+SELECT 1;
+```
+
+```html
+<b>hi</b>
+```
+
+```css
+body { color: red; }
+```

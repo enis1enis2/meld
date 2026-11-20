@@ -1,0 +1,19 @@
+# Third-party demo pack: POSIX shell (not one of the built-in python/js/lua packs).
+# No Rust core change is needed to publish or install this pack.
+id = "shell"
+aliases = ["sh", "posix-sh"]
+extensions = ["sh"]
+version = "0.1.0"
+tier = "T2"
+level = "L1"
+capabilities = ["stdout"]
+grammar_rev = "pinned:shell-v1"
+strict = true
+
+[tree_sitter]
+crate = "tree-sitter-bash"
+rev = "pinned:shell-v1"
+
+[sandbox]
+network = false
+fs = ["project"]

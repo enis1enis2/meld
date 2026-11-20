@@ -1,0 +1,5 @@
+[toolchain]
+required = ["lua", "lua-cjson"]
+min_version = "5.4"
+install = "never"  # meld doctor reports only; see project.md §9
+notes = "lua-cjson provides JSON framing; Meld tags are implemented in marshal.lua."

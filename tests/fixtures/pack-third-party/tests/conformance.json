@@ -1,0 +1,27 @@
+{
+  "lang": "shell",
+  "level": "L1",
+  "protocol": "meld-t2/1",
+  "cases": [
+    {
+      "name": "hello",
+      "code": "printf '%s\\n' 'shell-1'",
+      "expect": {"stdout": ["shell-1"]}
+    },
+    {
+      "name": "arithmetic",
+      "code": "echo $((2 + 3))",
+      "expect": {"stdout": ["5"]}
+    },
+    {
+      "name": "strings",
+      "code": "printf '%s\\n' hello world",
+      "expect": {"stdout": ["hello", "world"]}
+    },
+    {
+      "name": "error-propagation",
+      "code": "echo boom >&2; exit 7",
+      "expect": {"error_code": "RuntimeError", "error_contains": "boom"}
+    }
+  ]
+}

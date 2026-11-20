@@ -1,0 +1,16 @@
+# T2 launch profile (spec/lang-pack.md §4, spec/t2-protocol.md §6).
+tier = "T2"
+protocol = "meld-t2/1"
+command = "sh"
+# JUDGMENT CALL: paths follow the existing packs' project-root-relative
+# convention, so this fixture works from the repo root. When the pack is
+# installed elsewhere, the runner.toml discovery code must rebase args[0] to
+# the installed pack directory; packtool deliberately copies data verbatim.
+args = ["tests/fixtures/pack-third-party/worker.sh"]
+cwd = "project"
+stdout = "protocol"
+stderr = "forward"
+
+[limits]
+max_line_bytes = 1048576
+idle_timeout_ms = 30000

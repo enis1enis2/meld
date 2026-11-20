@@ -1,0 +1,18 @@
+# JUDGMENT CALL: grammar version is pinned here and in crates/meld-grammars/Cargo.toml.
+# Queries are copied from the published crate by tools/sync_grammars.py.
+id = "go"
+aliases = []
+extensions = []
+tier = "L0"
+level = "L0"
+capabilities = ["syntax"]
+grammar_rev = "crate:tree-sitter-go@0.25.0"
+strict = true
+
+[tree_sitter]
+crate = "tree-sitter-go"
+rev = "0.25.0"
+
+[sandbox]
+network = false
+fs = []

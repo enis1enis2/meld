@@ -1,0 +1,7 @@
+# Deterministic formatter fixture for `meld fmt` integration tests.
+id = "mockfmt"
+aliases = []
+extensions = ["mockfmt"]
+tier = "L0"
+level = "L0"
+strict = false

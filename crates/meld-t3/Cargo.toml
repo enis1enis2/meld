@@ -1,0 +1,17 @@
+[package]
+name = "meld-t3"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+meld-core = { path = "../meld-core" }
+meld-value = { path = "../meld-value" }
+# JUDGMENT CALL: wasmtime 50.0.3 is the verified Component Model runtime.
+# The compiled demo component is committed, so tests need no wasm toolchain.
+wasmtime = { version = "=50.0.3", features = ["component-model"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+meld-t2 = { path = "../meld-t2" }

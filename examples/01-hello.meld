@@ -1,0 +1,15 @@
+#meld python
+
+# Phase 0 example: block switch plus inline switch.
+@python as setup {
+    name = "Meld"
+    print("hello from python")
+}
+
+@javascript as greet {
+    const who = "world";
+    console.log("hello from javascript: " + who);
+}
+
+# Inline expression island rendered by the containing region at run time.
+print(⟦python: 2 + 3⟧)

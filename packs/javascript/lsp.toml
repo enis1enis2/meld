@@ -1,0 +1,8 @@
+# Pack-owned editor metadata (project.md §7, spec/lsp.md).
+[lsp]
+language_id = "javascript"
+extension = "js"
+keywords = [
+  "console", "log", "const", "let", "var", "function", "return", "class",
+  "new", "await", "async", "import", "export", "Map", "Set", "JSON",
+]

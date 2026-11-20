@@ -1,0 +1,18 @@
+#meld python
+
+# Phase 0 example: explicit cross-region value passing (Phase 3 target).
+@python as producer {
+    values = [1, 2, 3]
+    export values as nums
+}
+
+@javascript as consumer {
+    import nums from producer
+    // JUDGMENT CALL: top-level const/let bindings are not visible to
+    // vm.runInContext after a script finishes; pack-owned export convention is
+    // to mirror the value on globalThis before the export directive.
+    const doubled = nums.map(x => x * 2);
+    globalThis.doubled = doubled;
+    console.log(doubled.join(","));
+    export doubled as result
+}

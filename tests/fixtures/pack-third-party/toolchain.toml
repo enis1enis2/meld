@@ -1,0 +1,4 @@
+[toolchain]
+required = ["sh", "python3"]
+install = "never"  # project.md §9: meld doctor reports, never installs
+notes = "sh executes regions; python3 stdlib is used only as the JSON/base64 line codec inside worker.sh. No packages or interpreters are installed by this pack or by packtool."

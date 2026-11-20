@@ -1,0 +1,5 @@
+[toolchain]
+required = ["python3"]
+min_version = "3.8"
+install = "never"  # meld doctor reports only; see project.md §9
+notes = "python3 -u is required so protocol lines are not buffered."

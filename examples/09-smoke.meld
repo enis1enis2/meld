@@ -1,0 +1,33 @@
+#meld python
+
+# Smoke file that exercises every front-end form plus a three-language bridge.
+# Run with: meld check examples/09-smoke.meld
+#           meld run examples/09-smoke.meld
+
+@python as setup {
+    numbers = [10, 20, 30]
+    export numbers as nums
+}
+
+@javascript as double {
+    import nums from setup
+    globalThis.doubled = nums.map(function (x) { return x * 2; });
+    console.log("js: " + globalThis.doubled.join(","));
+    export doubled as result
+}
+
+@lua as consume {
+    import result from double
+    print("lua: " .. tostring(#result) .. " values")
+}
+
+# Inline island: evaluated by Python, rendered into this Python region.
+print("inline sum: " + str(⟦python: 2 + 3⟧))
+
+# Raw hash delimiter: the closing brace inside the string is literal data.
+@python#"{ print("raw: ok") }"#
+
+# Fenced literate region.
+```python
+print("fence: ok")
+```

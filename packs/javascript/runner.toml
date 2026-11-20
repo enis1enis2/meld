@@ -1,0 +1,11 @@
+tier = "T2"
+protocol = "meld-t2/1"
+command = "node"
+args = ["packs/javascript/worker.js"]
+cwd = "project"
+stdout = "protocol"
+stderr = "forward"
+
+[limits]
+max_line_bytes = 1048576
+idle_timeout_ms = 30000

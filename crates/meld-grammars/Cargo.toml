@@ -1,0 +1,29 @@
+[package]
+name = "meld-grammars"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+meld-core = { path = "../meld-core" }
+tree-sitter = "=0.27.2"
+tree-sitter-rust = "=0.24.2"
+tree-sitter-go = "=0.25.0"
+tree-sitter-c = "=0.24.2"
+tree-sitter-cpp = "=0.23.4"
+tree-sitter-java = "=0.23.5"
+tree-sitter-json = "=0.24.8"
+# JUDGMENT CALL: tree-sitter-markdown 0.7.1 still targets tree-sitter 0.19,
+# which is ABI-incompatible with the core's 0.27. tree-sitter-md 0.5.4 ships
+# the same upstream Markdown grammar with 0.27 bindings.
+tree-sitter-md = "=0.5.4"
+# JUDGMENT CALL: tree-sitter-sql 0.0.2 also targets tree-sitter 0.19.
+# tree-sitter-sequel 0.3.13 is the maintained SQL grammar with a
+# tree-sitter-language LanguageFn that converts to 0.27.
+tree-sitter-sequel = "=0.3.13"
+tree-sitter-html = "=0.23.2"
+tree-sitter-css = "=0.25.0"
+tree-sitter-python = "=0.25.0"
+tree-sitter-javascript = "=0.25.0"
+tree-sitter-lua = "=0.5.0"

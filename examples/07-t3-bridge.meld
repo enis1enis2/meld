@@ -1,0 +1,8 @@
+#meld python
+
+# Phase 4 done-when: a Python region calls a Rust function compiled to a Wasm
+# Component with typed s64 arguments via the WIT interface in spec/t3-component.md.
+@python as wasm_demo {
+    print("add(20, 22) =", meld_call("meld:t3/add", 20, 22))
+    print("mul(6, 7) =", meld_call("meld:t3/mul", 6, 7))
+}

@@ -1,0 +1,18 @@
+# JUDGMENT CALL: grammar version is pinned here and in crates/meld-grammars/Cargo.toml.
+# Queries are copied from the published crate by tools/sync_grammars.py.
+id = "python"
+aliases = ["py", "python3"]
+extensions = ["py"]
+tier = "T2"
+level = "L2"
+capabilities = ["stdout", "values", "int:arbitrary"]
+grammar_rev = "crate:tree-sitter-python@0.25.0"
+strict = true
+
+[tree_sitter]
+crate = "tree-sitter-python"
+rev = "0.25.0"
+
+[sandbox]
+network = false
+fs = ["project"]

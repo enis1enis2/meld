@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "crates/meld-core",
+    "crates/meld-value",
+    "crates/meld-t2",
+    "crates/meld-cli",
+    "crates/meld-grammars",
+    "crates/meld-t3",
+    "crates/meld-lsp",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+license = "MIT OR Apache-2.0"

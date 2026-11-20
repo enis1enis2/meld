@@ -1,0 +1,5 @@
+[toolchain]
+required = ["node"]
+min_version = "18"
+install = "never"  # meld doctor reports only; see project.md §9
+notes = "CommonJS require is used; no third-party npm modules are needed."

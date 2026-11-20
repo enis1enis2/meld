@@ -1,0 +1,11 @@
+# Pack-owned editor metadata (project.md §7, spec/lsp.md).
+# No external language server is mandatory; these keywords are the deterministic
+# fallback so completion still works when no Python LSP is installed.
+[lsp]
+language_id = "python"
+extension = "py"
+keywords = [
+  "print", "len", "range", "enumerate", "zip", "str", "int", "float",
+  "list", "dict", "set", "tuple", "True", "False", "None", "def", "class",
+  "return", "import", "from", "export", "import",
+]

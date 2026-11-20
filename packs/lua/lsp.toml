@@ -1,0 +1,8 @@
+# Pack-owned editor metadata (project.md §7, spec/lsp.md).
+[lsp]
+language_id = "lua"
+extension = "lua"
+keywords = [
+  "print", "local", "function", "end", "return", "if", "then", "else",
+  "for", "while", "do", "table", "string", "math", "nil", "true", "false",
+]

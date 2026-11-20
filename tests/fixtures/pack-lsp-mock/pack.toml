@@ -1,0 +1,8 @@
+# Deterministic third-party pack used by meld-lsp integration tests.
+# No Rust core or built-in pack change is needed to edit this language.
+id = "mocklang"
+aliases = ["mock-js"]
+extensions = ["mockjs"]
+tier = "L0"
+level = "L0"
+strict = false

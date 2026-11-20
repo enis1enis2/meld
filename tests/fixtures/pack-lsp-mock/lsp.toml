@@ -1,0 +1,8 @@
+# The mock external LSP proves virtual-document forwarding and source-map
+# translation without depending on an installed language server (project.md §7).
+[lsp]
+language_id = "javascript"
+extension = "js"
+command = "python3"
+args = ["tests/fixtures/lsp-mock/server.py"]
+keywords = ["mockFallback"]

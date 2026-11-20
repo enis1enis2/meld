@@ -1,0 +1,21 @@
+[package]
+name = "meld-demo-guest"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# JUDGMENT CALL: this guest is a standalone no_std cdylib, not a workspace
+# member. It is compiled only to wasm32-unknown-unknown by tools/build_t3_guest.sh
+# so the host workspace never inherits wasm-only cfg or panic settings.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

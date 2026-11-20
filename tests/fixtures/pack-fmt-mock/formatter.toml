@@ -1,0 +1,5 @@
+# Pack-owned formatter command (project.md §7). Meld formats glue itself and
+# delegates region bodies to the pack; no language-specific logic in the core.
+[formatter]
+command = "python3"
+args = ["tests/fixtures/fmt_mock.py", "{src}", "{out}"]

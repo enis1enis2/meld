@@ -1,0 +1,5 @@
+# Pack-owned inline expression rendering (spec/t2-protocol.md §3).
+# The inline language evaluates the expression; the containing language uses
+# this style to render the resulting Meld Value back into source text.
+[inline]
+style = "python"

@@ -1,0 +1,6 @@
+#meld shell
+
+# Phase 7 proof: this language is provided by tests/fixtures/pack-third-party,
+# not by crates/ or packs/. Run with:
+#   MELD_PACKS=tests/fixtures/pack-third-party meld run examples/08-shell-pack.meld
+echo "hello from a third-party pack"

@@ -1,0 +1,18 @@
+# JUDGMENT CALL: grammar version is pinned here and in crates/meld-grammars/Cargo.toml.
+# Queries are copied from the published crate by tools/sync_grammars.py.
+id = "lua"
+aliases = ["lua5.4"]
+extensions = ["lua"]
+tier = "T2"
+level = "L2"
+capabilities = ["stdout", "values"]
+grammar_rev = "crate:tree-sitter-lua@0.5.0"
+strict = true
+
+[tree_sitter]
+crate = "tree-sitter-lua"
+rev = "0.5.0"
+
+[sandbox]
+network = false
+fs = ["project"]

@@ -1,0 +1,20 @@
+#meld python
+
+# Phase 3: explicit values across three languages. Run from the project root:
+# meld run examples/06-bridge.meld
+@python as producer {
+    values = [1, 2, 3]
+    export values as nums
+}
+
+@javascript as consumer {
+    import nums from producer
+    globalThis.doubled = nums.map(function (x) { return x * 2; });
+    console.log("js doubled: " + globalThis.doubled.join(","));
+    export doubled as result
+}
+
+@lua as sink {
+    import result from consumer
+    print("lua received " .. tostring(#result) .. " values")
+}

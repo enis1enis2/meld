@@ -1,0 +1,4 @@
+@python as p { print('host') }
+@rust {
+  # generated feeder fixture
+}

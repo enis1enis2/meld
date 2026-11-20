@@ -1,0 +1,5 @@
+#meld shell
+@shell {
+  printf '%s\n' 'hello from shell'
+  echo $((2 + 3))
+}

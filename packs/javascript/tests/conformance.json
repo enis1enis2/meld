@@ -1,0 +1,12 @@
+{
+  "lang": "javascript",
+  "level": "L2",
+  "cases": [
+    {"name": "hello", "code": "console.log('hello from javascript');", "expect_stdout": ["hello from javascript"]},
+    {"name": "arithmetic", "code": "console.log(2 + 3);", "expect_stdout": ["5"]},
+    {"name": "strings", "code": "console.log('a' + 'b');", "expect_stdout": ["ab"]},
+    {"name": "list-roundtrip", "wire": ["1", "2", "3"]},
+    {"name": "error-propagation", "code": "throw new Error('boom');", "expect_error": "boom"},
+    {"name": "handle-lifetime", "wire": {"$handle": {"id": "h1", "resource": "Db", "borrow": false}}}
+  ]
+}

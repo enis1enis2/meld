@@ -1,0 +1,155 @@
+# Lang Pack Specification (Phase 0)
+
+Status: normative. Derived from `project.md` §4, §5, §9.
+
+## 1. Layout
+
+```
+packs/<lang-id>/
+  pack.toml          # required manifest
+  grammar/           # tree-sitter grammar source or pinned reference
+  queries/           # copied highlight/injection queries (tools/sync_grammars.py)
+  region_end.*       # end scanner (Wasm or built-in)
+  runner.toml        # tier, command, protocol, sandbox profile (T2 runtime)
+  marshal.*          # Meld Value <-> native converters
+  toolchain.toml     # detect hints; NEVER install hints executed automatically
+  inline.toml        # source-literal style for values rendered into this pack
+  lsp.toml           # editor metadata: language id, extension, LSP command
+  formatter.toml     # optional pack-owned formatter command
+  checksums.sha256   # Phase 7 registry integrity
+  signature.hmac     # Phase 7 registry integrity (required when strict)
+  tests/             # conformance cases
+```
+
+Only `pack.toml` is mandatory. The remaining files are required by the features
+a pack declares: `runner.toml` for auto-launched T2, `inline.toml` when the pack
+can contain inline islands, `lsp.toml`/`formatter.toml` for editor tooling, and
+the integrity files for strict publication (`spec/registry.md` §1).
+
+## 2. `pack.toml` fields (v1)
+
+```toml
+id = "python"                  # required, unique
+aliases = ["py", "python3"]    # optional
+extensions = ["py"]            # optional, used by auto-detect
+tree_sitter = { crate = "tree-sitter-python", rev = "pinned" }
+tier = "T2"                    # T1..T5, or "L0" shorthand for syntax-only
+level = "L1"                   # L0 syntax, L1 statements, L2 values, L3 handles
+capabilities = ["stdout", "env:PATH"]
+sandbox = { network = false, fs = ["project"] }
+```
+
+Validation: `meld check` validates a `.meld` file's regions, source maps and
+low-confidence detection; it does not validate pack manifests. `packtool verify`
+validates `pack.toml` tiers/levels, integrity files, and (for strict packs) the
+grammar pin. Launching a T2 pack at `level >= L1` additionally requires a usable
+`runner.toml` (§4.1), which is a runtime discovery rule rather than a checksum
+rule. **JUDGMENT CALL:** a grammar rev is pinned when it is either an opaque
+`pinned:<ref>` or an exact crate version (`0.25.0` / `=0.25.0`). The checked-in
+packs use exact versions so `tools/sync_grammars.py` can consume the same field;
+floating refs such as `main` are not pins (project.md §9).
+
+## 3. Conformance levels
+
+- **L0** syntax-only: highlighting/structure; no runner invoked.
+- **L1** statements: code executes, stdout merged, no bridge values.
+- **L2** values: import/export of the full value model round-trips.
+- **L3** full: handles and callbacks (`$fn`, `$handle`) work with lifetimes.
+
+A language with no runnable CLI/interpreter is L0 only; this is stated plainly
+in the pack and in `meld doctor` (project.md §5 honesty note).
+
+## 4. Tier selection
+
+Packs declare one primary tier. T2 is the default universal tier (project.md
+§5 judgment call). T1/T3/T4 are optimizations and must declare a T2 fallback so
+`meld run` works when the optimization is unavailable.
+
+## 4.1 `runner.toml` (T2 runtime discovery)
+
+```toml
+tier = "T2"
+protocol = "meld-t2/1"
+command = "python3"
+args = ["packs/python/worker.py"]
+cwd = "project"
+stdout = "protocol"
+stderr = "forward"
+
+[limits]
+max_line_bytes = 1048576
+idle_timeout_ms = 30000
+```
+
+`meld run` discovers this file at runtime; no language is hardcoded in the CLI.
+Command and argument paths are rebased project-root first, then pack-directory
+by basename, so an installed pack keeps working without a core edit. Set
+`MELD_ROOT` to override that project root and `MELD_PACKS` to add pack roots.
+**JUDGMENT CALL:** only `tier = "T2"` with `protocol = "meld-t2/1"` is
+auto-launched. Other tiers use explicit host APIs and are never guessed from a
+manifest.
+
+## 4.2 `inline.toml` (inline value rendering)
+
+```toml
+[inline]
+style = "python"        # python | javascript | json | lua
+```
+
+The inline island's language evaluates `⟦lang: expr⟧` with the T2 `eval` method
+(`spec/t2-protocol.md` §3). The *containing* pack then renders the returned
+Meld Value back into source using this style. **JUDGMENT CALL:** semantics stay
+with the inline language, syntax stays with the host language. Workers receive
+only the trimmed expression: delimiter padding is Meld syntax, not source code.
+
+## 4.3 `lsp.toml` (editor tooling)
+
+```toml
+[lsp]
+language_id = "python"         # passed to the external server / virtual doc
+extension = "py"               # virtual document URI suffix
+command = "python3"            # optional external stdio LSP
+args = ["vendor/server.py"]
+keywords = ["print", "len"]    # deterministic fallback completions
+```
+
+See `spec/lsp.md` for virtual-document and source-map rules. **JUDGMENT CALL:**
+`command` is optional. A pack with only `keywords` still gets completions; a
+pack with `command` gets real server forwarding. The core links no language
+server and keeps no language-id table.
+
+## 4.4 `formatter.toml` (region formatting)
+
+```toml
+[formatter]
+command = "python3"
+args = ["vendor/fmt.py", "{src}", "{out}"]
+```
+
+`meld fmt` formats glue itself (preserving region byte layout) and writes each
+region body to `{src}` for the pack to rewrite into `{out}`. **JUDGMENT CALL:**
+the core never parses a language to format it; pack commands are argv vectors
+with placeholders, never shell strings, and paths follow the `runner.toml`
+rebasing rule.
+
+## 5. Generator contract (Phase 1)
+
+`tools/gen_pack.py <lang-id> --grammar <pinned-ref>` creates a minimal L0 pack:
+manifest, grammar reference, empty end scanner stub, highlight query, and a
+feeder test. This is the "cheap route to a long tail" from project.md §4. The
+generator never downloads or executes grammar code; it writes references only.
+
+## 6. Security
+
+- Packs are data + small sandboxed plugins; Wasm preferred for `region_end` and
+  `marshal` (project.md §4).
+- No implicit network/filesystem. `sandbox` in manifest is deny-by-default.
+- Signing and registry are Phase 7 (`spec/registry.md`): `checksums.sha256`
+  covers every payload file and `signature.hmac` authenticates it. A strict
+  pack refuses to publish or install without both files.
+- `meld doctor` reports toolchain state; it never installs (project.md §9).
+
+## 7. Example minimal pack
+
+See `packs/python/` and `packs/javascript/` for L1/L2 examples and
+`packs/syntax/` for generated L0 packs.

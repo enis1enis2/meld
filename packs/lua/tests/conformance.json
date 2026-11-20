@@ -1,0 +1,12 @@
+{
+  "lang": "lua",
+  "level": "L2",
+  "cases": [
+    {"name": "hello", "code": "print('hello from lua')", "expect_stdout": ["hello from lua"]},
+    {"name": "arithmetic", "code": "print(2 + 3)", "expect_stdout": ["5"]},
+    {"name": "strings", "code": "print('a' .. 'b')", "expect_stdout": ["ab"]},
+    {"name": "list-roundtrip", "wire": ["1", "2", "3"]},
+    {"name": "error-propagation", "code": "error('boom')", "expect_error": "boom"},
+    {"name": "handle-lifetime", "wire": {"$handle": {"id": "h1", "resource": "Db", "borrow": false}}}
+  ]
+}

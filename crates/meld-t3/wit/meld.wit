@@ -1,0 +1,14 @@
+package meld:demo@0.1.0;
+
+// JUDGMENT CALL: reuse WIT directly as the cross-boundary IDL instead of a
+// bespoke IDL, per project.md §6/§13. The demo intentionally starts with
+// scalar s64 values so the Canonical ABI boundary is visible without string
+// allocation; richer Meld Value types map to WIT records/variants later.
+interface ops {
+  add: func(a: s64, b: s64) -> s64;
+  mul: func(a: s64, b: s64) -> s64;
+}
+
+world guest {
+  export ops;
+}
