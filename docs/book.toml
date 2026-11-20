@@ -3,7 +3,6 @@ title = "Meld release and reliability documentation"
 authors = ["Meld contributors"]
 description = "Release, schema stability and artifact verification notes for Meld"
 language = "en"
-multilingual = false
 src = "src"
 
 [output.html]
