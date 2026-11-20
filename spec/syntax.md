@@ -34,12 +34,19 @@ All forms lower to the same `Region { id, lang, start, end, body, kind }`.
 ```
 
 `{ ... }` is the Phase 1 delimiter. The raw form uses Rust-style hash counts so
-the closing marker can never collide with nested braces; `find_region_end`
-requires a pack-provided scanner only when the plain form is used and the body
-contains language constructs that hide `}` (§3.2 of project.md).
+the closing marker can never collide with nested braces; that branch is parsed
+before any scanner is consulted and remains the normative escape hatch (§3.2 of
+project.md). For the plain form, pack-owned `region_end.toml` metadata selects a
+built-in Rust scanner profile by name. `find_region_end` returns
+`RegionEnd { body_end, full_end, close_marker }` so glue stripping and source
+maps retain exact byte offsets; `find_end` remains as a compatibility shim.
 
-**JUDGMENT CALL:** Phase 1 always accepts the raw form even for packs that ship
-an end scanner; it is the deterministic fallback required by §3.2.
+**JUDGMENT CALL:** Phase 6 end scanners are data-only. A pack file names a
+built-in algorithm (`brace`, `heredoc`, `indent`, `delimited`, `counted`,
+`template`); Meld never loads, spawns, or compiles `region_end.py/js/lua/sh/wat`
+from a pack. `kind = "wasm"`, an unknown kind, an unknown schema, or invalid
+TOML warns and falls back to `brace`. Raw hash delimiters are always accepted
+even for packs that declare a scanner, and bypass the registry entirely.
 
 ### 2.2 Inline switch
 
