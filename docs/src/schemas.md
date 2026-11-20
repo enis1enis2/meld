@@ -7,5 +7,8 @@ Stable in 0.2.x: `pack.toml`, `meld-lang-library/1`,
 world. Unknown schema identifiers are rejected. Migrations are explicit via
 `tools/migrate_lock.py` and `tools/migrate_index.py`.
 
+See also [Artifacts and verification](artifacts.md) and
+[Security](security.md).
+
 See the canonical [schema-stability.md](https://github.com/enis1enis2/meld/blob/main/docs/schema-stability.md)
 and [SEMVER.md](https://github.com/enis1enis2/meld/blob/main/SEMVER.md).

@@ -1,6 +1,6 @@
 #meld shell
 
-# Phase 7 proof: this language is provided by tests/fixtures/pack-third-party,
-# not by crates/ or packs/. Run with:
+# Task: run a language supplied by tests/fixtures/pack-third-party instead of
+# core or bundled packs. Run from the project root with:
 #   MELD_PACKS=tests/fixtures/pack-third-party meld run examples/08-shell-pack.meld
 echo "hello from a third-party pack"

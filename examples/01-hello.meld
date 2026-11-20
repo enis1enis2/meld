@@ -1,6 +1,6 @@
 #meld python
 
-# Phase 0 example: block switch plus inline switch.
+# Task: switch between Python and JavaScript blocks, then evaluate an inline Python island.
 @python as setup {
     name = "Meld"
     print("hello from python")

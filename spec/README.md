@@ -1,5 +1,12 @@
 # Meld Phase 0 Specs — review record
 
+> **Historical record, not current guidance.** This file preserves
+> phase-by-phase decisions and research snapshots. Entries marked *historical*
+> are superseded: current authority is judgment call 26 (Ed25519 pack trust),
+> judgment call 28 (Wasmtime `=36.0.23`, MSRV `1.90`), and judgment call 45
+> (floating Python `3.12`) below, together with the final evidence in
+> [../status/production-readiness.md](../status/production-readiness.md).
+
 ## Reviewed deliverables
 
 - `syntax.md` — region forms, glue syntax, diagnostics.
@@ -13,16 +20,20 @@ text supplied in the task prompt was persisted verbatim as `project.md` before
 work began. **JUDGMENT CALL:** using prompt text as the authoritative file rather
  than halting, per the "flag blocker and continue with unblocked work" rule.
 
-## Library verification (done before Phase 0 sign-off)
+## Library verification — historical Phase 0 snapshot
 
 Verified against crates.io API on 2026-11-19:
 
 | crate | current stable | rust-version | note |
 |---|---|---|---|
 | `tree-sitter` | 0.27.2 | 1.90 | edition 2024; `wasm` feature exists |
-| `wasmtime` | 50.0.3 | 1.97 | `component-model` is a default feature; T3 target |
+| `wasmtime` | 50.0.3 | 1.97 | historical T3 target; `component-model` is a default feature; see judgment call 28 |
 | `tower-lsp-server` | 0.23.0 | 1.85 | maintained fork (`tower-lsp` original is legacy); Phase 5 |
 | `serde_json` | 1.0.154 | 1.71 | T2 envelope |
+
+> **Historical:** the `wasmtime 50.0.3` / `rust-version 1.97` row records a
+> pre-hardening research snapshot, not the current dependency pin. See judgment
+> call 28 and [../status/production-readiness.md](../status/production-readiness.md).
 
 Capability claims from project.md §2 were re-checked: tree-sitter docs index
 still documents multi-language documents; Component Model/WIT docs still define
@@ -46,11 +57,16 @@ None that change direction. One environment constraint is flagged below.
 
 ## Blockers
 
-- **B1 — no Rust toolchain** (RESOLVED). The user later granted an explicit
-  override to the no-install rule. Rust 1.100.0 was installed via rustup with
-  `CARGO_HOME`/`RUSTUP_HOME` under the writable share; `cargo test --workspace`
-  now passes, including a real T2 worker integration test. The Python reference
-  harness remains as a fast proxy but is no longer the only verification.
+- **B1 — no Rust toolchain** (RESOLVED; historical Phase 0/2 environment). The
+  user later granted an explicit override to the no-install rule. Rust 1.100.0
+  was installed via rustup with `CARGO_HOME`/`RUSTUP_HOME` under the writable
+  share; `cargo test --workspace` then passed, including a real T2 worker
+  integration test. The Python reference harness remained a fast proxy but was
+  no longer the only verification. **Historical:** Rust 1.100.0 was the
+  verification toolchain granted by that override, not the declared MSRV.
+  Current policy is MSRV `1.90` with Wasmtime `=36.0.23` (judgment call 28),
+  with final evidence in
+  [../status/production-readiness.md](../status/production-readiness.md).
 - **B2 — no Node.js or Lua interpreter** (RESOLVED). Node 18.20.4, Lua 5.4.4 and
   lua-cjson were installed in the isolated Debian root. All three workers are
   exercised by `tools/t2_ref.py`, and Python+JS+Lua execution is verified by
@@ -68,19 +84,24 @@ Phase 0's stated criteria are met; B1/B2 affect Phases 1–3 verification only.
   calls, Python → T2 → T3 callback, and the T5 toolchain fallback.
 - `lsp.md` — virtual documents, source maps, pack-owned editor metadata,
   completion forwarding, formatter delegation, and the scriptable REPL.
-- `registry.md` — pack checksums, local HMAC signing, registry format, and the
-  publish/list/install workflow that lets a third party add a language.
+- `registry.md` — pack checksums, **historical** local HMAC signing (superseded
+  by judgment call 26), registry format, and the publish/list/install workflow
+  that lets a third party add a language.
 - `libraries.md` — installable Lang Packs: `library.toml`, git-backed
   `meld-pack`, installed index, and project `meld.lock`.
 - `lang-pack.md` now documents `runner.toml`, `inline.toml`, `lsp.toml`,
   `formatter.toml`, copied queries, and the two accepted spellings of a pinned
   grammar rev.
 
-Library verification was refreshed on 2026-11-20: `tower-lsp-server 0.23.0`
-is still the newest stable release (`0.24.0-rc.1` is a prerelease), and the
-locked versions in `Cargo.lock` are `tree-sitter 0.27.2`, `wasmtime 50.0.3`,
-`tokio 1.54.1`, `serde_json 1.0.154`, and `ls-types 0.0.6`. No unverified
-preview dependency was adopted.
+**Historical pre-hardening snapshot:** library verification was refreshed on
+2026-11-20: `tower-lsp-server 0.23.0` was the newest stable release
+(`0.24.0-rc.1` was a prerelease), and the locked versions in `Cargo.lock` were
+`tree-sitter 0.27.2`, `wasmtime 50.0.3`, `tokio 1.54.1`, `serde_json 1.0.154`,
+and `ls-types 0.0.6`. No unverified preview dependency was adopted.
+
+> **Historical:** this lockfile state predates judgment call 28, which pins
+> Wasmtime to `=36.0.23` while keeping MSRV `1.90`. Final evidence is in
+> [../status/production-readiness.md](../status/production-readiness.md).
 
 Additional judgment calls (all also inline in the relevant spec/code):
 
@@ -90,8 +111,9 @@ Additional judgment calls (all also inline in the relevant spec/code):
 11. LSP virtual documents are padded to global line/column coordinates and
     pack `lsp.toml` supplies either keywords or an external stdio server.
 12. `meld fmt` formats glue in core and delegates region bodies to the pack.
-13. Pack signing uses local HMAC-SHA256; an exact crate version or
-    `pinned:<ref>` both satisfy strict grammar pinning.
+13. **Historical, superseded by judgment call 26:** pack signing used local
+    HMAC-SHA256; an exact crate version or `pinned:<ref>` both satisfied strict
+    grammar pinning. Current pack trust uses Ed25519 roots and revocations.
 14. Phase 6 composition research is a NO-GO for SGLR/SDF3 and a GO for
     pack-owned scanner upgrades and raw delimiters.
 
@@ -152,13 +174,19 @@ Additional judgment calls (also inline in `libraries.md` and the code):
     git checkout; a chrooted git otherwise writes outside the Rust process's
     view and looks like an empty catalog.
 
-Dependency versions were re-checked against crates.io on 2026-11-20 before
-implementation: `serde 1.0.229`, `serde_json 1.0.154`, and
-`toml 1.2.1+spec-1.1.0` were current stable. `sha2 0.11.1` had become current
-stable (the earlier workspace pin was `0.10.9`), so `meld-lib` was moved to the
-new exact pin; it declares `rust-version 1.88`, compatible with this workspace's
-`1.90`, and the RFC 4231 HMAC vector still passes. The checked-in
-`Cargo.lock` records the resolved graph.
+**Historical pre-cutover snapshot:** dependency versions were re-checked against
+crates.io on 2026-11-20 before implementation: `serde 1.0.229`,
+`serde_json 1.0.154`, and `toml 1.2.1+spec-1.1.0` were current stable.
+`sha2 0.11.1` had become current stable (the earlier workspace pin was
+`0.10.9`), so `meld-lib` was moved to the new exact pin; it declared
+`rust-version 1.88`, compatible with this workspace's `1.90`, and the RFC 4231
+HMAC vector passed at that time. The checked-in `Cargo.lock` records the
+resolved graph.
+
+> **Historical:** the RFC 4231 HMAC vector belongs to the pre-Ed25519 Lang
+> Libraries rollout. Current pack trust is judgment call 26; the CI Python
+> patch policy is judgment call 45. Final evidence is in
+> [../status/production-readiness.md](../status/production-readiness.md).
 
 Evidence and verification results are in `../status/language-libraries.md`.
 
@@ -367,3 +395,8 @@ official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
 `rust-version 1.85` and are not yanked; Python `cryptography 50.0.2` supports
 Python 3.9+ excluding 3.9.0/3.9.1; `wasmtime 36.0.23` declares
 `rust-version 1.86.0`, while `wasmtime 50.0.3` declares `1.97.0`.
+
+> **Historical comparison:** `wasmtime 50.0.3` appears only to explain why the
+> workspace did not adopt it. The selected pin is `=36.0.23` (judgment call 28),
+> with final evidence in
+> [../status/production-readiness.md](../status/production-readiness.md).

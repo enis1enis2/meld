@@ -14,4 +14,7 @@ Lang Pack data, licenses and docs. Placeholder checksums marked
 `TODO_VERIFY_SHA256` must be replaced from the signed release before a channel
 is published.
 
+See the [Release pipeline](release.md) and [Security](security.md) chapters for
+the signing identity and supply-chain context.
+
 See the canonical [release-artifacts.md](https://github.com/enis1enis2/meld/blob/main/docs/release-artifacts.md).

@@ -7,7 +7,10 @@ replaced. Every judgment call is also inline in the affected spec/code file.
 
 The signing layer was cut over from HMAC-SHA256 to Ed25519 in this worktree.
 Historical HMAC-only evidence below is labelled as such; the current verification
-table is authoritative for the code in this branch.
+table is authoritative for the code in this branch. Current policy is set by
+judgment calls 26 (Ed25519), 28 (MSRV `1.90`, Wasmtime `=36.0.23`) and 45
+(floating Python `3.12`) in `../spec/README.md`, with final evidence in
+[production-readiness.md](production-readiness.md).
 
 ## Scope delivered
 
@@ -78,11 +81,14 @@ crates.io was queried on 2026-11-20 before relying on these libraries:
 | `sha2` | 0.11.1 | `=0.11.1` | checksum hashing in `meld-lib` |
 | `ed25519-dalek` | 3.0.0 | `=3.0.0` | `verify_strict`; `rust-version 1.85` |
 
-`sha2 0.11.1` and `ed25519-dalek 3.0.0` fit the workspace's declared
-`rust-version 1.90`. The wasmtime 50 tree already in `Cargo.lock` declares
-`rust-version 1.97`, so full workspace tests were run with the available Rust
-1.100 toolchain; the parent-owned `Cargo.toml` was not modified. Formatting was
-limited to the touched crates with `cargo fmt -p meld-installer -p meld-cli`.
+**Historical pre-hardening snapshot:** `sha2 0.11.1` and `ed25519-dalek 3.0.0`
+fit the workspace's declared `rust-version 1.90`. The Wasmtime 50 tree already
+in `Cargo.lock` declared `rust-version 1.97`, so full workspace tests were run
+with the then-available Rust 1.100 toolchain; the parent-owned `Cargo.toml` was
+not modified. Formatting was limited to the touched crates with
+`cargo fmt -p meld-installer -p meld-cli`. This toolchain state is superseded by
+judgment call 28 (Wasmtime `=36.0.23`, MSRV `1.90`); final evidence is in
+[production-readiness.md](production-readiness.md).
 
 ## Verification performed
 
@@ -90,7 +96,7 @@ limited to the touched crates with `cargo fmt -p meld-installer -p meld-cli`.
 |---|---|
 | `python3 -m unittest discover -s tools/tests -v` | 10 tests passed |
 | `cargo test -p meld-lib -p meld-installer` | 5 library + 4 installer CLI tests passed |
-| `cargo test --locked -p meld-cli` (Rust 1.100) | 4 CLI tests passed |
+| `cargo test --locked -p meld-cli` (Rust 1.100; historical) | 4 CLI tests passed |
 | `packtool verify-registry packs/registry --verify-packs` | 29 packs verified, attestation verified |
 | `packtool verify <pack> --trust-roots ... --revocations ...` loop | 29/29 `signature: verified` |
 | `meld-pack verify packs/bash --trust-roots ... --revocations ...` | 14 files verified, signature verified |
@@ -122,8 +128,10 @@ Before the Ed25519 cutover, commit `245e591` was pushed to `origin/main` and
 `meld-pack remote-list/install/verify/remove` were exercised against the public
 repository with the then-current symmetric key. Those results validated the git
 source path and lifecycle only; the symmetric-key assertions no longer describe
-this branch. The current branch is verified with local git repositories and
-Ed25519 keys as recorded above; no push was performed for this change.
+this branch. Current trust policy is judgment call 26, with final evidence in
+[production-readiness.md](production-readiness.md). The current branch is
+verified with local git repositories and Ed25519 keys as recorded above; no
+push was performed for this change.
 
 ## Follow-up: chrooted git temp-directory visibility
 

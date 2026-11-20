@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Meld mark</title>
+  <desc id="desc">Two colored language regions joined by a gold bridge inside a dark rounded square.</desc>
+  <rect x="4" y="4" width="120" height="120" rx="28" fill="#102A43"/>
+  <path d="M31 34h26a12 12 0 0 1 12 12v14H43a12 12 0 0 1-12-12V34Z" fill="#0F8B8D"/>
+  <path d="M97 94H71a12 12 0 0 1-12-12V68h26a12 12 0 0 1 12 12v14Z" fill="#E76F51"/>
+  <path d="M51 55h26a9 9 0 0 1 0 18H51a9 9 0 0 1 0-18Z" fill="#F2C14E"/>
+  <circle cx="64" cy="64" r="6" fill="#F7F5EF"/>
+</svg>

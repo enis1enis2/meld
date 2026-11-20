@@ -1,6 +1,6 @@
 #meld python
 
-# Phase 0 example: explicit cross-region value passing (Phase 3 target).
+# Task: export a Python list, double it in JavaScript, and re-export the result.
 @python as producer {
     values = [1, 2, 3]
     export values as nums

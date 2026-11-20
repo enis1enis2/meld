@@ -1,6 +1,6 @@
 #meld text
 
-# Phase 0 example: literate/fenced regions and raw delimiter safety.
+# Task: parse a fenced region, a raw delimiter containing a brace, and an auto-detected tail.
 
 A Python fence:
 

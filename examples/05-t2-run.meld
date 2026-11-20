@@ -1,7 +1,7 @@
 #meld python
 
-# Phase 2 done-when: one Python and one JavaScript region, stdout merged in
-# file order. Run from the project root: meld run examples/05-t2-run.meld
+# Task: merge stdout from a Python region and a JavaScript region in file order.
+# Run from the project root: meld run examples/05-t2-run.meld
 @python as first {
     print("python region one")
     print("python region two")

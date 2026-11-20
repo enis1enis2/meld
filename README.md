@@ -1,13 +1,45 @@
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="Meld mark" width="96" />
+</p>
+
 # Meld
+
+> One file. Many languages. Typed values.
+
+![Meld social preview](docs/assets/social-preview.svg)
+
+[![CI](https://github.com/enis1enis2/meld/actions/workflows/ci.yml/badge.svg)](https://github.com/enis1enis2/meld/actions/workflows/ci.yml)
+[![Docs](https://github.com/enis1enis2/meld/actions/workflows/docs.yml/badge.svg)](https://github.com/enis1enis2/meld/actions/workflows/docs.yml)
+[![MSRV](https://github.com/enis1enis2/meld/actions/workflows/msrv.yml/badge.svg)](https://github.com/enis1enis2/meld/actions/workflows/msrv.yml)
+[![Supply-chain audit](https://github.com/enis1enis2/meld/actions/workflows/audit.yml/badge.svg)](https://github.com/enis1enis2/meld/actions/workflows/audit.yml)
+[![Fuzz](https://github.com/enis1enis2/meld/actions/workflows/fuzz.yml/badge.svg)](https://github.com/enis1enis2/meld/actions/workflows/fuzz.yml)
 
 Meld is a language/toolchain where one `.meld` file can switch language
 mid-file and pass typed values between regions. Coverage is open-ended: adding
 a language costs a Lang Pack (manifest, grammar, runner), not a core change.
 
-## Quick start
+**Docs:** [SemVer](SEMVER.md) · [SBOM](SBOM.md) · [Security policy](SECURITY.md) ·
+[Lang Pack spec](spec/lang-pack.md) · [Lang Library spec](spec/libraries.md) ·
+[book](docs/src/SUMMARY.md) · [schema stability](docs/schema-stability.md) ·
+[release artifacts](docs/release-artifacts.md)
+
+## Install
+
+The system package name is `meld-lang`; it provides three binaries: `meld`,
+`meld-lsp` and `meld-pack`. No signed release has been published yet, so build
+from source for now:
 
 ```sh
 cargo build --workspace
+```
+
+The source build places the binaries under `./target/debug/`. Commands below
+use that path; substitute `meld`, `meld-lsp` or `meld-pack` from `PATH` when a
+packaged installation is available.
+
+## Quick start
+
+```sh
 ./target/debug/meld check examples/09-smoke.meld
 ./target/debug/meld run examples/09-smoke.meld
 ```
@@ -54,7 +86,7 @@ the exact version to `meld.lock`; `remove`, `import`, `unimport`, `verify`,
 `self-install` and `self-uninstall` are also available. Remote installs read
 `packs/registry/trust-roots.toml` and `revocations.json` from the fetched tree
 by default, so an unsigned or unknown-key pack is rejected. See
-`spec/libraries.md` for the full workflow.
+[spec/libraries.md](spec/libraries.md) for the full workflow.
 
 ## Syntax at a glance
 
@@ -75,7 +107,8 @@ by default, so an unsigned or unknown-key pack is rejected. See
 print(⟦python: 2 + 3⟧)
 ```
 
-See `spec/syntax.md` for block, inline, fence, and raw-delimiter forms.
+See [spec/syntax.md](spec/syntax.md) for block, inline, fence, and raw-delimiter
+forms, and [examples/README.md](examples/README.md) for runnable examples.
 
 ## Layout
 
@@ -104,12 +137,18 @@ All 15 packs added in the 2026-11-20 expansion (`typescript`, `tsx`, `bash`,
 `r`, `dart`, `solidity`) are strict, pinned, signed, and generated through
 `tools/gen_pack.py --strict`; `bash` additionally ships a T2 L1 worker. All 28
 packs have a `library.toml`, so any of them can be installed with `meld-pack`.
-See `status/language-expansion.md` for versions and judgment calls, and
-`status/language-libraries.md` for installer evidence.
+See [status/language-expansion.md](status/language-expansion.md) for versions and
+judgment calls, and [status/language-libraries.md](status/language-libraries.md)
+for installer evidence.
 
 ## Verification
 
+Install the Python test dependency first. CI requests a floating Python `3.12`
+patch because an exact patch such as `3.12.9` can be absent from runner images;
+`requirements-ci.txt` pins the only Python dependency, `cryptography==50.0.2`.
+
 ```sh
+python -m pip install -r requirements-ci.txt
 cargo test --workspace
 python3 -m unittest discover -s tools/tests -v
 python3 tools/fuzz_splitter.py
@@ -124,16 +163,11 @@ python3 tools/sync_grammars.py --check
 python3 tools/packtool.py verify-registry packs/registry \
   --trust-roots packs/registry/trust-roots.toml \
   --revocations packs/registry/revocations.json --verify-packs
-PYTHONPATH=/mnt/data/opencode/tmp/opencode/pydeps \
-  python3 tools/packtool.py verify packs/bash --trust-roots packs/registry/trust-roots.toml
+python3 tools/packtool.py verify packs/bash \
+  --trust-roots packs/registry/trust-roots.toml \
+  --revocations packs/registry/revocations.json
 ./target/debug/meld-pack list
 ```
-
-CI pins Python 3.12.9 and installs `requirements-ci.txt` with that same
-interpreter (`python -m pip install -r requirements-ci.txt`). The Rust CLI
-conformance tests import `cryptography`, so install that requirements file
-locally too before running the full suite. On hosts where the interpreter is
-named `python3`, substitute it consistently for `python` in the commands above.
 
 `meld-pack verify` without trust roots checks checksums and signature shape;
 strict packs always require `signature.ed25519`, and passing the public trust
@@ -146,6 +180,9 @@ component and a C compiler for building the expanded grammar set), Python
 3.11+, Node.js, Lua, and `sh` for the built-in Bash pack. `meld doctor` reports
 what is present; it never installs anything.
 
-See `status/phase-1.md` through `status/phase-7.md`,
-`status/language-expansion.md`, and `status/language-libraries.md` for
-implementation details and judgment calls.
+See [status/production-readiness.md](status/production-readiness.md) for the
+final evidence snapshot, and [status/phase-1.md](status/phase-1.md) through
+[status/phase-7.md](status/phase-7.md),
+[status/language-expansion.md](status/language-expansion.md), and
+[status/language-libraries.md](status/language-libraries.md) for implementation
+details and judgment calls.

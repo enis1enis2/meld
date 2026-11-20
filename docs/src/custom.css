@@ -1,0 +1,39 @@
+/* Meld mdBook accents. Loaded after the built-in themes via additional-css. */
+:root {
+  --meld-ink: #102a43;
+  --meld-paper: #f7f5ef;
+  --meld-teal: #0f8b8d;
+  --meld-coral: #e76f51;
+  --meld-gold: #f2c14e;
+}
+
+.content h1 {
+  letter-spacing: -0.02em;
+}
+
+.content h1::after {
+  content: "";
+  display: block;
+  width: 72px;
+  height: 4px;
+  margin-top: 0.5rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--meld-teal), var(--meld-coral));
+}
+
+.content blockquote {
+  border-left-color: var(--meld-teal);
+}
+
+.content a {
+  text-decoration-color: var(--meld-gold);
+  text-underline-offset: 0.18em;
+}
+
+.content code {
+  border-radius: 4px;
+}
+
+.content pre {
+  border-left: 3px solid var(--meld-teal);
+}

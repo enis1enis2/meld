@@ -1,10 +1,11 @@
-Meld — a language that switches to any language mid-file
+# Meld — a language that switches to any language mid-file
 
-Status: authoritative design plan. The original "PLAN ONLY" line was stale and
-was corrected on 2026-11-20 after Phases 0–7 were implemented. Implementation
-evidence lives in `status/`; this document remains the source of truth for
-design decisions. Working name: Meld (judgment call: any name works; rename
-freely).
+Status: authoritative design plan. Historical note: the original draft said
+"PLAN ONLY" and treated "Meld" as a working name with the judgment call "any
+name works; rename freely". That framing was superseded on 2026-11-20 after
+Phases 0–7 were implemented. Implementation evidence lives in `status/`; this
+document remains the source of truth for design decisions. The release package
+name is `meld-lang`; binaries are `meld`, `meld-lsp` and `meld-pack`.
 
 1. Goal (and the honest version of it)
 
@@ -22,17 +23,19 @@ Non-goals: one unified semantics for all languages; zero-cost cross-language cal
 
 Meld should assemble proven parts, not invent them.
 
-Idea	What it proves	Source
-Tree-sitter language injection	A parent syntax tree can hold injected child trees (HTML→JS/CSS, JS→regex, Markdown code fences, Vue/Svelte). Injections can be static or dynamically named, nested recursively, and incrementally reparsed.	tree-sitter multi-language docs (https://tree-sitter.github.io/tree-sitter/using-parsers#multi-language-documents); ast-grep (https://ast-grep.github.io/advanced/language-injection.html); gotreesitter (https://pkg.go.dev/github.com/odvcencio/gotreesitter) lists 206 grammars
-GraalVM Truffle polyglot	Many languages in one runtime, calling each other in shared memory via a standard interop protocol: a set of messages every language implements for foreign values, so languages need not know about each other.	https://docs.oracle.com/en/graalvm/jdk/17/docs/reference-manual/polyglot-programming/
-WebAssembly Component Model + WIT	A language-agnostic IDL for typed interfaces (strings, lists, records, variants, resources). Components don't share memory; data is copied via the Canonical ABI.	https://component-model.bytecodealliance.org/design/wit.html ; https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
-Racket #lang	A file declares its language at the top; a language = reader + expander, packaged under a name. Proves "language chosen per module" is a clean model.	https://docs.racket-lang.org/guide/languages.html
-Raku slangs / "braid"	A parser that holds a set of mutually-embedded sublanguages and switches the active grammar mid-parse (strings, regex, pod, main language). Closest existing model to "switch mid-file".	https://gist.github.com/raiph/849a4a9d8875542fb86df2b2eda89296 ; https://mouq.github.io/slangs.html
-SDF3 / SGLR (Spoofax)	Scannerless generalized-LR parsing supports the full class of context-free grammars, which is closed under composition, so separately defined grammars can be combined, even with different lexical syntax. LR variants can't do this.	https://link.springer.com/doi/10.1007/978-3-030-58768-0_1 ; https://repository.tudelft.nl/file/File_0d239cac-92d0-4eca-979f-51c0eed00bff
+| Idea | What it proves | Source |
+|---|---|---|
+| Tree-sitter language injection | A parent syntax tree can hold injected child trees (HTML→JS/CSS, JS→regex, Markdown code fences, Vue/Svelte). Injections can be static or dynamically named, nested recursively, and incrementally reparsed. | tree-sitter multi-language docs (https://tree-sitter.github.io/tree-sitter/using-parsers#multi-language-documents); ast-grep (https://ast-grep.github.io/advanced/language-injection.html); gotreesitter (https://pkg.go.dev/github.com/odvcencio/gotreesitter) lists 206 grammars |
+| GraalVM Truffle polyglot | Many languages in one runtime, calling each other in shared memory via a standard interop protocol: a set of messages every language implements for foreign values, so languages need not know about each other. | https://docs.oracle.com/en/graalvm/jdk/17/docs/reference-manual/polyglot-programming/ |
+| WebAssembly Component Model + WIT | A language-agnostic IDL for typed interfaces (strings, lists, records, variants, resources). Components don't share memory; data is copied via the Canonical ABI. | https://component-model.bytecodealliance.org/design/wit.html ; https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md |
+| Racket #lang | A file declares its language at the top; a language = reader + expander, packaged under a name. Proves "language chosen per module" is a clean model. | https://docs.racket-lang.org/guide/languages.html |
+| Raku slangs / "braid" | A parser that holds a set of mutually-embedded sublanguages and switches the active grammar mid-parse (strings, regex, pod, main language). Closest existing model to "switch mid-file". | https://gist.github.com/raiph/849a4a9d8875542fb86df2b2eda89296 ; https://mouq.github.io/slangs.html |
+| SDF3 / SGLR (Spoofax) | Scannerless generalized-LR parsing supports the full class of context-free grammars, which is closed under composition, so separately defined grammars can be combined, even with different lexical syntax. LR variants can't do this. | https://link.springer.com/doi/10.1007/978-3-030-58768-0_1 ; https://repository.tudelft.nl/file/File_0d239cac-92d0-4eca-979f-51c0eed00bff |
 
 Takeaway: the pieces exist separately. Tree-sitter gives breadth of grammars, Truffle gives the interop-protocol idea, WIT gives the cross-language type contract, Racket gives the per-module language declaration, Raku gives mid-parse grammar switching, SGLR gives the principled route to true grammar composition. Nobody ships all of it as an open plugin system across arbitrary languages. That's the gap.
 
 3. Architecture
+```text
  source file (.meld)
         │
  ┌──────▼───────┐
@@ -58,6 +61,7 @@ Takeaway: the pieces exist separately. Tree-sitter gives breadth of grammars, Tr
  ┌──────▼───────┐
  │ 5. Backends  │  in-proc embed │ worker process │ Wasm │ Truffle │ toolchain
  └──────────────┘
+```
 3.1 Switching mechanisms (the user-visible syntax)
 
 Proposed (design, not final). Use several; they all lower to the same region model.
@@ -107,12 +111,13 @@ Packs declare a tier (§5) and a conformance level: L0 syntax-only, L1 executes 
 
 Not every language can be embedded. Use tiers; each pack picks the best available.
 
-Tier	Mechanism	Fits	Cost
-T1	In-process embed via the language's embedding API (e.g. Python, Lua, a JS engine)	scripting languages with embedding APIs	fast bridge, fragile ABI, crash risk
-T2	Worker process speaking a Meld protocol (JSON-RPC or binary over stdio/socket), like notebook kernels	anything with a REPL or script runner	safest, slowest, universal
-T3	Compile to Wasm component with WIT bindings	Rust, C/C++, Go-ish, Zig, etc.	strong isolation, typed contract, copying at boundary
-T4	GraalVM/Truffle backend	languages implemented on Truffle	shared-memory interop, heavy dependency
-T5	Toolchain shell-out (compile region to a shared lib/executable, run, capture)	compiled languages without Wasm story	slow cold start
+| Tier | Mechanism | Fits | Cost |
+|---|---|---|---|
+| T1 | In-process embed via the language's embedding API (e.g. Python, Lua, a JS engine) | scripting languages with embedding APIs | fast bridge, fragile ABI, crash risk |
+| T2 | Worker process speaking a Meld protocol (JSON-RPC or binary over stdio/socket), like notebook kernels | anything with a REPL or script runner | safest, slowest, universal |
+| T3 | Compile to Wasm component with WIT bindings | Rust, C/C++, Go-ish, Zig, etc. | strong isolation, typed contract, copying at boundary |
+| T4 | GraalVM/Truffle backend | languages implemented on Truffle | shared-memory interop, heavy dependency |
+| T5 | Toolchain shell-out (compile region to a shared lib/executable, run, capture) | compiled languages without Wasm story | slow cold start |
 
 Judgment call: T2 is the default universal tier. It is the only one that works for "any language" with a runnable CLI. T1/T3/T4 are optimizations per language. Build T2 first.
 
@@ -161,25 +166,29 @@ Rust for the core: tree-sitter has a first-class Rust binding, wasmtime provides
 Key dependencies: tree-sitter, wasmtime (+ component model), a JSON-RPC lib, tower-lsp (or equivalent) for the language server.
 
 11. Phased roadmap
-Phase	Deliverable	Done when
-0. Spec	Syntax spec (§3.1), Value Model spec (§6), Lang Pack spec (§4), protocol spec for T2	Specs reviewed; 3 example .meld files hand-written
-1. Front end	Region splitter + tree-sitter syntax layer; meld check; highlighting for ≥10 languages via auto-generated syntax-only packs	Splitter fuzz suite passes; highlights mixed file correctly
-2. T2 runner	Worker protocol + Python and JavaScript packs (L1)	meld run executes a Python+JS file, stdout merged in order
-3. Bridge	Value Model, import/export, errors; L2 for Python, JS, Lua	Round-trip matrix green for those 3
-4. Compiled tier	T3 (Rust/C → Wasm component with WIT) and T5 fallback	Rust function called from Python with typed args
-5. Tooling	LSP with virtual documents, formatter, REPL language switch	Editor completion works inside a non-default-language region
-6. Composition research	Prototype B (SGLR/SDF3 or Raku-slang-style grammar switch) on one real embedding case that islands can't handle	Written go/no-go decision with benchmarks
-7. Ecosystem	Pack registry, signing, pack generator polish, docs	A third party adds a language without touching core
+| Phase | Deliverable | Done when |
+|---|---|---|
+| 0. Spec | Syntax spec (§3.1), Value Model spec (§6), Lang Pack spec (§4), protocol spec for T2 | Specs reviewed; 3 example .meld files hand-written |
+| 1. Front end | Region splitter + tree-sitter syntax layer; meld check; highlighting for ≥10 languages via auto-generated syntax-only packs | Splitter fuzz suite passes; highlights mixed file correctly |
+| 2. T2 runner | Worker protocol + Python and JavaScript packs (L1) | meld run executes a Python+JS file, stdout merged in order |
+| 3. Bridge | Value Model, import/export, errors; L2 for Python, JS, Lua | Round-trip matrix green for those 3 |
+| 4. Compiled tier | T3 (Rust/C → Wasm component with WIT) and T5 fallback | Rust function called from Python with typed args |
+| 5. Tooling | LSP with virtual documents, formatter, REPL language switch | Editor completion works inside a non-default-language region |
+| 6. Composition research | Prototype B (SGLR/SDF3 or Raku-slang-style grammar switch) on one real embedding case that islands can't handle | Written go/no-go decision with benchmarks |
+| 7. Ecosystem | Pack registry, signing, pack generator polish, docs | A third party adds a language without touching core |
+
 12. Risks and mitigations
-Risk	Mitigation
-"Any language" is unbounded	Open pack contract; syntax-only tier L0 for the long tail (§4)
-Region-end ambiguity	Per-language end scanners + raw delimiters (§3.2)
-Semantic mismatch (GC, threads, async, exceptions, numerics)	Copy-by-value default, typed errors, documented numeric rules, no shared mutable state by default
-Cross-boundary performance	Tiering; batch calls; shared-buffer handles for bulk data
-Debugging multi-language stacks	Source maps first; unified debugger only after Phase 5
-Toolchain/version sprawl	meld doctor, per-pack version ranges, containerized runners
-Security of running arbitrary code	§9 sandboxing, no implicit capabilities
-Scope creep into "new general-purpose language"	Meld is glue + orchestration; no new semantics for the languages it hosts
+| Risk | Mitigation |
+|---|---|
+| "Any language" is unbounded | Open pack contract; syntax-only tier L0 for the long tail (§4) |
+| Region-end ambiguity | Per-language end scanners + raw delimiters (§3.2) |
+| Semantic mismatch (GC, threads, async, exceptions, numerics) | Copy-by-value default, typed errors, documented numeric rules, no shared mutable state by default |
+| Cross-boundary performance | Tiering; batch calls; shared-buffer handles for bulk data |
+| Debugging multi-language stacks | Source maps first; unified debugger only after Phase 5 |
+| Toolchain/version sprawl | meld doctor, per-pack version ranges, containerized runners |
+| Security of running arbitrary code | §9 sandboxing, no implicit capabilities |
+| Scope creep into "new general-purpose language" | Meld is glue + orchestration; no new semantics for the languages it hosts |
+
 13. Open questions (decided by default, revisable)
 Is Meld a language (own syntax and semantics for glue) or a host/format (just region switching)? Default: thin language, glue limited to import/export/control-of-order. Revisit after Phase 3.
 Reuse WIT as the IDL vs own format? Default: reuse WIT.

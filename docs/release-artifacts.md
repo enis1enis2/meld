@@ -39,8 +39,9 @@ sha256sum -c --strict SHA256SUMS
 
 # 2. Signature and manifest + archive payload checks
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --identity-regexp 'https://github.com/enis1enis2/meld/.github/workflows/release.yml@refs/tags/.*' \
-  --issuer 'https://token.actions.githubusercontent.com'
+  --tag v0.2.0-rc.1 \
+  --issuer https://token.actions.githubusercontent.com \
+  --attestation meld-lang-0.2.0-rc.1.intoto.jsonl
 
 # 3. Installed files
 sh scripts/verify_install.sh --root <install-prefix>

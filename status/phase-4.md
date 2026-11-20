@@ -1,13 +1,22 @@
 # Phase 4 status — compiled tier
 
+> **Historical phase record.** The Wasmtime version below is the Phase 4
+> snapshot, not the current pin. Current authority is judgment call 26 (Ed25519
+> pack trust), judgment call 28 (MSRV `1.90`, Wasmtime `=36.0.23`) and judgment
+> call 45 (floating Python `3.12`) in `../spec/README.md`, with final evidence
+> in [production-readiness.md](production-readiness.md).
+
 ## Done
 - `crates/meld-t3/wit/meld.wit` reuses WIT directly as the cross-language IDL
   (`meld:demo/ops@0.1.0`, `add`/`mul` over `s64`).
 - `crates/meld-t3/guest/` is a real `no_std` Rust guest compiled to core Wasm and
   wrapped as a Component Model component by `tools/build_t3_guest.sh`. The
   committed artifact is `crates/meld-t3/component/demo.component.wasm`.
-- `T3Backend` instantiates the component with Wasmtime 50.0.3, resolves nested
-  interface exports, and calls typed `(i64, i64) -> (i64,)` functions.
+- **Historical (Phase 4):** `T3Backend` instantiated the component with
+  Wasmtime 50.0.3, resolved nested interface exports, and called typed
+  `(i64, i64) -> (i64,)` functions. The current pin is Wasmtime `=36.0.23`
+  with MSRV `1.90` (judgment call 28); see
+  [production-readiness.md](production-readiness.md).
 - `call_value` maps `meld:t3/add` / `meld:t3/mul` from Meld Values with checked
   `s64` narrowing; oversized integers fail as typed errors, never wrap.
 - Python `meld_call` sends negative-id `__host_call` callbacks to the Rust host;
@@ -45,6 +54,8 @@
 ## Blockers
 None.
 
-## Done-when assessment
-"Rust function called from Python with typed args": satisfied by the real Python
-worker → T2 callback → Wasmtime → WIT component test and the CLI example.
+## Done-when assessment (historical Phase 4)
+"Rust function called from Python with typed args": satisfied at that time by
+the real Python worker → T2 callback → Wasmtime → WIT component test and the CLI
+example. Final toolchain and trust evidence is in
+[production-readiness.md](production-readiness.md).

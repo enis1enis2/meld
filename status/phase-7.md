@@ -1,14 +1,23 @@
 # Phase 7 status — ecosystem
 
+> **Historical phase record.** HMAC, Rust 1.100 and Wasmtime 50 details below
+> describe the Phase 7 baseline, not the current branch policy. Current
+> authority is judgment call 26 (Ed25519 pack trust), judgment call 28 (MSRV
+> `1.90`, Wasmtime `=36.0.23`) and judgment call 45 (floating Python `3.12`) in
+> `../spec/README.md`, with final evidence in
+> [production-readiness.md](production-readiness.md).
+
 ## Done
 - `tools/packtool.py` implements `verify`, `sign`, `publish`, `list`, `install`,
   `keygen`, `trust-roots`, `revocations`, `mirrors`, `attest` and
   `verify-registry` with canonical SHA-256 checksum files and Ed25519 public-key
   signatures. It never uses the network, installs toolchains, imports pack code,
   or spawns pack workers.
-- `spec/registry.md` is normative. HMAC-SHA256 was removed; `signature.hmac`
-  files are gone and every strict pack carries `signature.ed25519` over the
-  exact message `scheme\nid\nversion\n<raw checksums.sha256 bytes>`.
+- `spec/registry.md` is normative. **Historical cutover context:** HMAC-SHA256
+  was removed; `signature.hmac` files are gone and every strict pack carries
+  `signature.ed25519` over the exact message
+  `scheme\nid\nversion\n<raw checksums.sha256 bytes>`. Current trust policy is
+  judgment call 26.
 - `packs/registry/` now ships a 29-entry `index.json` (28 bundled packs via
   `../<id>`, the third-party shell fixture via
   `../../tests/fixtures/pack-third-party`), `trust-roots.toml`,
@@ -18,8 +27,8 @@
 - `tools/tests/test_packtool.py` has 10 unit/CLI tests: verification, tamper
   detection, Ed25519 signing, unknown/revoked keys, strict requirements,
   exact-version pins, id/alias resolution, publish/list/install, attestation
-  binding, and fixture completeness. HMAC has no test except the `--key`
-  removal error.
+  binding, and fixture completeness. **Historical:** HMAC had no test except
+  the `--key` removal error; current pack trust is Ed25519 (judgment call 26).
 - Third-party fixture `tests/fixtures/pack-third-party/` is a complete `shell`
   pack with manifest, runner, toolchain, worker, end scanner, data-driven
   conformance cases, checksums and an Ed25519 signature.
@@ -42,9 +51,12 @@
 - `cargo test -p meld-lib -p meld-installer`: 5 library tests and 4 installer
   CLI tests pass (tampering, unknown key, revoked key, missing/malformed trust
   roots).
-- `cargo test --locked -p meld-cli` with Rust 1.100 (the wasmtime 50 dependencies
-  in the pre-existing lockfile need a newer compiler than the 1.90 wrapper):
-  4 CLI tests pass, including the shell-pack and import-override tests.
+- **Historical verification (pre-downgrade):** `cargo test --locked -p meld-cli`
+  with Rust 1.100 (the Wasmtime 50 dependencies in the pre-existing lockfile
+  needed a newer compiler than the 1.90 wrapper): 4 CLI tests passed, including
+  the shell-pack and import-override tests. Current policy is Wasmtime
+  `=36.0.23` with MSRV `1.90` (judgment call 28); final evidence is in
+  [production-readiness.md](production-readiness.md).
 - `tools/packtool.py verify-registry packs/registry --verify-packs`:
   29 packs verified, attestation verified.
 - Loop `tools/packtool.py verify <pack> --trust-roots ... --revocations ...`:
@@ -70,14 +82,17 @@
 - Install is a non-overwriting data copy and validates index metadata against
   the staged pack; no network, toolchain install, or pack-code execution.
 
-## Blockers
-None for the Ed25519 cutover. Note for CI owners: the pinned `wasmtime 50.0.3`
-tree in the pre-existing lockfile declares `rust-version 1.97`; the 1.90 cargo
-wrapper cannot compile it. This is unrelated to the signing change and the
-parent-owned `Cargo.toml`/CI files were intentionally left untouched.
+## Blockers (historical Phase 7 note)
+None for the Ed25519 cutover. **Historical CI note:** the pinned
+`wasmtime 50.0.3` tree in the pre-existing lockfile declared `rust-version 1.97`,
+so the 1.90 cargo wrapper could not compile it. This was unrelated to the
+signing change, and the parent-owned `Cargo.toml`/CI files were intentionally
+left untouched. Superseded by judgment call 28 (Wasmtime `=36.0.23`, MSRV
+`1.90`); final evidence is in [production-readiness.md](production-readiness.md).
 
-## Done-when assessment
-"A third party adds a language without touching core": satisfied by the shell
-pack fixture, which is discovered and executed through data-only pack metadata,
-is listed in the attested registry, and can be installed with an Ed25519
-verified signature.
+## Done-when assessment (historical Phase 7)
+"A third party adds a language without touching core": satisfied at that time
+by the shell pack fixture, which was discovered and executed through data-only
+pack metadata, listed in the attested registry, and installable with an Ed25519
+verified signature. Final evidence is in
+[production-readiness.md](production-readiness.md).

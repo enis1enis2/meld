@@ -3,6 +3,9 @@
 Meld composes language-tagged regions in one source file. This book collects
 the release-facing contracts and verification notes.
 
+Read next: [Release pipeline](release.md), [Artifacts and
+verification](artifacts.md), [Schemas](schemas.md), [Security](security.md).
+
 The canonical policy files live at the repository root:
 
 - [CHANGELOG](https://github.com/enis1enis2/meld/blob/main/CHANGELOG.md)
