@@ -256,12 +256,18 @@ impl T5Backend {
     }
 
     fn fill(template: &str, dir: &Path) -> String {
-        let src = dir.join("region.src");
-        let out = dir.join("region.bin");
+        // JUDGMENT CALL 55: substituted paths use forward slashes. Windows
+        // accepts them in CreateProcess paths, while Git Bash and other POSIX
+        // toolchains would otherwise consume `C:\...` backslashes as shell
+        // escapes. The filesystem paths themselves are unchanged.
+        let portable = |path: PathBuf| path.to_string_lossy().replace('\\', "/");
+        let src = portable(dir.join("region.src"));
+        let out = portable(dir.join("region.bin"));
+        let root = portable(dir.to_path_buf());
         template
-            .replace("{src}", &src.to_string_lossy())
-            .replace("{out}", &out.to_string_lossy())
-            .replace("{dir}", &dir.to_string_lossy())
+            .replace("{src}", &src)
+            .replace("{out}", &out)
+            .replace("{dir}", &root)
     }
 
     fn run_stage(program: &str, args: &[String], cwd: &Path, stage: &str) -> Result<Vec<String>> {

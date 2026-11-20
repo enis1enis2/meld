@@ -38,7 +38,7 @@ fn t5_toolchain_fallback_compiles_and_runs_a_region() -> Result<()> {
         vec![
             "sh".to_string(),
             "-c".to_string(),
-            "cp {src} {out} && chmod +x {out}".to_string(),
+            "cp '{src}' '{out}' && chmod +x '{out}'".to_string(),
         ],
         vec!["sh".to_string(), "{out}".to_string()],
         PathBuf::from("."),

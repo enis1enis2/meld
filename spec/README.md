@@ -332,10 +332,12 @@ Additional judgment calls (also inline in the affected specs/code):
     pack so the Ed25519 signature covers the exact working-tree bytes stored by
     Git, regardless of host line endings.
 55. The T5 fallback test resolves `sh` through PATH for both build and run
-    stages. Windows runners have no `/bin/sh` and cannot execute a shebang
-    script directly; the previous hardcoded path was latent while earlier test
-    binaries stopped the run before this test executed. Invoking `sh` explicitly
-    preserves POSIX semantics without weakening the T5 contract.
+    stages, and `T5Backend::fill` normalizes substituted paths to forward
+    slashes. Windows runners have no `/bin/sh`, cannot execute a shebang script
+    directly, and Git Bash consumes backslashes in `-c` scripts as escapes. The
+    previous hardcoded path was latent while earlier test binaries stopped the
+    run before this test executed. These changes preserve POSIX semantics
+    without weakening the T5 contract.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
