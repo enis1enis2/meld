@@ -7,7 +7,7 @@
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-WASM_TOOLS=${WASM_TOOLS:-/mnt/data/opencode/bin/wasm-tools}
+WASM_TOOLS=${WASM_TOOLS:-wasm-tools}
 GUEST="$ROOT/crates/meld-t3/guest"
 OUT="$ROOT/crates/meld-t3/component"
 CORE="$GUEST/target/wasm32-unknown-unknown/release/meld_demo_guest.wasm"
