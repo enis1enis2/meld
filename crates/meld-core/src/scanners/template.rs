@@ -71,12 +71,17 @@ impl EndScanner for TemplateScanner {
             backticks: false,
             triple_quotes: false,
         };
-        host_end(text.as_bytes(), body_start, options, |cur: &mut Cursor<'_>| {
-            if cur.b[cur.i] == b'`' {
-                cur.i = skip_template(cur.b, cur.i);
-                return true;
-            }
-            false
-        })
+        host_end(
+            text.as_bytes(),
+            body_start,
+            options,
+            |cur: &mut Cursor<'_>| {
+                if cur.b[cur.i] == b'`' {
+                    cur.i = skip_template(cur.b, cur.i);
+                    return true;
+                }
+                false
+            },
+        )
     }
 }

@@ -108,7 +108,8 @@ impl HeredocScanner {
             None
         };
         let start = j;
-        while j < b.len() && (is_id(b[j]) || (self.dialect == HeredocDialect::Php && b[j] == b'-')) {
+        while j < b.len() && (is_id(b[j]) || (self.dialect == HeredocDialect::Php && b[j] == b'-'))
+        {
             j += 1;
         }
         if j == start {
@@ -142,7 +143,10 @@ impl EndScanner for HeredocScanner {
                 let start = cur.i;
                 let end = line_end(cur.b, start);
                 let mut candidate = &cur.b[start..end];
-                while candidate.last().is_some_and(|c| matches!(c, b' ' | b'\t' | b'\r')) {
+                while candidate
+                    .last()
+                    .is_some_and(|c| matches!(c, b' ' | b'\t' | b'\r'))
+                {
                     candidate = &candidate[..candidate.len() - 1];
                 }
                 if spec.indent_ok {

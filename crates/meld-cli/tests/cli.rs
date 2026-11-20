@@ -138,10 +138,7 @@ fn check_splits_a_ruby_heredoc_using_pack_metadata() {
     let output = run(&["check", file.to_str().unwrap()], None, None);
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        output.status.success(),
-        "stdout={stdout} stderr={stderr}"
-    );
+    assert!(output.status.success(), "stdout={stdout} stderr={stderr}");
     assert!(!stderr.contains("unterminated block"), "{stderr}");
     assert!(!stderr.contains("syntax ERROR"), "{stderr}");
     // Correct split: one Ruby block plus one trailing untagged run. A brace

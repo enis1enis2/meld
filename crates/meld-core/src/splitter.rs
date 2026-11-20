@@ -67,7 +67,8 @@ pub trait EndScanner: Send + Sync {
 
     /// Compatibility shim for the Phase 1 contract: only the body-end offset.
     fn find_end(&self, text: &str, body_start: usize) -> Option<usize> {
-        self.find_region_end(text, body_start).map(|end| end.body_end)
+        self.find_region_end(text, body_start)
+            .map(|end| end.body_end)
     }
 }
 
@@ -184,25 +185,24 @@ impl ScannerRegistry {
     /// falls back to [`BalancedBraceScanner`] in [`split`].
     pub fn default_registry() -> Self {
         let mut registry = Self::empty();
-        let brace: std::sync::Arc<dyn EndScanner> =
-            std::sync::Arc::new(BalancedBraceScanner);
+        let brace: std::sync::Arc<dyn EndScanner> = std::sync::Arc::new(BalancedBraceScanner);
         registry.register(
             [
-                "go", "c", "java", "json", "html", "css", "markdown", "toml",
-                "csharp", "scala", "zig", "dart", "solidity",
+                "go", "c", "java", "json", "html", "css", "markdown", "toml", "csharp", "scala",
+                "zig", "dart", "solidity",
             ],
             brace,
         );
         use crate::scanners::{
-            counted::CountedScanner,
-            delimited::DelimitedScanner,
-            heredoc::HeredocScanner,
-            indent::IndentScanner,
-            template::TemplateScanner,
+            counted::CountedScanner, delimited::DelimitedScanner, heredoc::HeredocScanner,
+            indent::IndentScanner, template::TemplateScanner,
         };
         let scan = |s: std::sync::Arc<dyn EndScanner>| s;
         registry.register(["ruby"], scan(Arc::new(HeredocScanner::ruby())));
-        registry.register(["bash", "sh", "shell"], scan(Arc::new(HeredocScanner::bash())));
+        registry.register(
+            ["bash", "sh", "shell"],
+            scan(Arc::new(HeredocScanner::bash())),
+        );
         registry.register(["php"], scan(Arc::new(HeredocScanner::php())));
         registry.register(["python"], scan(Arc::new(IndentScanner::python())));
         registry.register(["yaml"], scan(Arc::new(IndentScanner::yaml())));
@@ -300,8 +300,7 @@ pub fn split(source: &str, scanners: &ScannerRegistry) -> Result<SplitDocument> 
     let mut i = 0usize;
     let mut default_lang = String::new();
     let mut counter = 0usize;
-    let default_scanner: std::sync::Arc<dyn EndScanner> =
-        std::sync::Arc::new(BalancedBraceScanner);
+    let default_scanner: std::sync::Arc<dyn EndScanner> = std::sync::Arc::new(BalancedBraceScanner);
 
     // Header.
     if source.starts_with("#meld ") {
@@ -399,7 +398,9 @@ pub fn split(source: &str, scanners: &ScannerRegistry) -> Result<SplitDocument> 
                 let end = head.body_start + rel;
                 (end, end + head.close.len(), head.close.clone())
             } else {
-                let scanner = scanners.get(&head.lang).unwrap_or_else(|| default_scanner.clone());
+                let scanner = scanners
+                    .get(&head.lang)
+                    .unwrap_or_else(|| default_scanner.clone());
                 let end = scanner
                     .find_region_end(source, head.body_start)
                     .ok_or_else(|| MeldError::Split {

@@ -72,7 +72,10 @@ pub(crate) fn is_ws(c: u8) -> bool {
 }
 
 pub(crate) fn line_end(b: &[u8], i: usize) -> usize {
-    b[i..].iter().position(|c| *c == b'\n').map_or(b.len(), |p| i + p)
+    b[i..]
+        .iter()
+        .position(|c| *c == b'\n')
+        .map_or(b.len(), |p| i + p)
 }
 
 /// Consume a quoted run starting at the opening quote, honouring backslash
@@ -110,7 +113,11 @@ pub(crate) fn skip_triple(b: &[u8], i: usize, q: u8) -> usize {
 
 pub(crate) fn skip_line(b: &[u8], i: usize) -> usize {
     let end = line_end(b, i);
-    if end < b.len() { end + 1 } else { end }
+    if end < b.len() {
+        end + 1
+    } else {
+        end
+    }
 }
 
 pub(crate) fn skip_block_comment(b: &[u8], i: usize) -> usize {
@@ -128,7 +135,12 @@ pub(crate) fn skip_block_comment(b: &[u8], i: usize) -> usize {
 /// inspected, so every returned offset is a byte offset and no slice crosses a
 /// multibyte character. `hook` runs first, letting a dialect own embedded
 /// constructs (heredocs, raw strings, templates, block scalars).
-pub(crate) fn host_end<F>(b: &[u8], start: usize, opts: HostOptions, mut hook: F) -> Option<RegionEnd>
+pub(crate) fn host_end<F>(
+    b: &[u8],
+    start: usize,
+    opts: HostOptions,
+    mut hook: F,
+) -> Option<RegionEnd>
 where
     F: FnMut(&mut Cursor<'_>) -> bool,
 {

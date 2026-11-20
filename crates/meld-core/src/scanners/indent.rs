@@ -59,7 +59,10 @@ fn indent_of(b: &[u8], start: usize) -> usize {
 }
 
 fn line_start(b: &[u8], i: usize) -> usize {
-    b[..i].iter().rposition(|c| *c == b'\n').map_or(0, |p| p + 1)
+    b[..i]
+        .iter()
+        .rposition(|c| *c == b'\n')
+        .map_or(0, |p| p + 1)
 }
 
 impl EndScanner for IndentScanner {
@@ -108,10 +111,7 @@ impl EndScanner for IndentScanner {
                     }
                 }
             }
-            if self.dialect == IndentDialect::Python
-                && cur.depth == 1
-                && cur.b[cur.i] == b'}'
-            {
+            if self.dialect == IndentDialect::Python && cur.depth == 1 && cur.b[cur.i] == b'}' {
                 if let Some(baseline) = body_indent {
                     let start = line_start(cur.b, cur.i);
                     if indent_of(cur.b, start) > baseline {

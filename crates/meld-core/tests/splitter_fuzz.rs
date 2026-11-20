@@ -65,10 +65,7 @@ fn deterministic_scanner_cases_keep_offsets_and_render() {
             "@rust { let s = r##\"a \"#} b\"##; /* /* } */ */ x }\n",
             "a \"#} b",
         ),
-        (
-            "@sql { SELECT $tag$ } $tag$ AS x; }\n",
-            "$tag$ } $tag$",
-        ),
+        ("@sql { SELECT $tag$ } $tag$ AS x; }\n", "$tag$ } $tag$"),
     ];
     for (src, needle) in cases {
         let doc = splitter::split(src, &scanners()).unwrap_or_else(|e| panic!("{e}: {src:?}"));
@@ -82,11 +79,7 @@ fn deterministic_scanner_cases_keep_offsets_and_render() {
         assert!(block.body(src).contains(needle), "missing data: {src:?}");
         let start = src.find('{').unwrap() + 1;
         let generic = BalancedBraceScanner.find_end(src, start);
-        assert_ne!(
-            generic,
-            Some(block.end),
-            "negative control passed: {src:?}"
-        );
+        assert_ne!(generic, Some(block.end), "negative control passed: {src:?}");
     }
 
     // Raw hash delimiter bypass: no scanner registration is needed.

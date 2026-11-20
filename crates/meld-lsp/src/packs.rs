@@ -72,7 +72,8 @@ pub fn scanner_registry(specs: &HashMap<String, LspSpec>) -> ScannerRegistry {
             continue;
         }
         seen.push(id.clone());
-        spec.region_end.register(&mut registry, spec.names.iter().cloned());
+        spec.region_end
+            .register(&mut registry, spec.names.iter().cloned());
     }
     registry
 }
@@ -126,7 +127,8 @@ fn load(root: &Path, dir: &Path) -> Option<(LspSpec, Vec<String>)> {
         })
         .unwrap_or_default();
     let spec = LspSpec {
-        language_id: str_field("language_id").unwrap_or_else(|| names.first().cloned().unwrap_or_default()),
+        language_id: str_field("language_id")
+            .unwrap_or_else(|| names.first().cloned().unwrap_or_default()),
         extension: str_field("extension").unwrap_or_default(),
         names: names.clone(),
         command,

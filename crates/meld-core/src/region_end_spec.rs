@@ -80,9 +80,7 @@ impl RegionEndSpec {
             return Self::brace();
         };
         if value.get("schema").and_then(toml::Value::as_str) != Some(Self::SCHEMA) {
-            eprintln!(
-                "meld: warning: unsupported region_end.toml schema; using brace fallback"
-            );
+            eprintln!("meld: warning: unsupported region_end.toml schema; using brace fallback");
             return Self::brace();
         }
         let kind = ScannerKind::from_id(

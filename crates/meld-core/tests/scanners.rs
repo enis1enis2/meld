@@ -2,11 +2,8 @@
 //! host splitter, and the balanced-brace negative control must fail them.
 use meld_core::region_end_spec::{RegionEndSpec, ScannerKind};
 use meld_core::scanners::{
-    counted::CountedScanner,
-    delimited::DelimitedScanner,
-    heredoc::HeredocScanner,
-    indent::IndentScanner,
-    template::TemplateScanner,
+    counted::CountedScanner, delimited::DelimitedScanner, heredoc::HeredocScanner,
+    indent::IndentScanner, template::TemplateScanner,
 };
 use meld_core::splitter::{
     render, split, BalancedBraceScanner, EndScanner, RegionEnd, RegionKind, ScannerRegistry,
@@ -37,7 +34,11 @@ fn assert_generic_fails(src: &str) {
     );
 }
 
-fn split_with(lang: &str, scanner: Arc<dyn EndScanner>, src: &str) -> meld_core::splitter::SplitDocument {
+fn split_with(
+    lang: &str,
+    scanner: Arc<dyn EndScanner>,
+    src: &str,
+) -> meld_core::splitter::SplitDocument {
     let mut registry = ScannerRegistry::empty();
     registry.register([lang], scanner);
     let doc = split(src, &registry).unwrap_or_else(|e| panic!("split failed: {e}"));
@@ -68,9 +69,8 @@ fn ruby_heredoc_variants_and_lookalikes() {
         ("<<\"SQL\"", "SQL"),
         ("<<'SQL'", "SQL"),
     ] {
-        let src = format!(
-            "@ruby {{ x = {opener}\n  SELECT }} FROM t\nSQLx\n{terminator}\nputs x }}"
-        );
+        let src =
+            format!("@ruby {{ x = {opener}\n  SELECT }} FROM t\nSQLx\n{terminator}\nputs x }}");
         assert_end(&src, &HeredocScanner::ruby());
         assert_generic_fails(&src);
     }
@@ -195,7 +195,11 @@ fn raw_hash_delimiters_bypass_every_scanner() {
     let src = "@ruby#\" html = <<~SQL\n  } literal\nSQL\n \"# tail\n";
     // No scanner is registered at all: the raw delimiter still splits.
     let doc = split(src, &ScannerRegistry::empty()).unwrap();
-    let block = doc.regions.iter().find(|r| r.kind == RegionKind::Block).unwrap();
+    let block = doc
+        .regions
+        .iter()
+        .find(|r| r.kind == RegionKind::Block)
+        .unwrap();
     assert!(block.body(src).contains("} literal"));
     assert_eq!(block.close_marker, "\"#");
     assert_eq!(render(&doc), src);
@@ -218,5 +222,8 @@ fn metadata_selects_a_builtin_and_never_executes_pack_code() {
     let src = "@ruby { x = <<~SQL\n } data\nSQL\nputs x }";
     assert!(find(src, wasm.scanner().as_ref()).is_some());
     // Brace fallback stops at the heredoc's data brace, not the real closer.
-    assert_ne!(find(src, wasm.scanner().as_ref()).map(|e| e.body_end), Some(src.rfind('}').unwrap()));
+    assert_ne!(
+        find(src, wasm.scanner().as_ref()).map(|e| e.body_end),
+        Some(src.rfind('}').unwrap())
+    );
 }
