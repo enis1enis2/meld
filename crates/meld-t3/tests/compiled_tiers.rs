@@ -28,22 +28,28 @@ fn rust_component_function_is_callable_with_typed_args() -> Result<()> {
 
 #[test]
 fn t5_toolchain_fallback_compiles_and_runs_a_region() -> Result<()> {
-    // JUDGMENT CALL 55: use PATH-resolved `sh` for both stages. The old
-    // `/bin/sh` program name does not exist on Windows, and CreateProcess
-    // cannot execute the generated shebang script directly there. Invoking
-    // `sh` explicitly keeps the same POSIX build/run semantics on every host
-    // while letting Windows find Git Bash through PATH.
+    // JUDGMENT CALL 55: use Python for both stages instead of POSIX shell.
+    // Windows has no `/bin/sh`, cannot execute a shebang script directly, and
+    // Git Bash mangles backslash paths (then crashes on the run stage). Python
+    // is already installed by every CI job, so this remains a real external
+    // build/run round trip without host-specific shell semantics.
+    #[cfg(windows)]
+    let python = "python";
+    #[cfg(not(windows))]
+    let python = "python3";
     let backend = T5Backend::new(
-        "sh",
+        python,
         vec![
-            "sh".to_string(),
+            python.to_string(),
             "-c".to_string(),
-            "cp '{src}' '{out}' && chmod +x '{out}'".to_string(),
+            "import shutil,sys; shutil.copyfile(sys.argv[1], sys.argv[2])".to_string(),
+            "{src}".to_string(),
+            "{out}".to_string(),
         ],
-        vec!["sh".to_string(), "{out}".to_string()],
+        vec![python.to_string(), "{out}".to_string()],
         PathBuf::from("."),
     );
-    let code = "#!/bin/sh\necho t5-ok\necho '@meld \"7\"'\n";
+    let code = "print('t5-ok')\nprint('@meld \"7\"')\n";
     let (stdout, value) = backend.compile_and_run(code, &[])?;
     assert_eq!(stdout, vec!["t5-ok".to_string()]);
     assert_eq!(value, Some(Value::int(7)));

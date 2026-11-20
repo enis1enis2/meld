@@ -331,13 +331,15 @@ Additional judgment calls (also inline in the affected specs/code):
     verifier. The installer test fixture refreshes checksums after copying the
     pack so the Ed25519 signature covers the exact working-tree bytes stored by
     Git, regardless of host line endings.
-55. The T5 fallback test resolves `sh` through PATH for both build and run
-    stages, and `T5Backend::fill` normalizes substituted paths to forward
-    slashes. Windows runners have no `/bin/sh`, cannot execute a shebang script
-    directly, and Git Bash consumes backslashes in `-c` scripts as escapes. The
-    previous hardcoded path was latent while earlier test binaries stopped the
-    run before this test executed. These changes preserve POSIX semantics
-    without weakening the T5 contract.
+55. The T5 fallback test uses Python for both external stages, and
+    `T5Backend::fill` normalizes substituted paths to forward slashes. Windows
+    has no `/bin/sh`, cannot execute a shebang script directly, and Git Bash
+    consumed backslash paths before crashing on the run stage. Python is
+    installed by every CI job (`python` on Windows, `python3` elsewhere), so the
+    test still performs a real build/run round trip through an external
+    toolchain without host-specific shell behavior. The previous hardcoded shell
+    path stayed latent only because
+    earlier failing test binaries stopped the run before this test executed.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
