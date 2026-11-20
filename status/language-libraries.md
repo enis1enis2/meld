@@ -5,24 +5,34 @@ Authority: `../project.md` §4, §7, §9 and §11. The normative design is in
 calls, and the verification performed. No decision from `project.md` was
 replaced. Every judgment call is also inline in the affected spec/code file.
 
+The signing layer was cut over from HMAC-SHA256 to Ed25519 in this worktree.
+Historical HMAC-only evidence below is labelled as such; the current verification
+table is authoritative for the code in this branch.
+
 ## Scope delivered
 
 - `crates/meld-lib` — shared `library.toml` manifest, installed index, project
-  lock, canonical JSON, safe paths, and `verify_pack` mirroring `packtool`.
+  lock, canonical JSON, safe paths, and `verify_pack` mirroring `packtool`,
+  now with Ed25519 trust roots, revocations and strict signature parsing.
 - `crates/meld-installer` — `meld-pack` terminal app with `install`, `remove`,
   `import`, `unimport`, `list`, `remote-list`, `verify`, `self-install` and
-  `self-uninstall`.
+  `self-uninstall`. Remote installs require a verified Ed25519 signature.
 - `crates/meld-cli` — imported-library discovery, `meld lib`, extended
   `meld doctor`, and runner rebasing so an imported worker wins over a
   same-named built-in worker.
 - All 28 bundled packs plus `tests/fixtures/pack-third-party` carry
-  `library.toml`; missing `version` fields were added, checksums regenerated,
-  and all 29 packs signed with the out-of-repo development HMAC key.
+  `library.toml`; all 29 packs now carry `signature.ed25519` signed with the
+  out-of-repo development/release key (`8ec9528bf1f0e31f`). Payloads and
+  checksums were not regenerated.
+- `packs/registry/` contains the 29-entry index, public trust roots, empty
+  revocations, mirrors and a signed registry attestation. No private key or
+  `meld-keys` directory is inside any repository.
 - `tools/gen_pack.py` emits `library.toml` for every future pack.
-  `tools/make_libraries.py` derives manifests/checksums for existing packs and
-  deliberately leaves signing as an explicit step with an external key.
-- Docs: new `spec/libraries.md`, updates to `spec/README.md`,
-  `spec/lang-pack.md`, `spec/registry.md`, and the root `README.md`.
+  `tools/make_libraries.py` derives manifests/checksums for existing packs;
+  signing with `packtool sign --private-key` remains an explicit step.
+- Docs: `spec/registry.md`, `spec/libraries.md`, `spec/lang-pack.md`,
+  `README.md`, `tests/fixtures/pack-third-party/README.md`, and the relevant
+  status notes were updated for Ed25519. Parent-owned files were untouched.
 
 ## Judgment calls
 
@@ -31,20 +41,17 @@ replaced. Every judgment call is also inline in the affected spec/code file.
    Compiling arbitrary downloaded grammar code would violate the §9 trust
    model, so no `cdylib` is loaded at discovery time.
 2. **`exports` is a stable data surface.** It must contain safe relative paths
-   that exist, but the installer copies the whole verified pack. This keeps the
-   integration promise small without adding a partial-copy failure mode.
+   that exist, but the installer copies the whole verified pack.
 3. **Shared install root, per-project lock.** `<root>/index.json` records one
    active version per id; `meld.lock` records the exact version a project uses.
    `install`/`remove` mutate bytes and import, while `import`/`unimport` edit
    only the lock.
-4. **Canonical metadata with no timestamps.** Index, lock, checksums and
-   signatures are byte-reproducible; repeated identical installs produce no
-   diff beyond intended state.
+4. **Canonical metadata with no timestamps.** Index, lock, checksums,
+   signatures and registry metadata are byte-reproducible.
 5. **Git CLI source acquisition.** `meld-pack` accepts `owner/repo`, GitHub
    URLs, `github:` slugs, and local git repositories, then uses `git init`,
-   shallow `fetch` and `checkout FETCH_HEAD` in a temporary clone. Git is already
-   a development dependency and understands credentials; pack code is never
-   executed.
+   shallow `fetch` and `checkout FETCH_HEAD` in a temporary clone. Pack code is
+   never executed.
 6. **Verify twice.** Each library is verified in the checkout and again at its
    final destination. Identical existing installs are no-ops; changed bytes at
    the same coordinates require `--force` or a version bump.
@@ -52,86 +59,71 @@ replaced. Every judgment call is also inline in the affected spec/code file.
    reported as `MISSING`; a malformed lock is a warning. Imported libraries are
    inserted after built-ins so a project lock wins, and runner paths are
    rebased pack-first.
-8. **HMAC remains local and symmetric.** Keys are at least 16 bytes,
-   distributed out of band, and never stored in a pack or repository. Strict
-   packs always require a signature file; keyed verification is optional but
-   checked against a key-id first.
+8. **Ed25519 replaces HMAC.** Public trust roots let any verifier authenticate
+   a pack without being able to forge one. Key ids are public-key hashes;
+   revocation is an explicit key-id list; rotation is additive. Remote installs
+   require `require_trusted` and read trust roots/revocations from the fetched
+   tree unless pinned externally. `--key` remains only as an actionable removal
+   error.
 
 ## Dependency re-verification
 
-crates.io was queried again on 2026-11-20 before relying on these libraries:
+crates.io was queried on 2026-11-20 before relying on these libraries:
 
 | crate | current stable | pin used | note |
 |---|---|---|---|
 | `serde` | 1.0.229 | `=1.0.229` | derive feature used by `meld-lib` |
 | `serde_json` | 1.0.154 | `=1.0.154` | canonical JSON and index/lock parsing |
 | `toml` | 1.2.1+spec-1.1.0 | `1.2` | resolves to the current stable release |
-| `sha2` | 0.11.1 | `=0.11.1` | upgraded from the earlier `0.10.9` pin |
+| `sha2` | 0.11.1 | `=0.11.1` | checksum hashing in `meld-lib` |
+| `ed25519-dalek` | 3.0.0 | `=3.0.0` | `verify_strict`; `rust-version 1.85` |
 
-`sha2 0.11.1` declares `rust-version 1.88`, which fits the workspace's
-`rust-version 1.90`. Its only use in `meld-lib` is `Sha256::digest`, and the
-RFC 4231 HMAC vector test still passes after the upgrade. `sha2 0.10.9` remains
-elsewhere in `Cargo.lock` as a transitive dependency of existing crates;
-`meld-lib` no longer uses it.
-
-The user override allowed installing the `rustfmt` component so
-`cargo fmt --all` could normalize the new Rust code. Formatting-only changes to
-unrelated crates were reverted before staging.
+`sha2 0.11.1` and `ed25519-dalek 3.0.0` fit the workspace's declared
+`rust-version 1.90`. The wasmtime 50 tree already in `Cargo.lock` declares
+`rust-version 1.97`, so full workspace tests were run with the available Rust
+1.100 toolchain; the parent-owned `Cargo.toml` was not modified. Formatting was
+limited to the touched crates with `cargo fmt -p meld-installer -p meld-cli`.
 
 ## Verification performed
 
 | Check | Result |
 |---|---|
-| `cargo test --workspace` | 28 tests passed, 0 failed |
-| `python3 -m unittest discover -s tools/tests -v` | 8 tests passed |
-| `python3 tools/fuzz_splitter.py` | PASS (1000 cases) |
-| `python3 tools/meld_check_ref.py` | 0 problems |
-| `python3 tools/highlight_ref.py` | PASS (15 mixed-language spans) |
-| `python3 tools/t2_ref.py` | 0 problems |
-| `CARGO_HOME=... python3 tools/sync_grammars.py --check` | 0 stale query files |
-| Keyed `packtool verify` over all packs + fixture | 29 packs OK |
-| `meld-pack verify packs/bash --key <dev-key>` | 14 files verified, signature verified |
+| `python3 -m unittest discover -s tools/tests -v` | 10 tests passed |
+| `cargo test -p meld-lib -p meld-installer` | 5 library + 4 installer CLI tests passed |
+| `cargo test --locked -p meld-cli` (Rust 1.100) | 4 CLI tests passed |
+| `packtool verify-registry packs/registry --verify-packs` | 29 packs verified, attestation verified |
+| `packtool verify <pack> --trust-roots ... --revocations ...` loop | 29/29 `signature: verified` |
+| `meld-pack verify packs/bash --trust-roots ... --revocations ...` | 14 files verified, signature verified |
 | `python3 packs/bash/tests/run_conformance.py` | 5 cases OK |
-| `meld check` + `meld run` for `examples/01`–`10` | all 10 passed |
-| Installer CLI test | local git install/verify/list/remove/self-install/self-uninstall passed |
-| CLI test `imported_library_overrides_a_same_named_builtin_pack` | passed |
-| Sensitive-string scan | no private key bytes or key filename in the tree; key-id appears only in expected signature/status files |
+| `meld check` + `meld run` for examples `01`–`10` | passed in earlier workspace runs; CLI test suite covers examples `08` |
+| Sensitive-string scan | no private key bytes or PEM text in tracked files; key directory remains outside all repos |
 
-The `sync_grammars.py` check must be run with the isolated `CARGO_HOME`
-(`/mnt/data/supervisor/share/.cargo-home`) because the tool defaults to a
-repository-local Cargo cache; with the correct environment it reports zero
-stale queries.
+Installer CLI coverage includes: tampered payload (stale checksums), tampered
+checksums (stale signature), signer not in trust roots, revoked signer, missing
+trust roots, malformed trust roots, missing revocations, install/verify/list/
+remove round trip, and self-install/uninstall.
 
 ## Known limits
 
-- HMAC is symmetric, so key holders can forge signatures. Public-key signing
-  and key distribution remain future work, as recorded in `spec/registry.md`.
+- Private-key custody is operational: the public trust root is in the repo, so
+  adding a key to `trust-roots.toml` is a trust decision that must be reviewed.
+  A compromised key must be added to `revocations.json` and the registry
+  re-attested.
+- Editing any registry metadata file requires re-running `packtool attest`;
+  otherwise `verify-registry` reports an attestation mismatch by design.
 - Installing another version of the same id replaces the index entry but leaves
   the old version directory on disk for explicit removal.
 - `meld-pack remote-list` scans library manifests but does not verify every
   remote pack; verification happens for the libraries selected by `install`.
 
-## Live GitHub smoke test
+## Historical live GitHub smoke test (pre-cutover, HMAC)
 
-After pushing commit `245e591` to `origin/main`:
-
-- `meld-pack remote-list --source enis1enis2/meld --ref main` listed 29
-  libraries (28 bundled packs plus the `shell` fixture), including id/version,
-  tier/level and display name.
-- `meld-pack install bash ts ... --root <temp>/libs --project <temp>/project`
-  fetched the public repository, verified and installed both libraries, and
-  wrote both ids to `meld.lock`. `ts` resolved through the TypeScript alias.
-- `meld-pack list --root <temp>/libs` reported both installs as `ok` with source
-  `github:enis1enis2/meld@main`; `MELD_ROOT=<temp>/project MELD_LIB_ROOT=<temp>/libs meld lib` showed the same installed/imported split.
-- `meld-pack verify <temp>/libs/typescript/0.1.0 --key <out-of-repo dev key>`
-  verified 8 files and reported `signature: verified (key-id 32e400239df0f52a)`.
-  The keyed check was local; the public install used checksum plus signature
-  presence, since the symmetric development key is intentionally not published.
-- `meld-pack remove sh ...` resolved the `sh` alias to `bash`, removed its files
-  and lock entry, and the follow-up `list` showed only `typescript` remaining.
-
-All live smoke-test state was kept under
-`/mnt/data/opencode/tmp/opencode/meld-github-smoke`, outside the repository.
+Before the Ed25519 cutover, commit `245e591` was pushed to `origin/main` and
+`meld-pack remote-list/install/verify/remove` were exercised against the public
+repository with the then-current symmetric key. Those results validated the git
+source path and lifecycle only; the symmetric-key assertions no longer describe
+this branch. The current branch is verified with local git repositories and
+Ed25519 keys as recorded above; no push was performed for this change.
 
 ## Follow-up: chrooted git temp-directory visibility
 
@@ -139,24 +131,13 @@ An SSH user reported `meld-pack remote-list` printing "no libraries found"
 even though the public repository had 29 manifests. Reproduced with `TMPDIR`
 unset: the sandbox `git` wrapper chroots into `/mnt/data/pkgmgr/debian-root`,
 where the host's `/tmp` is not mounted. Git initialized and populated its own
-`/tmp/meld-pack-...`, while the Rust process read the host's empty directory,
-so the catalog was silently empty.
+`/tmp/meld-pack-...`, while the Rust process read the host's empty directory.
 
 Fix:
 
-- `meld-pack` now uses `MELD_PACK_TMP` first, then `TMPDIR`, then
+- `meld-pack` uses `MELD_PACK_TMP` first, then `TMPDIR`, then
   `env::temp_dir()`, and verifies after `git checkout` that the clone's `.git`
-  is visible to the Rust process. A mismatch is an actionable error naming the
-  shared directory to use instead of an empty catalog.
-- The `meld-tryout` environment sets `TMPDIR=<tryout>/tmp`, which lives under
-  `/mnt/data` and is visible on both sides of the chroot.
-
-Verification after the fix:
-
-- With `TMPDIR` and `MELD_PACK_TMP` unset, `remote-list` now fails with
-  `temporary clone ... is not visible to meld-pack after git checkout; set TMPDIR or MELD_PACK_TMP ...`.
-- With `MELD_PACK_TMP=/mnt/data/opencode/tmp`, `remote-list` lists 29 libraries.
-- From `meld-tryout` with `TMPDIR` unset in the parent shell, sourcing the
-  updated `activate` sets `TMPDIR=<tryout>/tmp` and `remote-list` lists the
-  public libraries correctly.
-- `cargo test -p meld-installer` and `cargo build -p meld-installer` pass.
+  is visible to the Rust process.
+- Installer CLI tests set `MELD_PACK_TMP` to a directory under `/mnt/data`, and
+  all git invocations use explicit `-C` so the chrooted wrapper cannot
+  accidentally initialize a repository at the chroot root.

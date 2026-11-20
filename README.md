@@ -49,9 +49,12 @@ cargo build -p meld-installer
 ./target/debug/meld lib
 ```
 
-`install` verifies the pack data and writes the exact version to `meld.lock`;
-`remove`, `import`, `unimport`, `verify`, `self-install` and `self-uninstall`
-are also available. See `spec/libraries.md` for the full workflow.
+`install` verifies the pack data against public Ed25519 trust roots and writes
+the exact version to `meld.lock`; `remove`, `import`, `unimport`, `verify`,
+`self-install` and `self-uninstall` are also available. Remote installs read
+`packs/registry/trust-roots.toml` and `revocations.json` from the fetched tree
+by default, so an unsigned or unknown-key pack is rejected. See
+`spec/libraries.md` for the full workflow.
 
 ## Syntax at a glance
 
@@ -80,8 +83,10 @@ See `spec/syntax.md` for block, inline, fence, and raw-delimiter forms.
   LSP/tooling, registry, Lang Libraries).
 - `crates/` — Rust core, grammars, T2/T3 backends, CLI, LSP server, Lang Library
   format (`meld-lib`) and terminal installer (`meld-installer`).
-- `packs/` — 28 Lang Packs / Lang Libraries. `python`, `javascript`, `lua` are
-  L2 execution packs; `bash` is L1; the other 24 are strict L0 syntax packs.
+- `packs/` — 28 Lang Packs / Lang Libraries plus `packs/registry/` metadata
+  (index, public trust roots, revocations, mirrors and a signed attestation).
+  `python`, `javascript`, `lua` are L2 execution packs; `bash` is L1; the other
+  24 are strict L0 syntax packs.
 - `tools/` — grammar sync, pack tooling, reference harnesses.
 - `tests/` — fixtures and conformance data.
 - `research/composition/` — Phase 6 go/no-go study.
@@ -113,13 +118,22 @@ python3 tools/highlight_ref.py
 python3 tools/t2_ref.py
 python3 tools/sync_grammars.py --check
 ./target/debug/meld-pack verify packs/bash
-MELD_PACK_KEY=/path/to/private.key ./target/debug/meld-pack verify packs/bash
+./target/debug/meld-pack verify packs/bash \
+  --trust-roots packs/registry/trust-roots.toml \
+  --revocations packs/registry/revocations.json
+python3 tools/packtool.py verify-registry packs/registry \
+  --trust-roots packs/registry/trust-roots.toml \
+  --revocations packs/registry/revocations.json --verify-packs
+PYTHONPATH=/mnt/data/opencode/tmp/opencode/pydeps \
+  python3 tools/packtool.py verify packs/bash --trust-roots packs/registry/trust-roots.toml
 ./target/debug/meld-pack list
 ```
 
-The `meld-pack verify` key is optional for a checksum/presence check; strict
-packs always require a signature file, and a keyed run proves the HMAC.
-Set `MELD_LIB_ROOT` to isolate installed libraries in tests.
+`meld-pack verify` without trust roots checks checksums and signature shape;
+strict packs always require `signature.ed25519`, and passing the public trust
+roots proves the Ed25519 signature. The private key is kept outside the repo
+and is never used for verification. Set `MELD_LIB_ROOT` to isolate installed
+libraries in tests.
 
 Toolchains: Rust (with `wasm32-unknown-unknown` for regenerating the T3
 component and a C compiler for building the expanded grammar set), Python

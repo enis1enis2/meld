@@ -76,13 +76,16 @@ core. This is recorded inline in `crates/meld-grammars/Cargo.toml` and in
 - `python3 tools/t2_ref.py`: 0 problems (Node/Lua unavailable in this shell;
   Python L2 matrix passes).
 - `CARGO_HOME=… python3 tools/sync_grammars.py --check`: 0 stale query files.
-- `packtool verify … --key <dev-key>`: all 28 built-in packs and the
-  third-party fixture pass with key-id `32e400239df0f52a`.
+- `packtool verify … --trust-roots packs/registry/trust-roots.toml`: all 28
+  built-in packs and the third-party fixture report `signature: verified` with
+  Ed25519 key-id `8ec9528bf1f0e31f`. Payloads/versions in this table are
+  unchanged; only the signature format was replaced.
 - `packs/bash/tests/run_conformance.py`: initialize + 4 cases pass.
 - `meld check examples/10-more-languages.meld`: 32 regions, 0 errors.
 - `meld run examples/10-more-languages.meld`: prints `bash-ok`.
 - Examples `01`–`10` pass under `drun`; `08` still uses
   `MELD_PACKS=tests/fixtures/pack-third-party`.
 
-The HMAC development key remains outside the repository; the GitHub token was
-never written into a tracked file.
+The Ed25519 private key remains outside every repository and worktree; only its
+public key is checked in as a trust root. The GitHub token was never written
+into a tracked file.
