@@ -58,7 +58,11 @@ Inline regions are expressions and may appear inside another region's body.
 They are still split out as separate regions by the splitter; the containing
 region's source map records a hole. **JUDGMENT CALL:** inline regions do not
 nest inside other inline regions in Phase 1; a nested `⟦` is literal text. This
-keeps the splitter O(n) and is enough for Phase 2/3 examples.
+keeps the splitter O(n) and is enough for Phase 2/3 examples. **JUDGMENT CALL:**
+only `⟦` starts a region boundary; a `⟧` outside an already-open inline island
+is literal text. The inline parser finds its own closing marker, so treating a
+stray close as a boundary could produce a zero-length untagged region and an
+infinite split loop.
 
 ### 2.3 Fence switch
 

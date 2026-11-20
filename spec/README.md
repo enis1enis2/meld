@@ -219,6 +219,11 @@ Additional judgment calls (also inline in the affected specs/code):
     registry, checksums, and signatures. Stable local smoke runs are evidence
     of crash-freedom only; instrumented nightly CI remains the required
     continuous gate.
+36. A stray `⟧` outside an inline island is literal text, not a splitter
+    boundary. Only `⟦` starts an inline region; the inline parser locates its
+    own close marker. The nightly fuzzer found that the old boundary rule could
+    yield a zero-length untagged region and hang on the three-byte input
+    `⟧`; the splitter now also guarantees forward progress for untagged runs.
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare

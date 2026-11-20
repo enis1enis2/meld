@@ -260,8 +260,11 @@ fn next_marker(source: &str, from: usize) -> Option<usize> {
     let b = source.as_bytes();
     let mut i = from;
     // JUDGMENT CALL: scan on char boundaries. Offsets are bytes, but slicing a
-    // str in the middle of a multibyte character would panic; `⟦`/`⟧` are
-    // multibyte, so a byte-wise scan cannot detect them safely.
+    // str in the middle of a multibyte character would panic; `⟦` is multibyte,
+    // so a byte-wise scan cannot detect it safely. A stray `⟧` is ordinary text
+    // outside an inline region (the inline parser finds its own close marker);
+    // treating it as a boundary here would make an untagged run end at its own
+    // start and loop forever.
     while i < b.len() {
         if !source.is_char_boundary(i) {
             i += 1;
@@ -271,7 +274,7 @@ fn next_marker(source: &str, from: usize) -> Option<usize> {
         if c == '@' && block_head(source, i).is_some() {
             return Some(i);
         }
-        if c == '⟦' || c == '⟧' {
+        if c == '⟦' {
             return Some(i);
         }
         if c == '`' && line_start(b, i) && source[i..].starts_with("```") {
@@ -467,8 +470,20 @@ pub fn split(source: &str, scanners: &ScannerRegistry) -> Result<SplitDocument> 
             continue;
         }
 
-        // Untagged run up to the next marker.
-        let end = next_marker(source, i).unwrap_or(b.len());
+        // Untagged run up to the next marker. A marker must always consume at
+        // least one character; if a future scanner violates that contract,
+        // look past the current character so `split` still makes progress and
+        // the fuzzer reports a boundary bug instead of hanging.
+        let mut end = next_marker(source, i).unwrap_or(b.len());
+        if end == i {
+            let width = source[i..]
+                .chars()
+                .next()
+                .expect("char boundary")
+                .len_utf8();
+            end = next_marker(source, i + width).unwrap_or(b.len());
+        }
+        debug_assert!(end > i, "untagged run must consume at least one character");
         let body = &source[i..end];
         let (detected, confidence) = detect_confidence(body, !default_lang.is_empty());
         let lang = if detected.is_empty() {

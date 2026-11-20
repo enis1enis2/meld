@@ -125,3 +125,20 @@ fn closing_marker_inside_string_does_not_end_region() {
         .unwrap();
     assert!(block.body(src).contains("a } b"));
 }
+
+#[test]
+fn stray_inline_close_marker_is_plain_text() {
+    // Regression: the fuzzer found that a lone `⟧` was reported as the next
+    // marker from offset 0, producing a zero-length untagged region and an
+    // infinite loop. A close marker outside an inline region is literal text.
+    for src in ["⟧", "tail ⟧ more", "⟦python: 1 + 2⟧⟧"] {
+        let doc = splitter::split(src, &scanners()).unwrap();
+        assert_eq!(splitter::render(&doc), src, "render changed {src:?}");
+        let again = splitter::split(&splitter::render(&doc), &scanners()).unwrap();
+        assert_eq!(
+            again.regions.len(),
+            doc.regions.len(),
+            "region drift: {src:?}"
+        );
+    }
+}
