@@ -41,6 +41,11 @@ fuzz_target!(|data: &[u8]| {
         assert_eq!(again.method, notification.method, "notification method drift");
     }
 
+    // ErrorObject is deliberately parsed from the whole byte slice rather than
+    // `line`: an error object can be pretty-printed across multiple lines, and
+    // this also exercises serde_json's raw-byte UTF-8 validation path. The
+    // other three envelopes are NDJSON-framed, so they intentionally use only
+    // the first line. Most inputs are rejected here; only panics are bugs.
     if let Ok(error) = serde_json::from_slice::<ErrorObject>(data) {
         let encoded = serde_json::to_string(&error).expect("error serializes");
         let again: ErrorObject =

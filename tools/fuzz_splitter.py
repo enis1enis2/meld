@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""Trusted reference harness for the Meld splitter.
+"""Bounded Python reference/differential harness for the Meld splitter.
 
-JUDGMENT CALL (spec/README.md B1): Rust/cargo are absent in this environment,
-so this harness executes the same algorithm in Python to validate the splitter
-design. It is a proxy, not a substitute for `cargo test`.
+This is a fast design check, not a substitute for the Rust libFuzzer target in
+`fuzz/fuzz_targets/splitter.rs` or for `cargo test`. It reimplements the
+split/render algorithm in Python, including data-only scanner profiles, so a
+fixed set of 1000 deterministic seeds can be checked without invoking the Rust
+toolchain: every seed must render byte-for-byte unchanged and re-split with
+identical region count, language, kind and body.
+
+The cargo-fuzz targets remain the authoritative panic/sanitizer fuzzing for the
+production splitter; this harness complements them with a bounded smoke and
+reference-model check.
 """
 from __future__ import annotations
 
