@@ -1,0 +1,22 @@
+#!/usr/bin/make -f
+# Reproducible Debian build: --locked and SOURCE_DATE_EPOCH from the changelog.
+export DEB_BUILD_MAINT_OPTIONS = reproducible=+all
+export SOURCE_DATE_EPOCH := $(shell dpkg-parsechangelog -SDate | date -f - +%s)
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	@echo "cargo build uses the committed Cargo.lock"
+
+override_dh_auto_build:
+	cargo build --release --locked
+
+override_dh_auto_test:
+	cargo test --workspace --locked
+
+override_dh_auto_install:
+	dh_install
+
+override_dh_installsystemd:
+	@:

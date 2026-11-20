@@ -1,0 +1,353 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+  MELD_IDENTITY: 'https://github.com/enis1enis2/meld/.github/workflows/release.yml@refs/tags/.*'
+  MELD_ISSUER: 'https://token.actions.githubusercontent.com'
+
+jobs:
+  gates:
+    name: build and test gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Cargo gates
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo test --workspace --all-targets --locked
+          cargo doc --workspace --no-deps --locked
+      - name: Python, schema and reference gates
+        shell: bash
+        run: |
+          python3 -m unittest discover -s tools/tests -v
+          python3 tools/fuzz_splitter.py
+          python3 tools/meld_check_ref.py
+          python3 tools/highlight_ref.py
+          python3 tools/check_grammar_sources.py
+          python3 tools/check_schemas.py
+      - name: Verify every checked-in pack
+        shell: bash
+        run: |
+          status=0
+          for pack in packs/* tests/fixtures/pack-third-party; do
+            if [ -f "$pack/pack.toml" ]; then
+              python3 tools/packtool.py verify "$pack" || status=1
+            fi
+          done
+          exit "$status"
+
+  audit:
+    name: audit
+    uses: ./.github/workflows/audit.yml
+
+  msrv:
+    name: msrv
+    uses: ./.github/workflows/msrv.yml
+
+  fuzz:
+    name: fuzz
+    uses: ./.github/workflows/fuzz.yml
+
+  native-matrix:
+    name: native build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Set release variables
+        shell: bash
+        run: |
+          target=$(rustc -vV | sed -n 's/^host: //p')
+          [ -n "$target" ] || { echo 'could not determine host target' >&2; exit 1; }
+          echo "MELD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "MELD_TARGET=$target" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git -C . log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: Build and package twice for reproducibility
+        shell: bash
+        run: |
+          sh scripts/check_reproducibility.sh \
+            --version "$MELD_VERSION" \
+            --target "$MELD_TARGET" \
+            --out dist/repro
+      - name: Collect canonical archive and repro proof
+        shell: bash
+        run: |
+          mkdir -p dist/release dist/repro-artifact/package-a dist/repro-artifact/package-b
+          cp dist/repro/package-a/* dist/release/
+          cp dist/repro/package-a/* dist/repro-artifact/package-a/
+          cp dist/repro/package-b/* dist/repro-artifact/package-b/
+      - name: Verify archive install layout
+        shell: bash
+        run: |
+          archive=$(find dist/release -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) | head -n 1)
+          [ -n "$archive" ] || { echo 'no release archive found' >&2; exit 1; }
+          mkdir -p dist/install-check
+          case "$archive" in
+            *.zip)
+              python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+                "$archive" dist/install-check
+              ;;
+            *)
+              python3 -c 'import sys, tarfile; tarfile.open(sys.argv[1]).extractall(sys.argv[2])' \
+                "$archive" dist/install-check
+              ;;
+          esac
+          payload=$(find dist/install-check -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          [ -n "$payload" ] || { echo 'archive has no payload directory' >&2; exit 1; }
+          sh scripts/verify_install.sh \
+            --bin-dir "$payload/bin" \
+            --share-dir "$payload/share/meld-lang"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: archive-${{ matrix.os }}
+          path: dist/release/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: repro-${{ matrix.os }}
+          path: dist/repro-artifact/*
+          if-no-files-found: error
+
+  reproducible:
+    name: reproducible packaging
+    needs: native-matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: repro-*
+          path: dist/repro
+      - name: Compare every uploaded build pair
+        shell: bash
+        run: |
+          count=0
+          for a in dist/repro/repro-*/package-a; do
+            [ -d "$a" ] || continue
+            b=${a%/package-a}/package-b
+            sh scripts/check_reproducibility.sh --compare "$a" "$b"
+            count=$((count + 1))
+          done
+          [ "$count" -eq 3 ] || { echo "expected 3 reproducible pairs, got $count" >&2; exit 1; }
+
+  sbom:
+    name: CycloneDX SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+        with:
+          tool: cargo-sbom@0.10.0
+          fallback: cargo-install
+      - name: Populate Cargo registry metadata
+        run: cargo fetch --locked
+      - name: Set release variables
+        shell: bash
+        run: |
+          echo "MELD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git -C . log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - name: Generate normalized SBOM
+        run: |
+          sh scripts/generate_sbom.sh \
+            --version "$MELD_VERSION" \
+            --out "dist/release/meld-lang-$MELD_VERSION-sbom.cdx.json"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sbom
+          path: dist/release/*.cdx.json
+          if-no-files-found: error
+
+  sign:
+    name: sign and verify release artifacts
+    needs: [gates, audit, msrv, fuzz, native-matrix, reproducible, sbom]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+        with:
+          cosign-release: v2.5.3
+      - name: Set release variables
+        shell: bash
+        run: |
+          echo "MELD_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "GIT_COMMIT=$(git -C . rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "SOURCE_DATE_EPOCH=$(git -C . log -1 --format=%ct)" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: archive-*
+          path: dist/release
+          merge-multiple: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sbom
+          path: dist/release
+      - name: Generate checksums and release manifest
+        shell: bash
+        run: |
+          sh scripts/generate_checksums.sh \
+            --dir dist/release \
+            --out dist/release/SHA256SUMS
+          python3 scripts/generate_release_manifest.py \
+            --version "$MELD_VERSION" \
+            --artifacts-dir dist/release \
+            --checksums dist/release/SHA256SUMS \
+            --sbom "dist/release/meld-lang-$MELD_VERSION-sbom.cdx.json" \
+            --commit "$GIT_COMMIT" \
+            --source-date-epoch "$SOURCE_DATE_EPOCH" \
+            --out "dist/release/meld-lang-$MELD_VERSION.release-manifest.json"
+      - name: Keyless-sign and verify artifacts
+        shell: bash
+        run: |
+          sh scripts/sign_artifacts.sh \
+            --dir dist/release \
+            --identity-regexp "$MELD_IDENTITY" \
+            --issuer "$MELD_ISSUER"
+      - name: Verify signed release locally in CI
+        shell: bash
+        run: |
+          sh scripts/verify_artifacts.sh \
+            --dir dist/release \
+            --identity-regexp "$MELD_IDENTITY" \
+            --issuer "$MELD_ISSUER"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: signed-release
+          path: dist/release/*
+          if-no-files-found: error
+
+  provenance:
+    name: GitHub build provenance
+    needs: sign
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: signed-release
+          path: dist/release
+      # An attestation is not a certification. This workflow does not claim
+      # SLSA Level 3 or any other SLSA level.
+      - name: Attest core release files
+        id: attest
+        uses: actions/attest-build-provenance@db473fddc028af60658334401dc6fa3ffd8669fd # v2.3.0
+        with:
+          subject-path: |
+            dist/release/*.tar.gz
+            dist/release/*.zip
+            dist/release/SHA256SUMS
+            dist/release/*.cdx.json
+            dist/release/*release-manifest*.json
+      - name: Collect attestation bundle
+        shell: bash
+        run: |
+          bundle="${{ steps.attest.outputs.bundle-path }}"
+          [ -n "$bundle" ] && [ -f "$bundle" ] || {
+            echo 'provenance action did not produce a bundle' >&2
+            exit 1
+          }
+          version="${GITHUB_REF_NAME#v}"
+          cp "$bundle" "dist/release/meld-lang-$version.intoto.jsonl"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-with-provenance
+          path: dist/release/*
+          if-no-files-found: error
+
+  release:
+    name: publish GitHub release
+    needs: [gates, audit, msrv, fuzz, native-matrix, reproducible, sbom, sign, provenance]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - uses: sigstore/cosign-installer@d58896d6a1865668819e1d91763c7751a165e159 # v3.9.2
+        with:
+          cosign-release: v2.5.3
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release-with-provenance
+          path: dist/release
+      - name: Re-verify downloaded release before publishing
+        shell: bash
+        run: |
+          sh scripts/verify_artifacts.sh \
+            --dir dist/release \
+            --identity-regexp "$MELD_IDENTITY" \
+            --issuer "$MELD_ISSUER"
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          flags=(--verify-tag --title "Meld $version" --notes-file CHANGELOG.md)
+          if [[ "$version" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/release/* "${flags[@]}"

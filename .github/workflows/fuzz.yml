@@ -1,0 +1,52 @@
+name: Fuzz
+
+on:
+  push:
+    branches: [main, "production/**"]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  fuzz:
+    name: libFuzzer ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [splitter, value_decode]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Install nightly for cargo-fuzz
+        run: rustup toolchain install nightly --profile minimal
+      - uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+        with:
+          tool: cargo-fuzz@0.13.2
+          fallback: cargo-install
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - name: Create crash artifact directory
+        run: mkdir -p fuzz/artifacts
+      - name: Run bounded fuzz target
+        shell: bash
+        run: |
+          cd fuzz
+          cargo +nightly fuzz run "${{ matrix.target }}" -- \
+            -max_total_time=60 \
+            -max_len=4096 \
+            -timeout=5 \
+            -artifact_prefix=artifacts/
+      - name: Upload failing inputs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-failure-${{ matrix.target }}
+          path: fuzz/artifacts
+          if-no-files-found: ignore

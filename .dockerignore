@@ -1,0 +1,13 @@
+.git
+target
+**/target
+dist
+fuzz/artifacts
+fuzz/corpus
+fuzz/target
+**/__pycache__
+*.pyc
+result
+*.sig
+*.bundle
+*.intoto.jsonl

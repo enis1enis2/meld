@@ -1,0 +1,18 @@
+Source: meld-lang
+Section: devel
+Priority: optional
+Maintainer: Meld maintainers <meld@example.invalid>
+Build-Depends: debhelper-compat (= 13), cargo, rustc (>= 1.90)
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+
+Package: meld-lang
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Meld language-composition compiler, CLI and language server
+ Meld composes language-tagged regions inside one source file. This package
+ installs the `meld`, `meld-lsp` and `meld-pack` binaries together with the
+ bundled Lang Pack data, documentation and license texts.
+ .
+ The package is named meld-lang to avoid a collision with the existing `meld`
+ diff tool. No language runtime is installed or pulled in as a dependency.

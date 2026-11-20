@@ -1,0 +1,39 @@
+{
+  "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
+  "version": "0.2.0-rc.1",
+  "description": "Meld language-composition compiler, CLI and language server",
+  "homepage": "https://github.com/enis1enis2/meld",
+  "license": "MIT OR Apache-2.0",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/enis1enis2/meld/releases/download/v0.2.0-rc.1/meld-lang-0.2.0-rc.1-x86_64-pc-windows-msvc.zip",
+      "hash": "TODO_VERIFY_SHA256",
+      "extract_dir": "meld-lang-0.2.0-rc.1-x86_64-pc-windows-msvc"
+    }
+  },
+  "bin": [
+    "bin/meld.exe",
+    "bin/meld-lsp.exe",
+    "bin/meld-pack.exe"
+  ],
+  "env": {
+    "MELD_ROOT": "$dir\\share\\meld-lang"
+  },
+  "post_install": [
+    "if (Test-Path \"$dir\\share\\doc\\meld-lang\\README.md\") { Write-Host 'meld-lang: licenses and docs are in share\\doc\\meld-lang' }"
+  ],
+  "checkver": {
+    "github": "https://github.com/enis1enis2/meld"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/enis1enis2/meld/releases/download/v$version/meld-lang-$version-x86_64-pc-windows-msvc.zip"
+      }
+    }
+  },
+  "notes": [
+    "Replace TODO_VERIFY_SHA256 with the checksum from the cosign-signed v0.2.0-rc.1 release before publishing.",
+    "MELD_ROOT points at the bundled Lang Packs; no language runtime is installed."
+  ]
+}
