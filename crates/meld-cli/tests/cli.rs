@@ -127,6 +127,76 @@ fn third_party_shell_pack_runs_without_core_changes() {
 }
 
 #[test]
+fn check_splits_a_ruby_heredoc_using_pack_metadata() {
+    let dir = temp_dir("heredoc");
+    let file = dir.join("sample.meld");
+    std::fs::write(
+        &file,
+        "#meld ruby\n@ruby { html = <<~SQL\n  SELECT } FROM t\nSQL\nputs html }\ntail\n",
+    )
+    .unwrap();
+    let output = run(&["check", file.to_str().unwrap()], None, None);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "stdout={stdout} stderr={stderr}"
+    );
+    assert!(!stderr.contains("unterminated block"), "{stderr}");
+    assert!(!stderr.contains("syntax ERROR"), "{stderr}");
+    // Correct split: one Ruby block plus one trailing untagged run. A brace
+    // fallback would close at the `}` in `SELECT } FROM t` and leave more runs.
+    assert!(stdout.contains("r0 → u1"), "{stdout}");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn fixture_pack_scanner_metadata_is_data_only() {
+    let dir = temp_dir("region-end");
+    let file = dir.join("sample.meld");
+    std::fs::write(
+        &file,
+        "#meld ruby-fixture\n@ruby-fixture { html = <<~SQL\n  SELECT } FROM t\nSQL\nputs html }\n",
+    )
+    .unwrap();
+    let fixture = root().join("tests/fixtures/pack-region-end-heredoc");
+    let output = run(&["check", file.to_str().unwrap()], None, Some(&fixture));
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // `kind = "wasm"` warns and falls back to the built-in brace scanner.
+    // The pack's script is never invoked: its marker file stays absent.
+    let bad = dir.join("wasm-pack");
+    std::fs::create_dir_all(&bad).unwrap();
+    let marker = dir.join("EXECUTED");
+    std::fs::write(
+        bad.join("pack.toml"),
+        "id = \"wasm-fixture\"\nversion = \"0.1.0\"\ntier = \"L0\"\nlevel = \"L0\"\nstrict = false\n",
+    )
+    .unwrap();
+    std::fs::write(
+        bad.join("region_end.toml"),
+        "schema = \"meld-region-end/1\"\nkind = \"wasm\"\nfallback = \"brace\"\n[options]\nmodule = \"region_end.sh\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        bad.join("region_end.sh"),
+        format!("#!/bin/sh\nprintf executed > '{}'\n", marker.display()),
+    )
+    .unwrap();
+    std::fs::write(&file, "#meld wasm-fixture\n@wasm-fixture { x = 1 }\n").unwrap();
+    let output = run(&["check", file.to_str().unwrap()], None, Some(&bad));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(stderr.contains("using brace fallback"), "{stderr}");
+    assert!(!marker.exists(), "pack region_end code was executed");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn imported_library_overrides_a_same_named_builtin_pack() {
     // JUDGMENT CALL: the project is isolated so this test never writes a lock
     // into the repository. A copy of the built-in bash pack (which supplies the
