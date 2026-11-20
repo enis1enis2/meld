@@ -61,7 +61,7 @@ Local clippy result after fixes:
 Finished `dev` profile [unoptimized + debuginfo] target(s)
 ```
 
-CI run links: pending first push of `production/baseline`.
+CI run links for the final branch are recorded in §1.2 below.
 
 ### 1.1 Production reruns (interim evidence)
 
@@ -114,11 +114,43 @@ worktree:
 | `git grep` for HMAC/private-key material | PASS: no `signature.hmac`, `hmac-sha256`, `MELD_PACK_KEY`, PEM, seed, or `meld-keys` material. |
 | `cargo deny check` after `publish = false` | PASS: `advisories ok, bans ok, licenses ok, sources ok`. |
 
-GitHub push remains blocked: the available OAuth credential has only the
-`repo` scope and GitHub rejects pushes that create or update workflow files
-without the `workflow` scope. All CI and release workflows are committed
-locally; public CI run links remain pending until a workflow-scoped credential
-or SSH deploy key is available.
+The original OAuth credential lacked the `workflow` scope and the first push
+was rejected verbatim as recorded in §5. It was replaced with a
+repository-scoped fine-grained PAT (`Contents: write`, `Workflows: write`,
+`Pull requests: write`, `Actions: read`); the successful push and triggered CI
+runs are recorded in §1.2.
+
+### 1.2 Public branch and CI runs
+
+Command: `git push origin production/security-from-baseline`
+
+```text
+To https://github.com/enis1enis2/meld.git
+ * [new branch]      production/security-from-baseline -> production/security-from-baseline
+push exit: 0
+```
+
+The credential used is a fine-grained PAT limited to `enis1enis2/meld` with
+`Contents: write`, `Workflows: write`, `Pull requests: write`, and
+`Actions: read`. The token is stored only in the git credential store outside
+the repository (`/mnt/data/supervisor/share/.git-home/.git-credentials`, mode
+`0600`) and is never committed.
+
+GitHub API
+`GET /repos/enis1enis2/meld/actions/runs?branch=production%2Fsecurity-from-baseline`
+returned `status=200`, `total_count: 5`. At the time of the check all five runs
+were `in_progress` (conclusions pending):
+
+| Run ID | Workflow | Status at check | Link |
+|---|---|---|---|
+| 44769509918 | Supply-chain audit | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509918 |
+| 44769509948 | Fuzz | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509948 |
+| 44769509968 | CI | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769509968 |
+| 44769510069 | Docs | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769510069 |
+| 44769510130 | MSRV | `in_progress` | https://github.com/enis1enis2/meld/actions/runs/44769510130 |
+
+No green result is claimed here; native platform runs must finish before §2
+platform gaps can be closed.
 
 ## 2. Security
 
@@ -263,14 +295,12 @@ Status: DONE.
 - **Test totals:** Rust workspace 102 passed / 0 failed / 1 ignored; Python 10
   tests passed. Formatter, clippy (`-D warnings`), check, tests, and docs all
   pass locally.
-- **CI run links:** pending. `git push -u origin
-  production/security-from-baseline` was attempted against
-  `https://github.com/enis1enis2/meld.git` and rejected verbatim:
+- **CI run links:** the branch was pushed successfully with a repository-scoped
+  fine-grained PAT that includes `Workflows: write`; the five triggered runs are
+  listed in §1.2. The earlier rejected attempt was verbatim:
   `! [remote rejected] production/security-from-baseline ->
   production/security-from-baseline (refusing to allow an OAuth App to create
   or update workflow '.github/workflows/audit.yml' without 'workflow' scope)`.
-  All workflows are committed locally; public run links require a
-  workflow-scoped credential or SSH deploy key.
 
 ## 6. Performance and reliability
 
@@ -344,8 +374,9 @@ privileged Linux namespace/cgroup enforcement tests (CLI fixtures here use the
 debug-only unsandboxing switch); Landlock (`ENOSYS` here) and the OCI fallback;
 full-workspace Darwin cross-build (no macOS cross C toolchain/SDK — only the
 platform-sensitive `meld-sandbox` crate was cross-checked); nightly instrumented
-fuzzing and Miri/sanitizers; and public CI run links (workflow-scope push
-blocked). These are tracked as environment/CI gaps, not as passed checks.
+fuzzing and Miri/sanitizers; and final CI conclusions (runs are triggered and
+linked in §1.2, but were still in progress at the time of this check). These
+are tracked as environment/CI gaps, not as passed checks.
 
 **Final judgment:** every gate that can be executed in this environment passes,
 and the code fails closed where a platform control cannot be attested. Meld is
