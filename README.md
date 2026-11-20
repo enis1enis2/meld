@@ -129,6 +129,12 @@ PYTHONPATH=/mnt/data/opencode/tmp/opencode/pydeps \
 ./target/debug/meld-pack list
 ```
 
+CI pins Python 3.12.9 and installs `requirements-ci.txt` with that same
+interpreter (`python -m pip install -r requirements-ci.txt`). The Rust CLI
+conformance tests import `cryptography`, so install that requirements file
+locally too before running the full suite. On hosts where the interpreter is
+named `python3`, substitute it consistently for `python` in the commands above.
+
 `meld-pack verify` without trust roots checks checksums and signature shape;
 strict packs always require `signature.ed25519`, and passing the public trust
 roots proves the Ed25519 signature. The private key is kept outside the repo

@@ -1,0 +1,3 @@
+# Exact pins for Python code exercised by CI. Keep this in sync with the
+# setup-python version in .github/workflows/ci.yml.
+cryptography==50.0.2
