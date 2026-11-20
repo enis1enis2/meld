@@ -113,4 +113,22 @@ stale queries.
 
 ## Live GitHub smoke test
 
-_Pending after the commit is pushed to `origin/main`._
+After pushing commit `245e591` to `origin/main`:
+
+- `meld-pack remote-list --source enis1enis2/meld --ref main` listed 29
+  libraries (28 bundled packs plus the `shell` fixture), including id/version,
+  tier/level and display name.
+- `meld-pack install bash ts ... --root <temp>/libs --project <temp>/project`
+  fetched the public repository, verified and installed both libraries, and
+  wrote both ids to `meld.lock`. `ts` resolved through the TypeScript alias.
+- `meld-pack list --root <temp>/libs` reported both installs as `ok` with source
+  `github:enis1enis2/meld@main`; `MELD_ROOT=<temp>/project MELD_LIB_ROOT=<temp>/libs meld lib` showed the same installed/imported split.
+- `meld-pack verify <temp>/libs/typescript/0.1.0 --key <out-of-repo dev key>`
+  verified 8 files and reported `signature: verified (key-id 32e400239df0f52a)`.
+  The keyed check was local; the public install used checksum plus signature
+  presence, since the symmetric development key is intentionally not published.
+- `meld-pack remove sh ...` resolved the `sh` alias to `bash`, removed its files
+  and lock entry, and the follow-up `list` showed only `typescript` remaining.
+
+All live smoke-test state was kept under
+`/mnt/data/opencode/tmp/opencode/meld-github-smoke`, outside the repository.
