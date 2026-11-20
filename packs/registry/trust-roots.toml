@@ -1,0 +1,7 @@
+schema = "meld-trust-roots/1"
+
+[[keys]]
+key_id = "8ec9528bf1f0e31f"
+public_key = "cf4af2da869998ad10eedf04be673ddcb52fe55e26cb62e0033188e5c1754e87"
+label = "Meld Ed25519 release key"
+created = "2026-11-20"

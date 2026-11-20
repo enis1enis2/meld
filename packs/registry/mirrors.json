@@ -1,0 +1,6 @@
+{
+  "mirrors": [
+    "github:enis1enis2/meld@main"
+  ],
+  "schema": "meld-registry-mirrors/1"
+}
