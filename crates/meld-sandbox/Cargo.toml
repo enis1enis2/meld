@@ -1,5 +1,3 @@
-[workspace]
-
 [package]
 name = "meld-sandbox"
 version = "0.1.0"
@@ -8,14 +6,15 @@ rust-version = "1.90"
 license = "MIT OR Apache-2.0"
 description = "Deny-by-default OS sandbox policy model and backends for Meld"
 
-# NOTE: this crate is a STANDALONE workspace on purpose. The parent agent wires
-# it into the root workspace after review; no root Cargo.toml/Cargo.lock changes
-# are made by this branch.
+publish = false
+
 [dependencies]
 toml = "1.0"
 thiserror = "1"
-libc = "0.2"
 serde_json = { version = "1.0.154", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 seccompiler = "0.5"

@@ -3,6 +3,7 @@ members = [
     "crates/meld-core",
     "crates/meld-value",
     "crates/meld-t2",
+    "crates/meld-sandbox",
     "crates/meld-cli",
     "crates/meld-grammars",
     "crates/meld-t3",

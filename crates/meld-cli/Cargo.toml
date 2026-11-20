@@ -16,6 +16,7 @@ meld-lib = { path = "../meld-lib" }
 meld-grammars = { path = "../meld-grammars" }
 meld-t2 = { path = "../meld-t2" }
 meld-t3 = { path = "../meld-t3" }
+meld-sandbox = { path = "../meld-sandbox" }
 meld-value = { path = "../meld-value" }
 serde_json = "1.0.154"
 toml = "1.2"
