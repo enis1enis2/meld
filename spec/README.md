@@ -161,3 +161,42 @@ new exact pin; it declares `rust-version 1.88`, compatible with this workspace's
 `Cargo.lock` records the resolved graph.
 
 Evidence and verification results are in `../status/language-libraries.md`.
+
+## Production hardening amendments (2026-11-20)
+
+`threat-model.md` is normative for the production hardening workstream. It
+records the assets, trust boundaries, adversaries, deny-by-default invariants,
+tier enforcement rules, and residual platform limitations. It does not claim
+completion; runtime evidence is tracked separately in
+`../status/production-readiness.md`.
+
+Additional judgment calls (also inline in the affected specs/code):
+
+26. Local HMAC pack signing is replaced by a hard cutover to Ed25519. A
+    symmetric dev key cannot be a public trust root; trust is anchored in
+    `packs/registry/trust-roots.toml`, rotation adds roots, revocation is
+    explicit in `revocations.json`, and registry metadata is bound by a signed
+    attestation. Private keys remain outside all repositories and CI artifacts.
+27. Untrusted region authority is an intersection
+    (`pack maximum ∩ runner constraints ∩ file default grant ∩ region grant`).
+    Grants can only narrow, unknown capabilities/traversal are hard errors, and
+    an unenforceable declared policy fails closed. T2's protocol requests are
+    not enforcement; T3 is hardened independently with no WASI.
+28. The workspace MSRV remains 1.90. Wasmtime is pinned to `=36.0.23`
+    (declared `rust-version 1.86`) instead of adopting Wasmtime 50, which
+    declares `rust-version 1.97.0`. This is a security-compatible downgrade
+    that preserves strict T3 limits without raising the supported toolchain.
+29. SGLR/SDF3/Raku-slang composition remains a NO-GO. Production parsing uses
+    pack-owned, data-only scanner profiles selected by `region_end.toml` and
+    implemented as built-in Rust algorithms. Pack `region_end.*` code is never
+    executed; raw hash delimiters remain the normative escape hatch.
+30. The first public signed release candidate is `v0.2.0-rc.1`, versions follow
+    SemVer 2.0.0, and the system package name is `meld-lang` to avoid collision
+    with the existing Meld diff tool. Binaries remain `meld`, `meld-lsp`, and
+    `meld-pack`.
+
+Dependency/toolchain versions used by these amendments were re-checked against
+official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
+`rust-version 1.85` and are not yanked; Python `cryptography 50.0.2` supports
+Python 3.9+ excluding 3.9.0/3.9.1; `wasmtime 36.0.23` declares
+`rust-version 1.86.0`, while `wasmtime 50.0.3` declares `1.97.0`.
