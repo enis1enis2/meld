@@ -126,6 +126,47 @@ fn closing_marker_inside_string_does_not_end_region() {
     assert!(block.body(src).contains("a } b"));
 }
 
+/// Exact bytes from GitHub Actions artifact `fuzz-failure-splitter`
+/// (artifact id 14649141699, crash-151c648844c8db74133fee74eaee420d9c8aabee),
+/// Fuzz run https://github.com/enis1enis2/meld/actions/runs/44774908545.
+/// The input ends in a Lua `--` comment with no following byte, which used to
+/// make `lua_long(b, i + 2)` index one past the end of the buffer.
+const DELIMITED_EOF_CRASH: &[u8] =
+    b"-e@-e@@lua{x88888$8(8888888\x00xA8+++++\xe2\x9f\xa688888#me############################################l88--";
+
+fn assert_split_round_trips(source: &str) {
+    if let Ok(doc) = splitter::split(source, &scanners()) {
+        let rendered = splitter::render(&doc);
+        assert_eq!(rendered, source, "render changed {source:?}");
+        let again = splitter::split(&rendered, &scanners()).unwrap();
+        assert_eq!(
+            again.regions.len(),
+            doc.regions.len(),
+            "region drift: {source:?}"
+        );
+    }
+}
+
+#[test]
+fn delimited_lua_comment_at_eof_does_not_panic() {
+    let source = std::str::from_utf8(DELIMITED_EOF_CRASH).unwrap();
+    assert_split_round_trips(source);
+}
+
+#[test]
+fn delimited_crash_prefixes_and_suffixes_do_not_panic() {
+    // Property-style companion: every prefix and suffix must either split with
+    // exact render/idempotence or fail closed with a typed error, never panic.
+    for n in 0..=DELIMITED_EOF_CRASH.len() {
+        // Some truncations split the embedded three-byte `⟦`; normalize those
+        // byte cuts the same way the libFuzzer target does.
+        let prefix = String::from_utf8_lossy(&DELIMITED_EOF_CRASH[..n]);
+        assert_split_round_trips(&prefix);
+        let suffix = String::from_utf8_lossy(&DELIMITED_EOF_CRASH[n..]);
+        assert_split_round_trips(&suffix);
+    }
+}
+
 #[test]
 fn stray_inline_close_marker_is_plain_text() {
     // Regression: the fuzzer found that a lone `⟧` was reported as the next

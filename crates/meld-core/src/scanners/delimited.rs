@@ -44,8 +44,12 @@ impl DelimitedScanner {
 }
 
 /// Lua `[=[ ... ]=]`: the number of `=` bytes is the close delimiter.
+/// JUDGMENT CALL 37: delimiter probes accept an index at the end of input,
+/// because a Lua `--` comment may end exactly at EOF. Bounds-checking inside
+/// the helper keeps every scan total instead of relying on each caller to
+/// prove that an offset derived from a marker is still in range.
 fn lua_long(b: &[u8], i: usize) -> Option<usize> {
-    if b[i] != b'[' {
+    if i >= b.len() || b[i] != b'[' {
         return None;
     }
     let mut j = i + 1;
@@ -69,7 +73,7 @@ fn lua_long(b: &[u8], i: usize) -> Option<usize> {
 /// SQL `$tag$ ... $tag$` (or `$$ ... $$`). JUDGMENT CALL: tags follow the
 /// PostgreSQL identifier rule so a stray `$` in arithmetic is not a opener.
 fn sql_dollar(b: &[u8], i: usize) -> Option<usize> {
-    if b[i] != b'$' {
+    if i >= b.len() || b[i] != b'$' {
         return None;
     }
     let mut j = i + 1;

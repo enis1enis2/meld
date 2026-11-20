@@ -224,6 +224,12 @@ Additional judgment calls (also inline in the affected specs/code):
     own close marker. The nightly fuzzer found that the old boundary rule could
     yield a zero-length untagged region and hang on the three-byte input
     `⟧`; the splitter now also guarantees forward progress for untagged runs.
+37. Delimiter probes are total over indices at or past the end of input. A Lua
+    `--` comment ending at EOF used to make `lua_long(b, i + 2)` read `b[len]`;
+    both Lua and SQL delimiter helpers now return `None` at EOF, so a final
+    comment is consumed by line-end handling instead of panicking. This came
+    from fuzz artifact `crash-151c648844c8db74133fee74eaee420d9c8aabee`
+    (Fuzz run 44774908545).
 
 Dependency/toolchain versions used by these amendments were re-checked against
 official sources: `ed25519-dalek 3.0.0` and `rand_core 0.10.1` both declare
