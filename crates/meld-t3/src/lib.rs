@@ -365,7 +365,10 @@ impl ScratchDir {
             let entropy = RandomState::new().hash_one((pid, seq, nanos, attempt));
             let path =
                 env::temp_dir().join(format!("meld-t5-{label}-{pid}-{seq:x}-{entropy:016x}"));
+            #[cfg(unix)]
             let mut builder = fs::DirBuilder::new();
+            #[cfg(not(unix))]
+            let builder = fs::DirBuilder::new();
             #[cfg(unix)]
             {
                 use std::os::unix::fs::DirBuilderExt;

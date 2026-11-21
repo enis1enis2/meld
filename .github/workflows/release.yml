@@ -5,7 +5,9 @@ on:
     tags:
       - "v*.*.*"
       - "!v*-*"
-      - "!v*+*"
+      # GitHub's glob grammar rejects a bare `+` here. Tags carrying build
+      # metadata still trigger the workflow but are rejected by the strict
+      # stable-SemVer gate in release-gates, so they can never publish.
 
 permissions:
   contents: read

@@ -112,6 +112,10 @@ mod tests {
     fn policy(label: &str) -> (SandboxPolicy, std::path::PathBuf) {
         let root = std::env::temp_dir().join(format!("meld-sbpl-{}-{label}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
+        // macOS exposes temp_dir through /var, while SafeRoot stores the
+        // canonical /private/var path. Compare against the same path the
+        // policy actually emits in the SBPL profile.
+        let root = std::fs::canonicalize(&root).unwrap();
         let mut policy = SandboxPolicy::deny_all("sbpl");
         policy
             .fs
