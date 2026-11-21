@@ -83,12 +83,17 @@ done
 cp "$BUILT/BUILD_INFO" "$STAGE/$PACKAGE/share/doc/meld-lang/BUILD_INFO.txt"
 
 # Portable metadata normalization: fixed mtimes for every file and directory.
+# Windows does not implement utime(follow_symlinks=False), so use it only where
+# the platform supports it; the staged tree contains no symlinks to preserve.
 python3 - "$STAGE" "$SOURCE_DATE_EPOCH" <<'PY'
 import os, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 epoch = int(sys.argv[2])
+follow = {}
+if os.utime in os.supports_follow_symlinks:
+    follow["follow_symlinks"] = False
 for path in sorted(root.rglob('*'), key=lambda p: str(p).encode()):
-    os.utime(path, (epoch, epoch), follow_symlinks=False)
+    os.utime(path, (epoch, epoch), **follow)
 os.utime(root, (epoch, epoch))
 PY
 
