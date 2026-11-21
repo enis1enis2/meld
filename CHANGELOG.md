@@ -20,15 +20,19 @@ All notable changes to Meld are documented here. Meld follows
 - Package-channel guards were tightened: Scoop uses `env_set`, Debian wording
   no longer implies a signed source package, and release docs require a real
   committed `flake.lock`.
-- No source or wire-format changes are planned for `0.2.0-rc.1`; the release
-  candidate exists to validate the release process end to end.
+- The bundled Python pack now launches through `py -3` or `python` on Windows
+  when `python3` is absent, without changing signed pack bytes. `meld doctor`
+  reports the interpreter that will actually be used.
+- Added a tuned release profile and `cargo rbuild`/`rtest`/`rcheck`/`rclippy`
+  aliases so optimized binaries are a single command away on every platform.
+- Both installers now detect and install missing language runtimes and cosign
+  by default, with `--skip-dependencies`/`-SkipDependencies` to opt out.
 
-## [0.2.0-rc.1] - planned first signed candidate
+## [0.2.0-rc.1] - 2026-11-21
 
-This is the first candidate intended to be signed with Sigstore keyless
-signing and published from CI. It is a release candidate, not a final release.
-The workspace `Cargo.toml` still declares `0.1.0`; bumping the workspace
-version requires a separate authorized change and is not done here.
+This is the first candidate signed with Sigstore keyless signing and published
+from CI. It is a release candidate, not a final release. The workspace version,
+lockfiles, notices and package metadata all report `0.2.0-rc.1`.
 
 ### Added
 
@@ -50,8 +54,8 @@ version requires a separate authorized change and is not done here.
 
 ### Notes
 
-- macOS/Windows builds, the public release upload and public signature
-  verification are CI obligations; they are not claimed to have run in the
-  environment where these assets were authored.
+- Native macOS, Windows and Linux builds, the public release upload and public
+  signature verification are performed by the release workflow, not by the
+  local dry run documented in [RELEASE.md](RELEASE.md).
 - GitHub build attestations are not a SLSA level certification; no SLSA level
   is claimed.

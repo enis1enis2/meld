@@ -2,8 +2,8 @@
 
 The first signed candidate is `v0.2.0-rc.1`. Meld follows SemVer 2.0.0
 ([SEMVER.md](SEMVER.md)). This document describes what CI does and what a human
-must verify before a tag is considered good. Nothing here claims a release has
-already been published.
+must verify before a tag is considered good. Publication is automated from `v*`
+tags after every gate below passes.
 
 ## Preconditions
 
@@ -14,9 +14,9 @@ already been published.
 3. Dependency policy files (`deny.toml`, `audit.toml`, `about.toml`) and grammar
    pins (`grammar-sources.json`) pass their checks. Any `TODO_VERIFY` value
    fails the grammar checker by design.
-4. The workspace version bump is a separate, authorized change. Until it lands,
-   the candidate tag and manifest version describe the release while Cargo
-   metadata still reports `0.1.0`; note this in release notes.
+4. The workspace version is `0.2.0-rc.1`, matching the candidate tag and the
+   release manifest. Lockfiles, third-party notices and package metadata are
+   regenerated as part of the bump; no version mismatch is shipped.
 5. There is no standard Linux aarch64 GitHub-hosted runner. `install.sh` fails
    clearly on Linux aarch64 instead of downloading a target that was never
    published. Do not hand-edit a target into the manifest or installer map.

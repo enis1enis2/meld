@@ -124,16 +124,16 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 | `log` | `0.4.35` | MIT OR Apache-2.0 | `5d15f86d12da44cd8d4ec3c73984537eb7f4cadcb9776a575a0a8a05ca11005c` |
 | `ls-types` | `0.0.6` | MIT | `896e16b8e17d8732b9efe4d5b66cb0cc162b3023a2d8122f2aea6f7f185e0a67` |
 | `mach2` | `0.4.3` | BSD-2-Clause OR MIT OR Apache-2.0 | `d640282b302c0bb0a2a8e0233ead9035e3bed871f0b7e81fe4a1ec829765db44` |
-| `meld-cli` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-core` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-grammars` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-installer` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-lib` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-lsp` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-sandbox` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-t2` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-t3` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
-| `meld-value` | `0.1.0` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-cli` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-core` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-grammars` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-installer` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-lib` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-lsp` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-sandbox` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-t2` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-t3` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
+| `meld-value` | `0.2.0-rc.1` | MIT OR Apache-2.0 | `workspace crate (no registry checksum)` |
 | `memchr` | `2.8.3` | Unlicense OR MIT | `cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98` |
 | `memfd` | `0.6.6` | MIT OR Apache-2.0 | `57804b2c9b69967f1536a56f86297e367a33b19e98852ed624b84551cdbc0d90` |
 | `mio` | `1.2.5` | MIT | `20521a903f02b0a573cd6840e9d0a5a0cc043d361fe924092cd70f8556cc9c4a` |
