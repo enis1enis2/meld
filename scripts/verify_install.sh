@@ -70,11 +70,16 @@ PAYLOAD_MANIFEST="$ROOT/scripts/release_payload.txt"
 [ -f "$PAYLOAD_MANIFEST" ] || {
     printf 'verify_install.sh: missing payload manifest %s\n' "$PAYLOAD_MANIFEST" >&2; exit 1
 }
+CR=$(printf '\r')
 while IFS= read -r payload_path || [ -n "$payload_path" ]; do
+    payload_path=${payload_path%"$CR"}
     case "$payload_path" in ''|'#'*) continue ;; esac
     doc=${payload_path##*/}
     found=no
     for dir in $DOC_DIRS; do
+        # Packaging preserves a manifest path such as docs/schema-stability.md
+        # below the doc root; accept the flat basename for top-level files too.
+        [ -f "$dir/$payload_path" ] && found=yes && break
         [ -f "$dir/$doc" ] && found=yes && break
     done
     [ "$found" = yes ] || {

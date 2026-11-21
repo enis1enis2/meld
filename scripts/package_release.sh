@@ -58,7 +58,9 @@ done
 # One shared payload manifest keeps packaging and smoke verification aligned.
 PAYLOAD_MANIFEST="$ROOT/scripts/release_payload.txt"
 [ -f "$PAYLOAD_MANIFEST" ] || { printf 'package_release.sh: missing %s\n' "$PAYLOAD_MANIFEST" >&2; exit 1; }
+CR=$(printf '\r')
 while IFS= read -r required || [ -n "$required" ]; do
+    required=${required%"$CR"}
     case "$required" in ''|'#'*) continue ;; esac
     [ -f "$ROOT/$required" ] || { printf 'package_release.sh: missing required payload %s\n' "$required" >&2; exit 1; }
 done < "$PAYLOAD_MANIFEST"
@@ -81,6 +83,7 @@ done
 cp -R "$ROOT/packs/." "$STAGE/$PACKAGE/packs/"
 cp -R "$ROOT/examples/." "$STAGE/$PACKAGE/share/meld-lang/examples/"
 while IFS= read -r doc || [ -n "$doc" ]; do
+    doc=${doc%"$CR"}
     case "$doc" in ''|'#'*) continue ;; esac
     mkdir -p "$STAGE/$PACKAGE/share/doc/meld-lang/$(dirname "$doc")"
     cp "$ROOT/$doc" "$STAGE/$PACKAGE/share/doc/meld-lang/$doc"
@@ -119,13 +122,16 @@ if fmt == 'tar.gz':
         with gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as gz:
             with tarfile.open(fileobj=gz, mode='w', format=tarfile.GNU_FORMAT) as tf:
                 for path in entries:
-                    ti = tf.gettarinfo(str(path), arcname=f'{package}/{path.relative_to(base).as_posix()}')
+                    rel = path.relative_to(base)
+                    ti = tf.gettarinfo(str(path), arcname=f'{package}/{rel.as_posix()}')
                     ti.uid = ti.gid = 0
                     ti.uname = ti.gname = ''
                     ti.mtime = epoch
-                    # Set modes explicitly: the staging umask and platform must
-                    # not leak into the archive. Only symlinks are 0755.
-                    ti.mode = 0o755 if path.is_symlink() else (0o755 if path.is_dir() else 0o644)
+                    # Modes are explicit so the staging umask and host platform
+                    # cannot leak into the archive. Files under bin/ must keep
+                    # 0755: install verification checks -x and runs the binaries.
+                    executable = rel.parts[0] == 'bin'
+                    ti.mode = 0o755 if (path.is_symlink() or path.is_dir() or executable) else 0o644
                     if path.is_symlink():
                         ti.type = tarfile.SYMTYPE
                         ti.linkname = path.readlink().as_posix()
@@ -150,10 +156,12 @@ else:
         for path in entries:
             if not path.is_file():
                 continue
-            name = f'{package}/{path.relative_to(base).as_posix()}'
+            rel = path.relative_to(base)
+            name = f'{package}/{rel.as_posix()}'
             zi = zipfile.ZipInfo(name, date_time=date_time)
-            zi.create_system = 0
-            zi.external_attr = 0o644 << 16  # explicit, umask-independent file mode
+            zi.create_system = 3  # Unix, so POSIX extractors restore the mode
+            mode = 0o755 if rel.parts[0] == 'bin' else 0o644
+            zi.external_attr = mode << 16  # explicit, umask-independent file mode
             zi.compress_type = zipfile.ZIP_DEFLATED
             with path.open('rb') as fh:
                 zf.writestr(zi, fh.read())

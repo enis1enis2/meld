@@ -4,3 +4,7 @@
 # to the committed and signed blobs on every host.
 /packs/** -text
 /tests/fixtures/pack-third-party/** -text
+
+# Shared shell-readable manifests must stay LF on Git for Windows, otherwise
+# `read` yields "README.md\r" and packaging/verification report missing files.
+/scripts/release_payload.txt text eol=lf

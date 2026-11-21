@@ -46,9 +46,9 @@ cargo sbom --help >/dev/null 2>&1 || {
 COMMIT=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || printf 'unknown')
 RAW=$(mktemp "${TMPDIR:-/tmp}/meld-sbom.XXXXXX")
 trap 'rm -f "$RAW"' EXIT HUP INT TERM
-# --locked keeps the SBOM tied to Cargo.lock instead of any incidental local
-# resolution performed by cargo-sbom.
-cargo sbom --project-directory "$ROOT" --locked --output-format "$FORMAT" > "$RAW"
+# cargo-sbom 0.10.0 has no --locked flag; CI pins resolution with
+# `cargo fetch --locked` and the committed Cargo.lock before calling this script.
+cargo sbom --project-directory "$ROOT" --output-format "$FORMAT" > "$RAW"
 
 mkdir -p "$(dirname "$OUT")"
 python3 - "$RAW" "$OUT" "$SOURCE_DATE_EPOCH" "$VERSION" "$COMMIT" <<'PY'
