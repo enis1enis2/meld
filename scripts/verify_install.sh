@@ -1,13 +1,17 @@
 #!/bin/sh
 # Smoke-test an installed Meld distribution without installing anything.
+# This is a layout/executable smoke test ONLY: it is not an integrity,
+# signature, checksum or provenance verification. Use scripts/verify_artifacts.sh
+# for release authenticity checks.
 set -eu
 
 usage() {
     cat <<'EOF'
 usage: scripts/verify_install.sh [--root PREFIX | --bin-dir DIR --share-dir DIR]
 
-Checks binaries, bundled packs, licenses and docs. MELD_PACKS is set for the
-smoke test so an install layout that keeps packs under share/ works as shipped.
+Smoke-checks binaries, bundled packs, licenses and docs. This does NOT verify
+file integrity, signatures or provenance. MELD_PACKS is set for the smoke test
+so an install layout that keeps packs under share/ works as shipped.
 No language runtime is installed, downloaded or required by this script.
 EOF
 }
@@ -61,8 +65,14 @@ printf 'verify_install.sh: PASS bundled pack data\n'
 # (share/doc/meld-lang next to share/meld-lang).
 DOC_DIRS="$SHARE_DIR/doc $SHARE_DIR/docs $SHARE_DIR/../doc/meld-lang"
 [ -n "$PREFIX" ] && DOC_DIRS="$PREFIX/share/doc/meld-lang $DOC_DIRS"
-for doc in LICENSE-APACHE LICENSE-MIT NOTICE CHANGELOG.md RELEASE.md SBOM.md \
-    SECURITY.md THIRD-PARTY-NOTICES.md; do
+# Use the same payload manifest as scripts/package_release.sh (basenames).
+PAYLOAD_MANIFEST="$ROOT/scripts/release_payload.txt"
+[ -f "$PAYLOAD_MANIFEST" ] || {
+    printf 'verify_install.sh: missing payload manifest %s\n' "$PAYLOAD_MANIFEST" >&2; exit 1
+}
+while IFS= read -r payload_path || [ -n "$payload_path" ]; do
+    case "$payload_path" in ''|'#'*) continue ;; esac
+    doc=${payload_path##*/}
     found=no
     for dir in $DOC_DIRS; do
         [ -f "$dir/$doc" ] && found=yes && break
@@ -70,11 +80,11 @@ for doc in LICENSE-APACHE LICENSE-MIT NOTICE CHANGELOG.md RELEASE.md SBOM.md \
     [ "$found" = yes ] || {
         printf 'verify_install.sh: missing documentation or license %s\n' "$doc" >&2; exit 1;
     }
-done
+done < "$PAYLOAD_MANIFEST"
 printf 'verify_install.sh: PASS licenses and documentation\n'
 
 MELD_PACKS="$PACKS${MELD_PACKS:+:$MELD_PACKS}" "$BIN_DIR/meld$ext" doctor >/dev/null
 printf 'verify_install.sh: PASS meld doctor smoke test\n'
 "$BIN_DIR/meld-pack$ext" --help >/dev/null
 printf 'verify_install.sh: PASS meld-pack help smoke test\n'
-printf 'verify_install.sh: install verification complete (no runtime was installed)\n'
+printf 'verify_install.sh: install SMOKE TEST complete (not an integrity verification; no runtime was installed)\n'

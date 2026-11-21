@@ -14,6 +14,10 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# Keep this list empty. The single reviewed exception (RUSTSEC-2025-0057) lives
+# only in .cargo/audit.toml with a hard EXPIRY of 2027-02-20; moving it here
+# would widen the exception to cargo-deny without the same deadline. See
+# tools/check_audit_expiry.py, which gates the deadline in CI.
 ignore = []
 
 [licenses]

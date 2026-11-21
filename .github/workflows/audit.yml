@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_call:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -38,5 +42,7 @@ jobs:
         run: cargo deny --all-features check
       - name: Grammar source pins
         run: python3 tools/check_grammar_sources.py
+      - name: Audit exception expiry
+        run: python3 tools/check_audit_expiry.py
       - name: Third-party notices are current
         run: python3 tools/generate_third_party_notices.py --check

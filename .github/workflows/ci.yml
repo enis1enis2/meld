@@ -62,6 +62,8 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo test -p meld-sandbox --features oci --all-targets --locked
       - name: Build docs
+        env:
+          RUSTDOCFLAGS: -D warnings
         run: cargo doc --workspace --no-deps --locked
       - name: Python, grammar, schema and reference gates
         shell: bash
@@ -72,6 +74,7 @@ jobs:
           python tools/highlight_ref.py
           python tools/check_grammar_sources.py
           python tools/check_schemas.py
+          python tools/smoke_manual_tools.py
       - name: Verify every checked-in pack
         shell: bash
         run: |
@@ -102,7 +105,7 @@ jobs:
         run: cargo clippy -p meld-sandbox --all-targets --locked --target x86_64-apple-darwin -- -D warnings
       - name: Clippy Windows x86
         run: cargo clippy -p meld-sandbox --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings
-      - name: Clippy Windows x86 (OCI feature gated out)
+      - name: Clippy Windows x86 (OCI feature enabled)
         run: cargo clippy -p meld-sandbox --features oci --all-targets --locked --target x86_64-pc-windows-msvc -- -D warnings
 
   supply-chain:
@@ -120,6 +123,8 @@ jobs:
         with:
           tool: cargo-audit@0.23.0,cargo-deny@0.22.0
           fallback: cargo-install
+      - name: Audit exception expiry
+        run: python3 tools/check_audit_expiry.py
       - name: cargo audit
         run: cargo audit --deny warnings
       - name: cargo deny

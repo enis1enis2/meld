@@ -1,0 +1,16 @@
+# Required documentation/license payload for every release archive.
+# One path per line; `#` comments and blank lines are ignored. Shared by
+# scripts/package_release.sh (source paths) and scripts/verify_install.sh
+# (checked by basename in the installed doc directory) so the two scripts
+# cannot drift apart.
+README.md
+CHANGELOG.md
+RELEASE.md
+SBOM.md
+SECURITY.md
+THIRD-PARTY-NOTICES.md
+LICENSE-APACHE
+LICENSE-MIT
+NOTICE
+docs/schema-stability.md
+docs/release-artifacts.md

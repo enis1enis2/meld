@@ -9,6 +9,7 @@ never synthesizes signature data.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import re
@@ -18,6 +19,11 @@ from pathlib import Path
 SCHEMA = "meld-release-manifest/1"
 SEMVER_SPEC = "2.0.0"
 TARGET_RE = re.compile(r"[A-Za-z0-9_-]+")
+STABLE_SEMVER_RE = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)")
+FULL_SEMVER_RE = re.compile(
+    r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+    r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?"
+)
 EXCLUDED_SUFFIXES = ('.sig', '.bundle', '.intoto.jsonl', '.sha256')
 EXCLUDED_NAMES = {'SHA256SUMS', 'SHA256SUMS.sig', 'SHA256SUMS.bundle'}
 
@@ -50,10 +56,19 @@ def is_excluded(name: str) -> bool:
 
 
 def kind_of(name: str) -> str:
+    """Classify inputs with the same rules as verify_artifacts.sh.
+
+    Only `*.cdx.json` is an SBOM here; a filename merely containing "sbom"
+    must not be promoted into the SBOM contract.
+    """
     if name.endswith('.tar.gz') or name.endswith('.zip'):
         return 'platform-archive'
-    if name.endswith('.cdx.json') or 'sbom' in name:
+    if name.endswith('.cdx.json'):
         return 'sbom'
+    if fnmatch.fnmatch(name, '*release-manifest*.json'):
+        return 'manifest'
+    if name == 'SHA256SUMS':
+        return 'checksums'
     return 'metadata'
 
 
@@ -65,6 +80,8 @@ def main() -> int:
     parser.add_argument('--commit', required=True)
     parser.add_argument('--source-date-epoch', type=int, required=True)
     parser.add_argument('--expected-target', action='append', default=[], dest='expected_targets')
+    parser.add_argument('--allow-prerelease', action='store_true',
+                        help='allow SemVer prerelease/build suffixes (release jobs must not pass this)')
     parser.add_argument('--repository', default='enis1enis2/meld')
     parser.add_argument('--out', type=Path, required=True)
     args = parser.parse_args()
@@ -73,8 +90,15 @@ def main() -> int:
     out = args.out.resolve()
     if not root.is_dir():
         raise SystemExit(f'artifacts directory does not exist: {root}')
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?", args.version):
-        raise SystemExit(f'version is not SemVer 2.0.0: {args.version}')
+    version_re = FULL_SEMVER_RE if args.allow_prerelease else STABLE_SEMVER_RE
+    if not version_re.fullmatch(args.version):
+        expected = 'SemVer 2.0.0' if args.allow_prerelease else 'stable vMAJOR.MINOR.PATCH'
+        raise SystemExit(f'version is not {expected}: {args.version}')
+    if (root / 'SHA256SUMS').exists():
+        raise SystemExit(
+            'SHA256SUMS already exists: generate the manifest BEFORE checksums; '
+            'remove the stale checksum file deliberately before regenerating'
+        )
     if args.source_date_epoch <= 0:
         raise SystemExit('source-date-epoch must be positive')
     if not args.expected_targets:
@@ -142,6 +166,7 @@ def main() -> int:
         'binaries': ['meld', 'meld-lsp', 'meld-pack'],
         'version': args.version,
         'semver_spec': SEMVER_SPEC,
+        'expected_targets': sorted(set(args.expected_targets)),
         'git_commit': args.commit,
         'source_date_epoch': args.source_date_epoch,
         'repository': args.repository,
@@ -171,7 +196,7 @@ def main() -> int:
         'verification': {
             'checksums': 'sha256sum -c --strict SHA256SUMS',
             'signatures': 'scripts/verify_artifacts.sh --dir <release-dir> --tag <tag> --issuer <issuer> [--attestation <bundle>]',
-            'install': 'scripts/verify_install.sh --root <install-prefix>',
+            'install': 'scripts/verify_install.sh --root <install-prefix> (layout smoke test only, NOT an integrity check)',
         },
     }
     out.parent.mkdir(parents=True, exist_ok=True)

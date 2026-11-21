@@ -6,6 +6,10 @@ on:
   pull_request:
   workflow_call:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -21,7 +25,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: dtolnay/rust-toolchain@547f64eaa184fd62768e02b77019e5408713ca53 # 1.90.0
+      # Same pinned action ref as ci.yml:27-29. The generic dtolnay/rust-toolchain
+      # action ref resolves the 1.90.0 input; the two workflows deliberately use
+      # one pin so an action bump cannot change only one of them.
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable (1.90.0 input)
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Check workspace on the declared MSRV
         run: cargo check --workspace --all-targets --locked

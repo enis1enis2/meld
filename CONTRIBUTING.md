@@ -54,10 +54,24 @@ for pack in packs/* tests/fixtures/pack-third-party; do
     python3 tools/packtool.py verify "$pack" --trust-roots packs/registry/trust-roots.toml --require-trusted
   fi
 done
-python3 tools/packtool.py verify-registry packs/registry --verify-packs
+python3 tools/packtool.py verify-registry packs/registry --verify-packs --gha-workflow <workflow-ref>
 ```
 
+`verify-registry --verify-packs` and `install-pack --verify-packs` share the same index metadata and Sigstore identity checks. In CI the workflow reference is the full immutable `https://github.com/<owner>/<repo>/.github/workflows/release.yml@refs/tags/<tag>` of the release; locally it is the trusted pack signing workflow. Pack signatures are bound to the pinned identity, the tag, and the exact archive digest; a pack that fails any check is rejected.
+
 Some privilege-dependent and native-platform checks are intentionally skipped locally. CI matrices and release jobs remain the source of truth for those; document any skip in the pull request.
+
+## Release verification
+
+Release artifacts are checked with `scripts/verify_artifacts.sh`, which requires an anchored `--identity-regexp` matching the exact release workflow identity and tag, and enforces Sigstore attestations. The manifest records the expected target triples, so files from other builds are rejected.
+
+Channel metadata is generated from the verified dist directory rather than written by hand. Before publishing a release, run:
+
+```sh
+python3 tools/generate_channel_metadata.py --dist-dir dist/release --version <version> --check
+```
+
+The T3 demo guest is reproducible. `tools/build_t3_guest.sh --check` verifies that the committed component matches a rebuild when the pinned `wasm32-unknown-unknown` target is installed; `python3 tools/check_t3_guest_digest.py --check` additionally checks the recorded digest. Release CI gates on both checks and fails closed on drift.
 
 ## Lang Packs and signing
 

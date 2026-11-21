@@ -20,6 +20,10 @@ Environment:
   MELD_VERSION         fallback release version
   MELD_TARGETS         fallback target list
   MELD_BUILD_DIR       fallback output root
+  MELD_ALLOW_DIRTY_VERSION=1
+                       opt in to --dirty/commit-hash suffixes in BUILD_INFO;
+                       by default the version comes from the exact tag or the
+                       latest tag, never from a dirty worktree or commit hash
 EOF
 }
 
@@ -39,7 +43,15 @@ while [ $# -gt 0 ]; do
 done
 
 if [ -z "$VERSION" ]; then
-    VERSION=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 'unknown')
+    if [ "${MELD_ALLOW_DIRTY_VERSION:-}" = "1" ]; then
+        VERSION=$(git -C "$ROOT" describe --tags --always --dirty 2>/dev/null || printf 'unknown')
+    else
+        # JUDGMENT CALL: release BUILD_INFO must not leak a local worktree
+        # state (`-dirty`) or an abbreviated commit hash. Prefer the exact tag,
+        # otherwise the latest tag; opt in explicitly if a hash is wanted.
+        VERSION=$(git -C "$ROOT" describe --tags --exact-match 2>/dev/null || \
+            git -C "$ROOT" describe --tags --abbrev=0 2>/dev/null || printf '0.0.0')
+    fi
 fi
 if [ -z "$TARGETS" ]; then
     TARGETS=$(rustc -vV | sed -n 's/^host: //p')
