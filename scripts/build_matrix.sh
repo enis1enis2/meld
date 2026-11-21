@@ -37,27 +37,45 @@ VERSION=${MELD_VERSION:-}
 TARGETS=${MELD_TARGETS:-}
 OUT=${MELD_BUILD_DIR:-$ROOT/dist/build}
 CARGO_TARGET_DIR=${MELD_CARGO_TARGET_DIR:-$ROOT/target}
+RAW_CARGO_TARGET_DIR=$CARGO_TARGET_DIR
 export CARGO_TARGET_DIR
 
 # Generated sources (notably cranelift-codegen's ISLE output) and dependency
-# panic locations embed absolute OUT_DIR / registry paths in compiled binaries.
-# Two independent release builds therefore differ in .rodata and in the ELF
-# build ID even though the source is identical. Remap local roots to stable
-# placeholders so artifacts do not depend on the checkout, target directory or
-# runner home. More specific prefixes come first: remapping is applied in order.
+# panic locations embed OUT_DIR / registry paths in compiled binaries. Cargo can
+# pass a *relative* target root (the release workflow uses dist/repro/cargo-a),
+# so remap both the original spelling and the native absolute path. Two
+# independent builds must not differ in .rodata or the ELF build ID.
 CARGO_REGISTRY_SRC=${CARGO_HOME:-$(python3 -c 'import os; print(os.path.expanduser("~/.cargo"))')}/registry/src
 if command -v cygpath >/dev/null 2>&1; then
-    # Git Bash / MSYS paths must become native Windows paths for rustc to match.
-    CARGO_TARGET_DIR=$(cygpath -w "$CARGO_TARGET_DIR")
-    ROOT=$(cygpath -w "$ROOT")
-    CARGO_REGISTRY_SRC=$(cygpath -w "$CARGO_REGISTRY_SRC")
+    # Git Bash / MSYS paths must become native absolute Windows paths for rustc.
+    CARGO_TARGET_DIR=$(cygpath -w -a "$CARGO_TARGET_DIR")
+    ROOT=$(cygpath -w -a "$ROOT")
+    CARGO_REGISTRY_SRC=$(cygpath -w -a "$CARGO_REGISTRY_SRC")
 else
     CARGO_TARGET_DIR=$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$CARGO_TARGET_DIR")
     ROOT=$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$ROOT")
     CARGO_REGISTRY_SRC=$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$CARGO_REGISTRY_SRC")
 fi
 export CARGO_TARGET_DIR
-export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$CARGO_TARGET_DIR=/meld-target --remap-path-prefix=$CARGO_REGISTRY_SRC=/meld-registry --remap-path-prefix=$ROOT=/meld"
+
+REMAP_FLAGS=
+add_remap() {
+    prefix=$1
+    replacement=$2
+    [ -n "$prefix" ] || return 0
+    case " $REMAP_FLAGS " in
+        *" --remap-path-prefix=$prefix=$replacement "*) return 0 ;;
+    esac
+    REMAP_FLAGS="${REMAP_FLAGS} --remap-path-prefix=$prefix=$replacement"
+}
+RAW_TARGET_SLASHES=$(printf '%s' "$RAW_CARGO_TARGET_DIR" | tr '/' '\')
+# Later mappings win, so list the least specific prefixes first.
+add_remap "$ROOT" /meld
+add_remap "$CARGO_REGISTRY_SRC" /meld-registry
+add_remap "$RAW_CARGO_TARGET_DIR" /meld-target
+add_remap "$RAW_TARGET_SLASHES" /meld-target
+add_remap "$CARGO_TARGET_DIR" /meld-target
+export RUSTFLAGS="${RUSTFLAGS:-}$REMAP_FLAGS"
 
 
 while [ $# -gt 0 ]; do
@@ -113,7 +131,7 @@ for target in $TARGETS; do
             CXXFLAGS=$BASE_CXXFLAGS
             ;;
         *)
-            C_PREFIX_FLAGS=" -ffile-prefix-map=$CARGO_TARGET_DIR=/meld-target -ffile-prefix-map=$CARGO_REGISTRY_SRC=/meld-registry -ffile-prefix-map=$ROOT=/meld"
+            C_PREFIX_FLAGS=" -ffile-prefix-map=$ROOT=/meld -ffile-prefix-map=$CARGO_REGISTRY_SRC=/meld-registry -ffile-prefix-map=$RAW_CARGO_TARGET_DIR=/meld-target -ffile-prefix-map=$RAW_TARGET_SLASHES=/meld-target -ffile-prefix-map=$CARGO_TARGET_DIR=/meld-target"
             CFLAGS="$BASE_CFLAGS$C_PREFIX_FLAGS"
             CXXFLAGS="$BASE_CXXFLAGS$C_PREFIX_FLAGS"
             ;;
@@ -148,13 +166,16 @@ for target in $TARGETS; do
             ;;
     esac
 
-    # Fail the release build if any local path survived compilation.
+    # Fail the release build if any local path survived compilation. MSVC's C
+    # compiler still emits registry __FILE__ strings; those are identical across
+    # the two job-local builds, so only check the path that can actually differ.
+    set -- --prefix "$ROOT" --prefix "$CARGO_TARGET_DIR" --prefix "$RAW_CARGO_TARGET_DIR"
+    case "$target" in
+        *msvc*) ;;
+        *) set -- "$@" --prefix "$CARGO_REGISTRY_SRC" ;;
+    esac
     for bin in meld meld-lsp meld-pack; do
-        python3 "$ROOT/tools/check_binary_paths.py" \
-            --prefix "$ROOT" \
-            --prefix "$CARGO_TARGET_DIR" \
-            --prefix "$CARGO_REGISTRY_SRC" \
-            "$destdir/$bin$ext"
+        python3 "$ROOT/tools/check_binary_paths.py" "$@" "$destdir/$bin$ext"
     done
 
     # Normalized metadata: no local paths, no wall-clock times, no host name.
