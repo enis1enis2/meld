@@ -114,7 +114,7 @@ if fmt == 'tar.gz':
         with gzip.GzipFile(filename='', mode='wb', fileobj=raw, mtime=0) as gz:
             with tarfile.open(fileobj=gz, mode='w', format=tarfile.GNU_FORMAT) as tf:
                 for path in entries:
-                    ti = tf.gettarinfo(str(path), arcname=str(path.relative_to(base)))
+                    ti = tf.gettarinfo(str(path), arcname=f'{package}/{path.relative_to(base).as_posix()}')
                     ti.uid = ti.gid = 0
                     ti.uname = ti.gname = ''
                     ti.mtime = epoch
