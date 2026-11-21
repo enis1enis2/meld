@@ -2,15 +2,16 @@
 
 Meld declares [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 Given `MAJOR.MINOR.PATCH`, pre-release identifiers follow `-` and build
-metadata follows `+`. The first signed candidate is `v0.2.0-rc.1`; `rc.1` is a
-pre-release identifier, so it ranks below `0.2.0`.
+metadata follows `+`, but Meld no longer uses pre-release identifiers for
+published release tags. The historical `v0.2.0-rc.5` release is published as a
+stable GitHub Release; under SemVer `0.2.0-rc.5` ranks below `0.2.0`.
 
 ## Public contract
 
 The following are part of the versioned contract:
 
 | Surface | Schema / location | Stability |
-|---|---|---|
+| --- | --- | --- |
 | CLI commands and exit codes | `meld` | see [docs/schema-stability.md](docs/schema-stability.md) |
 | Language server capabilities | `meld-lsp` | see docs/schema-stability.md |
 | Lang Pack manifest | `pack.toml` | stable in 0.2.x |
@@ -36,10 +37,9 @@ not part of the contract.
   capability.
 - **PATCH** — backward-compatible fixes, dependency pin updates that do not
   change behavior, documentation and packaging fixes.
-- **Pre-release** — `alpha`, `beta`, `rc` identifiers may change without the
-  stability guarantees above, but a candidate must not introduce a breaking
-  change silently. Changes to the contract after `rc.1` require a new candidate
-  with a higher pre-release identifier.
+- **Pre-release** — SemVer permits `alpha`, `beta` and `rc`, but Meld does not
+  publish pre-release tags. Validate candidates in branches or workflow runs;
+  do not create `-rc.N`, `-alpha`, or `-beta` tags.
 
 ## Dependency pins
 
@@ -49,6 +49,8 @@ schema or query format changes, in which case it is MAJOR.
 
 ## Tagging
 
-Release tags are `vMAJOR.MINOR.PATCH` for final releases and
-`vMAJOR.MINOR.PATCH-rc.N` for candidates. The tag must match the release
-manifest `version` field (without the leading `v`) and the signed checksums.
+Release tags are `vMAJOR.MINOR.PATCH` only. A tag containing `-`, `+`, or any
+other pre-release/build suffix is rejected by the release workflow. The tag must
+match the release manifest `version` field (without the leading `v`) and the
+signed checksums. The historical `v0.2.0-rc.5` tag is retained as published
+history, not a pattern for new releases.

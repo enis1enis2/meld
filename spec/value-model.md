@@ -6,7 +6,7 @@ below is the T2 JSON envelope; WIT is reused as the IDL per project.md §13.
 ## 1. Type set
 
 | Meld type | JSON wire form | WIT equivalent | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `null` | `null` | `option<none>` sentinel | single value |
 | `bool` | `true`/`false` | `bool` | |
 | `int` | decimal string, e.g. `"42"` | `s64`/`u64` when in range | arbitrary precision; string avoids JSON f64 loss |

@@ -24,7 +24,7 @@ claim that any control is complete.
 ## 2. Trust boundaries
 
 | Boundary | Trust given | Rationale |
-|---|---|---|
+| --- | --- | --- |
 | Rust core (`meld-core`, `meld-value`, scheduler, CLI, LSP host) | Trusted code, untrusted input | Memory-safe core; all inputs still validated and bounded. |
 | `.meld` source, including `grant(...)` and region bodies | Untrusted | Author-controlled text may be malicious or malformed. Grants may only narrow authority. |
 | Lang Pack data (`pack.toml`, `runner.toml`, queries, LSP/formatter metadata, `region_end.toml`) | Authenticated but not safe | A valid signature proves origin, not benign behavior. Pack content is data except for the explicitly declared runtime command. |
@@ -172,7 +172,7 @@ verification as a downgrade path.
 ## 5. Attack scenarios and required mitigations
 
 | Scenario | Required mitigation |
-|---|---|
+| --- | --- |
 | Ruby heredoc contains `}`; generic brace scanner ends region early | Heredoc/lexer scanner selected by pack metadata; render/idempotence tests; raw hash escape hatch. |
 | A pack adds `region_end.py` that runs shell commands | Only `region_end.toml` is parsed; executable extensions are never loaded; unknown kinds fail closed/fallback. |
 | Region declares `grant(net=all)` for a network-denied pack | Intersection rejects or drops the granted capability; effective policy remains network-denied. |

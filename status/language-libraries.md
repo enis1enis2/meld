@@ -74,7 +74,7 @@ judgment calls 26 (Ed25519), 28 (MSRV `1.90`, Wasmtime `=36.0.23`) and 45
 crates.io was queried on 2026-11-20 before relying on these libraries:
 
 | crate | current stable | pin used | note |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `serde` | 1.0.229 | `=1.0.229` | derive feature used by `meld-lib` |
 | `serde_json` | 1.0.154 | `=1.0.154` | canonical JSON and index/lock parsing |
 | `toml` | 1.2.1+spec-1.1.0 | `1.2` | resolves to the current stable release |
@@ -93,7 +93,7 @@ judgment call 28 (Wasmtime `=36.0.23`, MSRV `1.90`); final evidence is in
 ## Verification performed
 
 | Check | Result |
-|---|---|
+| --- | --- |
 | `python3 -m unittest discover -s tools/tests -v` | 10 tests passed |
 | `cargo test -p meld-lib -p meld-installer` | 5 library + 4 installer CLI tests passed |
 | `cargo test --locked -p meld-cli` (Rust 1.100; historical) | 4 CLI tests passed |
