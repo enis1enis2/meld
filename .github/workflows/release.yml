@@ -87,7 +87,11 @@ jobs:
         shell: bash
         run: |
           python3 tools/check_grammar_sources.py
-          python3 tools/check_schemas.py --release-ready
+          # Channel checksum placeholders are expected on the tagged tree: the
+          # signed archives that produce them do not exist until this tag runs.
+          # The strict --release-ready form is checked on `main` in the
+          # channel-readiness job, which gates publication.
+          python3 tools/check_schemas.py
           status=0
           for pack in packs/* tests/fixtures/pack-third-party; do
             if [ -f "$pack/pack.toml" ]; then
@@ -399,12 +403,57 @@ jobs:
           path: dist/release/*
           if-no-files-found: error
 
+  # Channel metadata cannot be filled until signed v0.2.0 artifacts exist, and
+  # signed artifacts require the stable tag. Keep publication in a second phase:
+  # the first tagged run builds/signs/attests and uploads everything, this job
+  # reports whether `main` already carries hashes matching the signed release,
+  # and the release job only runs once that is true. Nothing is published early
+  # and the tagged tree is never rewritten.
+  channel-readiness:
+    name: channel metadata readiness
+    needs: provenance
+    if: >-
+      needs.provenance.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') && !contains(github.ref_name, '+')
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-with-provenance
+          path: dist/release
+      - name: Check channel metadata on main against the signed release
+        id: check
+        shell: bash
+        run: |
+          if python3 tools/check_schemas.py --release-ready && \
+             python3 tools/generate_channel_metadata.py \
+              --dist-dir dist/release \
+              --version "${GITHUB_REF_NAME#v}" \
+              --check; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel metadata on main is not aligned with the signed release" >&2
+            echo "publication will be skipped until the signed hashes are committed to main" >&2
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
     name: publish GitHub release
-    needs: [ci, docs, release-gates, audit, msrv, fuzz, native-matrix, reproducible, sbom, sign, provenance]
+    needs: [ci, docs, release-gates, audit, msrv, fuzz, native-matrix, reproducible, sbom, sign, provenance, channel-readiness]
     if: >-
       needs.release-gates.result == 'success' &&
       needs.provenance.result == 'success' &&
+      needs.channel-readiness.outputs.ready == 'true' &&
       startsWith(github.ref, 'refs/tags/v') &&
       !contains(github.ref_name, '-') && !contains(github.ref_name, '+')
     runs-on: ubuntu-latest
@@ -438,13 +487,6 @@ jobs:
             --expected-target aarch64-apple-darwin \
             --expected-target x86_64-apple-darwin \
             --expected-target x86_64-pc-windows-msvc
-      - name: Verify channel metadata readiness
-        shell: bash
-        run: |
-          python3 tools/generate_channel_metadata.py \
-            --dist-dir dist/release \
-            --version "${GITHUB_REF_NAME#v}" \
-            --check
       - name: Extract exact changelog section
         shell: bash
         run: |

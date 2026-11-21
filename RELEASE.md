@@ -72,9 +72,19 @@ A stable `vMAJOR.MINOR.PATCH` tag triggers, in order:
     files. The published release job re-verifies artifacts and checks the
     `.intoto.jsonl` bundle with `gh attestation verify --bundle`. This is **not**
     a SLSA L3 claim; no SLSA level is asserted.
-12. **release** — `gh release create`, always stable and marked latest, with all
+12. **channel readiness** — a separate job checks `main` (not the tagged tree)
+    with `generate_channel_metadata.py --check` against the signed
+    `SHA256SUMS`. Homebrew and Scoop hashes cannot be filled before the stable
+    tag produces signed artifacts, so the first tagged run deliberately leaves
+    them as placeholders. That run builds, signs, attests and uploads everything
+    but skips publication; it never force-moves the tag or mutates the RC tags.
+13. **release** — `gh release create`, always stable and marked latest, with all
     archives, checksums, manifest, SBOM, signatures, bundles and attestations
-    attached.
+    attached. This job only runs when the channel-readiness job reports that the
+    hashes on `main` match the signed release. After the signed `SHA256SUMS` is
+    downloaded and the channel files are committed to `main`, re-running the
+    workflow on the same tag publishes the release. The archives are rebuilt
+    from the same immutable tagged tree, so their hashes do not change.
 
 ## Local dry run
 
@@ -141,10 +151,10 @@ tag-specific identity.
 - Debian: `packaging/deb/` — `dpkg-buildpackage -us -uc -b` is an unsigned source
   package build and is not part of the signed artifact set; verify upstream
   release artifacts separately.
-- Nix: `flake.nix` / `package.nix` — run `nix flake lock` and commit the real
-  `flake.lock`. No `flake.lock` is present in this worktree, so this channel is
-  a release blocker until it is generated; do not hand-write `narHash` or
-  invent lock hashes.
+- Nix: `flake.nix` / `package.nix` / `flake.lock` — the lock file was generated
+  with `nix flake lock` (nixpkgs `b6018f87da91d19d0ab4cf979885689b469cdd41`,
+  narHash `sha256-twXPFqFsrrY5r28Zh7Homgcp2gUMBgQ6WDS98Q/3xFI=`). Refresh it
+  with `nix flake lock`, never by hand-writing `narHash` or inventing hashes.
 - Docker: `Dockerfile` — built from a release tag or checkout; the image is
   outside the signed artifact set. Pinning base images by digest and using a
   reproducible exporter remain future work.
