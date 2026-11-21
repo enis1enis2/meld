@@ -1179,16 +1179,59 @@ fn cmd_repl() -> i32 {
     0
 }
 
+fn path_has_executable(paths: &std::ffi::OsStr, tool: &str, extensions: &[String]) -> bool {
+    for dir in std::env::split_paths(paths) {
+        for extension in extensions {
+            let candidate = dir.join(format!("{tool}{extension}"));
+            if !candidate.is_file() {
+                continue;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = candidate.metadata() {
+                    if metadata.permissions().mode() & 0o111 != 0 {
+                        return true;
+                    }
+                }
+                continue;
+            }
+            #[cfg(not(unix))]
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn tool_on_path(tool: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let extensions: Vec<String> = if cfg!(windows) {
+        let pathext =
+            std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+        let mut candidates = vec![String::new()];
+        candidates.extend(
+            pathext
+                .split(';')
+                .map(str::trim)
+                .filter(|ext| !ext.is_empty())
+                .map(|ext| ext.to_ascii_lowercase()),
+        );
+        candidates
+    } else {
+        vec![String::new()]
+    };
+    path_has_executable(&path, tool, &extensions)
+}
+
 fn cmd_doctor() -> i32 {
     // JUDGMENT CALL: `sh` is included because the built-in Bash pack executes
     // through it; doctor reports only, never installs (project.md §9).
     for tool in ["rustc", "cargo", "python3", "node", "lua", "sh"] {
-        let found = Command::new("sh")
-            .arg("-c")
-            .arg(format!("command -v {tool}"))
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let found = tool_on_path(tool);
         println!(
             "{tool}: {}",
             if found {
@@ -1337,4 +1380,53 @@ fn cmd_pack_new(lang: Option<&str>) -> i32 {
     let _ = std::fs::write(dir.join("pack.toml"), manifest);
     println!("created {}", dir.display());
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::path_has_executable;
+
+    #[test]
+    fn doctor_path_detection_checks_path_directly() {
+        let dir = std::env::temp_dir().join(format!("meld-doctor-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let tool = "meld-doctor-test-tool";
+        let filename = if cfg!(windows) {
+            format!("{tool}.exe")
+        } else {
+            tool.to_string()
+        };
+        let executable = dir.join(filename);
+        std::fs::write(&executable, b"").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&executable, permissions).unwrap();
+        }
+
+        let extensions = if cfg!(windows) {
+            vec![".exe".to_string()]
+        } else {
+            vec![String::new()]
+        };
+        let paths = std::env::join_paths([dir.as_os_str()]).unwrap();
+
+        assert!(path_has_executable(&paths, tool, &extensions));
+        assert!(!path_has_executable(
+            &paths,
+            "meld-doctor-noexec",
+            &extensions
+        ));
+        assert!(!path_has_executable(
+            &paths,
+            "meld-doctor-absent",
+            &extensions
+        ));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
