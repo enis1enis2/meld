@@ -107,14 +107,15 @@ try {
 
     $realBin = Join-Path $InstallDir 'lib\meld-lang\bin'
     $share = Join-Path $InstallDir 'share\meld-lang'
+    $packs = Join-Path $share 'packs'
     $doc = Join-Path $InstallDir 'share\doc\meld-lang'
     $wrapperBin = Join-Path $InstallDir 'bin'
-    foreach ($dir in @($realBin, $share, $doc, $wrapperBin)) {
+    foreach ($dir in @($realBin, $share, $packs, $doc, $wrapperBin)) {
         if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
     Copy-Item -Path (Join-Path $payload.FullName 'bin\*') -Destination $realBin -Force
-    Copy-Item -Path (Join-Path $payload.FullName 'packs\*') -Destination (Join-Path $share 'packs') -Recurse -Force
+    Copy-Item -Path (Join-Path $payload.FullName 'packs\*') -Destination $packs -Recurse -Force
     Copy-Item -Path (Join-Path $payload.FullName 'share\doc\meld-lang\*') -Destination $doc -Recurse -Force
 
     # MELD_PACKS is colon-separated in the core; Windows drive letters contain
