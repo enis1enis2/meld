@@ -1040,7 +1040,7 @@ version = "0.2.0-rc.5"
 dependencies = [
  "meld-value",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
  "tree-sitter",
 ]
@@ -1120,7 +1120,7 @@ dependencies = [
  "oci-spec",
  "seccompiler",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
  "toml 1.2.1+spec-1.1.0",
  "windows-sys 0.61.2",
 ]
@@ -1134,7 +1134,7 @@ dependencies = [
  "meld-value",
  "serde",
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1153,7 +1153,7 @@ name = "meld-value"
 version = "0.2.0-rc.5"
 dependencies = [
  "serde_json",
- "thiserror 1.0.69",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
