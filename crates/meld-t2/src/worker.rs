@@ -186,10 +186,9 @@ impl T2Backend {
         F: Fn(&str, &[Value]) -> Result<Value> + Send + Sync + 'static,
     {
         self.host_call = Some(Arc::new(callback));
-        self.host_call_policy = HostCallPolicy {
-            allow_reserved_t3: true,
-            exact: HashSet::new(),
-        };
+        // Do not clear exact entries registered before the callback arrived.
+        // Registration only unlocks the reserved T3 namespace.
+        self.host_call_policy.allow_reserved_t3 = true;
     }
 
     /// Add one exact `meld:*` name to the host-call allowlist. Returns an error
@@ -440,6 +439,19 @@ impl T2Backend {
                 if !host_call_ids.insert(callback_num) {
                     return Err(self.deny(format!("duplicate host call id {callback_num}")));
                 }
+                // Count every host call, including pre-initialization ones.
+                // Otherwise a worker could flood the host with calls that are
+                // denied but never charged against the cap.
+                if host_calls >= T2_MAX_HOST_CALLS_PER_REQUEST {
+                    let _ = self.send_host_call_response(
+                        &callback_id,
+                        Err(MeldError::SandboxDenied(
+                            "T2 host call limit exceeded".to_string(),
+                        )),
+                    );
+                    return Err(self.deny("T2 host call limit exceeded"));
+                }
+                host_calls += 1;
                 // Worker-initiated callbacks are a privilege of fully capable
                 // workers. The handshake has not assigned a level yet, so any
                 // call during initialization is denied unconditionally.
@@ -452,16 +464,6 @@ impl T2Backend {
                     );
                     continue;
                 }
-                if host_calls >= T2_MAX_HOST_CALLS_PER_REQUEST {
-                    let _ = self.send_host_call_response(
-                        &callback_id,
-                        Err(MeldError::SandboxDenied(
-                            "T2 host call limit exceeded".to_string(),
-                        )),
-                    );
-                    return Err(self.deny("T2 host call limit exceeded"));
-                }
-                host_calls += 1;
 
                 let params = msg
                     .get("params")

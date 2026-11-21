@@ -28,6 +28,7 @@ pub mod io;
 pub mod manifest;
 pub mod policy;
 pub mod process;
+pub mod sbpl;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
@@ -53,6 +54,7 @@ pub use policy::{EnforcementRequirements, Fingerprint, SandboxPolicy};
 pub use process::{
     configure_process_group, kill_process_tree, CommandSpec, ProcessTreeGuard, SpawnedProcess,
 };
+pub use sbpl::{sbpl_quote, seatbelt_profile};
 
 #[cfg(target_os = "linux")]
 pub use linux::LinuxBackend;

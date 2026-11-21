@@ -8,7 +8,9 @@ publish = false
 
 [dependencies]
 meld-core = { path = "../meld-core" }
+meld-sandbox = { path = "../meld-sandbox" }
 meld-value = { path = "../meld-value" }
+sha2 = "=0.11.1"
 # JUDGMENT CALL: wasmtime 36.0.23 is the last Component Model runtime line that
 # supports the workspace MSRV (Rust 1.90). Pin it exactly so a dependency bump
 # cannot silently raise the MSRV or change trap semantics. The compiled demo

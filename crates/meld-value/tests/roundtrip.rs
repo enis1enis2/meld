@@ -1,4 +1,4 @@
-use meld_value::{SourceStyle, Value};
+use meld_value::{SourceStyle, Value, ValueError};
 use std::collections::BTreeMap;
 
 #[test]
@@ -40,30 +40,63 @@ fn composite_roundtrip() {
 fn bigint_does_not_round_trip_through_f64() {
     let v = Value::Int("123456789012345678901234567890".to_string());
     let j = v.to_json();
-    assert!(j.is_string());
-    assert_eq!(Value::from_json(&j).unwrap(), v);
+    assert_eq!(
+        j,
+        serde_json::json!({ "$int": "123456789012345678901234567890" })
+    );
+    assert_eq!(Value::from_json_strict(&j).unwrap(), v);
 }
 
 #[test]
-fn decimal_strings_decode_as_int_for_wire_compatibility() {
-    // Pinned compatibility behaviour: `Int` and `String` share the JSON string
-    // shape, so decimal-looking strings are intentionally decoded as `Int`.
+fn tagged_ints_are_unambiguous_in_both_modes() {
+    let wire = serde_json::json!({ "$int": "123" });
+    assert_eq!(Value::from_json(&wire).unwrap(), Value::int(123));
+    assert_eq!(Value::from_json_strict(&wire).unwrap(), Value::int(123));
+    assert_eq!(
+        Value::String("123".to_string()).to_json(),
+        serde_json::json!("123")
+    );
+}
+
+#[test]
+fn decimal_strings_decode_as_int_for_wire_compatibility_only() {
+    // Old fixtures encode `Int` as a bare decimal string. The compatibility
+    // reader keeps that behaviour; strict mode refuses the ambiguous form.
     let decimal = serde_json::json!("123");
     assert_eq!(
         Value::from_json(&decimal).unwrap(),
         Value::Int("123".to_string())
     );
-    assert_eq!(Value::String("123".to_string()).to_json(), decimal);
+    assert!(matches!(
+        Value::from_json_strict(&decimal),
+        Err(ValueError::InvalidTag(_))
+    ));
     assert_eq!(
         Value::from_json(&serde_json::json!("-42")).unwrap(),
         Value::Int("-42".to_string())
     );
-    // Leading zeros are also treated as decimal strings today; changing this
-    // would alter the existing wire contract.
+    // Leading zeros are preserved by the legacy reader.
     assert_eq!(
         Value::from_json(&serde_json::json!("007")).unwrap(),
         Value::Int("007".to_string())
     );
+}
+
+#[test]
+fn reserved_dollar_keys_are_rejected() {
+    for wire in [
+        serde_json::json!({ "$bogus": 1 }),
+        serde_json::json!({ "a": 1, "$int": "2" }),
+        serde_json::json!({ "$int": "1", "$ok": 2 }),
+        serde_json::json!({ "$map": { "$secret": 1 } }),
+        serde_json::json!({ "record": { "$nested": 1 } }),
+        serde_json::json!({ "$int": "not-a-number" }),
+    ] {
+        assert!(
+            Value::from_json(&wire).is_err(),
+            "reserved-key violation must fail: {wire}"
+        );
+    }
 }
 
 #[test]

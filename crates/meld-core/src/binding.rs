@@ -25,6 +25,28 @@ pub struct Bindings {
     pub region_ids: HashSet<String>,
 }
 
+/// True only for the three-token Meld glue form `import <name> from <region>`.
+/// A native `import json` is not glue: treating it as such deletes a real
+/// dependency from the runner source (H4).
+pub(crate) fn is_glue_import(line: &str) -> bool {
+    let Some(rest) = line.trim_start().strip_prefix("import ") else {
+        return false;
+    };
+    let mut parts = rest.split_whitespace();
+    parts.next().is_some() && parts.next() == Some("from")
+}
+
+/// True for a glue line that must be stripped before the region is executed.
+pub(crate) fn is_glue_line(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed.starts_with("export ") {
+        return trimmed
+            .strip_prefix("export ")
+            .is_some_and(|r| !r.trim().is_empty());
+    }
+    is_glue_import(trimmed)
+}
+
 /// Extract glue lines. JUDGMENT CALL: glue is line-based and stripped from
 /// runner code; this keeps the host language lexer untouched.
 pub fn resolve(doc: &SplitDocument) -> Result<Bindings> {
@@ -33,6 +55,11 @@ pub fn resolve(doc: &SplitDocument) -> Result<Bindings> {
         out.region_ids.insert(r.id.clone());
         for line in r.body(&doc.source).lines() {
             let line = line.trim();
+            if !is_glue_line(line) {
+                // Native imports (`import json`, `from x import y`) are ordinary
+                // source code and must survive into the region body.
+                continue;
+            }
             if let Some(rest) = line.strip_prefix("export ") {
                 let mut parts = rest.split_whitespace();
                 let name = parts.next().unwrap_or("").to_string();
@@ -49,13 +76,23 @@ pub fn resolve(doc: &SplitDocument) -> Result<Bindings> {
             } else if let Some(rest) = line.strip_prefix("import ") {
                 let mut parts = rest.split_whitespace();
                 let name = parts.next().unwrap_or("").to_string();
-                if parts.next().filter(|p| *p == "from").is_none() {
-                    return Err(MeldError::Parse {
-                        region_id: r.id.clone(),
-                        message: "import requires 'from <region-id>'".to_string(),
-                    });
-                }
+                // `is_glue_line` already established the `from` token.
+                let _ = parts.next();
                 let source_region = parts.next().unwrap_or("").to_string();
+                if !out.region_ids.contains(&source_region) {
+                    let error = if doc.regions.iter().any(|other| other.id == source_region) {
+                        MeldError::ForwardImport {
+                            importing_region_id: r.id.clone(),
+                            source_region: source_region.clone(),
+                        }
+                    } else {
+                        MeldError::MissingRegionSource {
+                            importing_region_id: r.id.clone(),
+                            source_region: source_region.clone(),
+                        }
+                    };
+                    return Err(error);
+                }
                 out.exports
                     .iter()
                     .find(|e| e.region_id == source_region && e.bridge_name == name)
@@ -148,6 +185,24 @@ mod tests {
         }
     }
 
+    fn doc_with_bodies(bodies: &[(&str, &str)]) -> SplitDocument {
+        let mut source = String::new();
+        let mut regions = Vec::new();
+        for (id, body) in bodies {
+            let start = source.len();
+            source.push_str(body);
+            let mut item = region(id);
+            item.start = start;
+            item.end = source.len();
+            regions.push(item);
+        }
+        SplitDocument {
+            source,
+            default_lang: "python".to_string(),
+            regions,
+        }
+    }
+
     #[test]
     fn missing_source_region_has_a_precise_error() {
         let doc = SplitDocument {
@@ -174,6 +229,36 @@ mod tests {
         ));
         assert!(!matches!(error, MeldError::UnknownLang(_)));
         assert!(error.to_string().contains("no region 'ghost'"));
+    }
+
+    #[test]
+    fn native_imports_are_not_glue() {
+        let doc = doc_with_bodies(&[
+            ("producer", "export value as result\nnative = 1\n"),
+            (
+                "consumer",
+                "import json\nimport result from producer\nfrom pathlib import Path\n",
+            ),
+        ]);
+        let bindings = resolve(&doc).expect("native imports must be ignored");
+        assert_eq!(bindings.imports.len(), 1);
+        assert_eq!(bindings.imports[0].source_region, "producer");
+        assert_eq!(bindings.imports[0].bridge_name, "result");
+    }
+
+    #[test]
+    fn forward_import_is_rejected_with_a_precise_error() {
+        let doc = doc_with_bodies(&[
+            ("consumer", "import value from producer\n"),
+            ("producer", "export value\n"),
+        ]);
+        assert!(matches!(
+            resolve(&doc),
+            Err(MeldError::ForwardImport {
+                ref importing_region_id,
+                ref source_region,
+            }) if importing_region_id == "consumer" && source_region == "producer"
+        ));
     }
 
     #[test]

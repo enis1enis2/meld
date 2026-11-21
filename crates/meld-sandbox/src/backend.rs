@@ -6,6 +6,7 @@ use crate::error::{Result, SandboxError};
 use crate::policy::{EnforcementRequirements, SandboxPolicy};
 use crate::process::{CommandSpec, SpawnedProcess};
 use std::fmt;
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BackendKind {
@@ -45,17 +46,25 @@ pub struct BackendFeatures {
     pub rlimits: bool,
     pub landlock_available: bool,
     pub landlock_enforced: bool,
+    /// A real filesystem root boundary (e.g. an OCI container rootfs). A mount
+    /// namespace that merely makes mounts private is **not** root confinement:
+    /// declared paths still refer to the host filesystem.
+    pub root_confinement: bool,
     pub process_group_kill: bool,
     pub seatbelt: bool,
     pub job_object: bool,
     pub appcontainer: bool,
+    /// A backend that can actually restrict destinations by hostname (for
+    /// example a policy-aware proxy). No current backend claims this: seccomp,
+    /// Seatbelt and an empty netns can only filter protocols or deny all.
+    pub host_allowlist: bool,
 }
 
 impl BackendFeatures {
     /// Map mechanism requirements to the mechanisms that can satisfy them.
-    /// Alternatives are explicit: e.g. network denial can come from a network
-    /// namespace *or* seccomp, filesystem isolation from a mount namespace *or*
-    /// an enforced Landlock ruleset.
+    /// Alternatives are explicit. Filesystem isolation needs a real root
+    /// boundary, an enforced Landlock ruleset, Seatbelt or AppContainer; a
+    /// bare mount namespace is deliberately not accepted (C2).
     pub fn can_enforce(&self, req: &EnforcementRequirements) -> Result<()> {
         if req.network_denial
             && !(self.network_namespace || self.seccomp || self.seatbelt || self.appcontainer)
@@ -64,14 +73,20 @@ impl BackendFeatures {
                 "network denial needs netns, seccomp, Seatbelt or AppContainer".to_string(),
             ));
         }
+        if req.host_allowlist && !self.host_allowlist {
+            return Err(SandboxError::Unsupported(
+                "hostname allowlists need a backend that can enforce destination hosts; protocol bits are not a host filter"
+                    .to_string(),
+            ));
+        }
         if req.fs_isolation
-            && !(self.mount_namespace
+            && !(self.root_confinement
                 || self.landlock_enforced
                 || self.seatbelt
                 || self.appcontainer)
         {
             return Err(SandboxError::Unsupported(
-                "filesystem isolation needs mountns, enforced Landlock, Seatbelt or AppContainer"
+                "filesystem isolation needs root confinement, enforced Landlock, Seatbelt or AppContainer (a mount namespace alone is not enough)"
                     .to_string(),
             ));
         }
@@ -134,6 +149,22 @@ pub trait SandboxBackend: Send + Sync {
     fn spawn(&self, spec: &CommandSpec, policy: &SandboxPolicy) -> Result<SpawnedProcess>;
 }
 
+/// Shared backends are first-class backends. This lets hosts attach one probed
+/// backend to multiple workers without wrapping it in a bespoke adapter.
+impl<T: SandboxBackend + ?Sized> SandboxBackend for Arc<T> {
+    fn kind(&self) -> BackendKind {
+        (**self).kind()
+    }
+
+    fn probe(&self) -> BackendProbe {
+        (**self).probe()
+    }
+
+    fn spawn(&self, spec: &CommandSpec, policy: &SandboxPolicy) -> Result<SpawnedProcess> {
+        (**self).spawn(spec, policy)
+    }
+}
+
 /// Validate before doing any side effect. Shared by all backend `spawn`s.
 pub fn require_enforcement(backend: &dyn SandboxBackend, policy: &SandboxPolicy) -> Result<()> {
     policy.validate()?;
@@ -168,6 +199,52 @@ mod tests {
             features.can_enforce(&req),
             Err(SandboxError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn mount_namespace_alone_never_satisfies_filesystem_isolation() {
+        let features = BackendFeatures {
+            mount_namespace: true,
+            landlock_available: true,
+            ..Default::default()
+        };
+        let req = EnforcementRequirements {
+            fs_isolation: true,
+            ..Default::default()
+        };
+        assert!(matches!(
+            features.can_enforce(&req),
+            Err(SandboxError::Unsupported(_))
+        ));
+
+        let confined = BackendFeatures {
+            root_confinement: true,
+            ..features
+        };
+        confined.can_enforce(&req).unwrap();
+    }
+
+    #[test]
+    fn protocol_bits_never_satisfy_a_hostname_allowlist() {
+        let features = BackendFeatures {
+            seccomp: true,
+            seatbelt: true,
+            network_namespace: true,
+            ..Default::default()
+        };
+        let req = EnforcementRequirements {
+            host_allowlist: true,
+            ..Default::default()
+        };
+        assert!(matches!(
+            features.can_enforce(&req),
+            Err(SandboxError::Unsupported(_))
+        ));
+        let proxy = BackendFeatures {
+            host_allowlist: true,
+            ..features
+        };
+        proxy.can_enforce(&req).unwrap();
     }
 
     #[test]

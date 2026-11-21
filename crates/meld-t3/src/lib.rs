@@ -7,15 +7,23 @@
 //! a region to a temp file, runs a pack-declared build command, then runs the
 //! produced artifact. It never downloads or installs a toolchain.
 use meld_core::error::{MeldError, Result};
+use meld_sandbox::{
+    Access, Capability, CommandSpec, SafeRoot, SandboxBackend, SandboxError, SandboxPolicy,
+    SpawnedProcess,
+};
 use meld_value::Value;
 use serde_json::Value as Json;
+use sha2::{Digest, Sha256};
+use std::collections::hash_map::RandomState;
+use std::env;
 use std::fs;
+use std::hash::BuildHasher;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use wasmtime::component::{Component, Linker};
 use wasmtime::{
     Config, Engine, PoolingAllocationConfig, Store, StoreLimits, StoreLimitsBuilder, Trap,
@@ -37,6 +45,10 @@ const T3_HOSTCALL_FUEL: usize = 64 * 1024;
 const T3_MAX_COMPONENT_HANDLES: usize = 256;
 /// Refuse oversized binaries before JIT compilation, which is itself costly.
 const T3_MAX_COMPONENT_BYTES: usize = 16 * 1024 * 1024;
+/// SHA-256 of the committed `component/demo.component.wasm`. The release gate
+/// is enforced by [`demo`], not merely documented for CI.
+pub const DEMO_COMPONENT_SHA256: &str =
+    "1f4ad3f28b77075cded9a3c0dcf3bca5cd91a7595a57da3079bfd4104e7f30e1";
 
 /// Build the single hardened Wasmtime configuration used by every T3 call.
 ///
@@ -76,9 +88,57 @@ pub fn strict_engine() -> Engine {
     Engine::new(&strict_config()).expect("strict T3 config must be valid")
 }
 
+/// Hex-encode a digest without pulling a formatting helper into the hot path.
+fn hex_digest(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+/// Verify the committed demo bytes before they reach Wasmtime. A mismatch is a
+/// sandbox denial: this is a release/provenance gate, not a diagnostic.
+pub fn verify_demo_component_bytes(wasm: &[u8]) -> Result<()> {
+    let actual = hex_digest(&Sha256::digest(wasm));
+    if actual != DEMO_COMPONENT_SHA256 {
+        return Err(MeldError::SandboxDenied(format!(
+            "committed T3 component digest mismatch: expected {DEMO_COMPONENT_SHA256}, got {actual}"
+        )));
+    }
+    Ok(())
+}
+
+/// Classify an unstructured Wasmtime error by a small allowlist of stable
+/// keywords. Only the fixed label is returned, never any part of the diagnostic
+/// text (which may carry host paths or register dumps).
+fn wasm_error_category(error: &wasmtime::Error) -> &'static str {
+    let text = format!("{error:#}").to_ascii_lowercase();
+    if text.contains("handle") || text.contains("resource") {
+        "resource handle failure"
+    } else if text.contains("fuel") {
+        "fuel budget exhausted"
+    } else if text.contains("epoch") || text.contains("interrupt") {
+        "wall-clock deadline exceeded"
+    } else if text.contains("stack") {
+        "wasm stack limit exceeded"
+    } else if text.contains("memory") || text.contains("bounds") {
+        "wasm memory bounds violation"
+    } else if text.contains("type") {
+        "wasm type mismatch"
+    } else {
+        "wasm runtime failure"
+    }
+}
+
 /// Convert Wasmtime failures into Meld errors without leaking a raw backtrace.
 /// Resource-limit traps are sandbox denials; epoch interruption is a worker
-/// timeout; ordinary traps are reported by code only.
+/// timeout; ordinary traps are reported by code only. The raw `Display` text is
+/// deliberately discarded: Wasmtime diagnostics can contain host paths, register
+/// dumps and source snippets, none of which belong in a Meld error (T3 detail
+/// normalization).
 fn map_wasm_error(context: &str, error: wasmtime::Error) -> MeldError {
     if let Some(trap) = error.downcast_ref::<Trap>() {
         return match trap {
@@ -94,7 +154,8 @@ fn map_wasm_error(context: &str, error: wasmtime::Error) -> MeldError {
             other => MeldError::Wasm(format!("{context}: wasm trap {other:?}")),
         };
     }
-    MeldError::Wasm(format!("{context}: {error:#}"))
+    // Stable, sanitized category only. Never interpolate `error` here.
+    MeldError::Wasm(format!("{context}: {}", wasm_error_category(&error)))
 }
 
 /// The demo component's canonical export, derived from `wit/meld.wit`.
@@ -106,6 +167,10 @@ pub const MUL_EXPORT: &str = "meld:demo/ops@0.1.0#mul";
 pub struct T3Backend {
     engine: Engine,
     component: Component,
+    /// One engine epoch is shared by every store built from this engine. Without
+    /// serialization, a watchdog armed for call A can interrupt call B. The
+    /// lock spans the watchdog so no two epoch deadlines can overlap.
+    call_lock: Mutex<()>,
 }
 
 impl T3Backend {
@@ -118,7 +183,7 @@ impl T3Backend {
         }
         let engine = strict_engine();
         let component = Component::new(&engine, wasm)
-            .map_err(|e| MeldError::Wasm(format!("component decode: {e}")))?;
+            .map_err(|_| MeldError::Wasm("T3 component decode failed".to_string()))?;
         // No host functions are registered anywhere in T3. A component that
         // imports anything is therefore rejected up front rather than allowed
         // to fail late with an ambiguous linker error.
@@ -127,17 +192,23 @@ impl T3Backend {
                 "T3 component declares imports; host imports are disabled".to_string(),
             ));
         }
-        Ok(Self { engine, component })
+        Ok(Self {
+            engine,
+            component,
+            call_lock: Mutex::new(()),
+        })
     }
 
     /// Load the committed Rust demo component (see tools/build_t3_guest.sh).
     ///
-    /// PROVENANCE NOTE: `component/demo.component.wasm` is a committed binary
-    /// artifact. CI/release automation must verify its provenance (for example,
-    /// by rebuilding from `guest/` and `wit/meld.wit` and comparing a recorded
-    /// digest). This code intentionally asserts no checksum it did not verify.
+    /// PROVENANCE GATE: `component/demo.component.wasm` is a committed binary
+    /// artifact. The recorded digest is checked here on every load, so a swapped
+    /// artifact fails closed before JIT compilation even if build tooling forgets
+    /// its provenance check.
     pub fn demo() -> Result<Self> {
-        Self::from_bytes(include_bytes!("../component/demo.component.wasm"))
+        let wasm = include_bytes!("../component/demo.component.wasm");
+        verify_demo_component_bytes(wasm)?;
+        Self::from_bytes(wasm)
     }
 
     /// Start a per-call watchdog. The channel lets a fast call cancel the
@@ -159,6 +230,12 @@ impl T3Backend {
     /// Call a WIT `func(a: s64, b: s64) -> s64` export with typed arguments.
     /// Every call gets a fresh bounded store; no state leaks between calls.
     pub fn call_i64_pair(&self, export: &str, a: i64, b: i64) -> Result<i64> {
+        // Serialize the whole call, including watchdog cancellation. A poisoned
+        // lock means a previous call panicked while owning the engine; fail
+        // closed rather than sharing a possibly corrupted epoch state.
+        let _call = self.call_lock.lock().map_err(|_| {
+            MeldError::WorkerCrashed("T3 call lock poisoned by an earlier call".to_string())
+        })?;
         // JUDGMENT CALL: componentizing a WIT interface nests functions under
         // an interface instance. Resolve the two-level export index instead of
         // assuming a flat core-Wasm export name.
@@ -236,14 +313,127 @@ impl T3Backend {
 
 /// T5 toolchain fallback. Commands are argv vectors (no shell interpolation
 /// by Meld) with `{src}`, `{out}` and `{dir}` placeholders substituted.
+///
+/// JUDGMENT CALL 56: a T5 backend without an attached
+/// [`SandboxBackend`](meld_sandbox::SandboxBackend) is not a "best effort"
+/// fallback. It fails closed. The host must supply both the enforcement backend
+/// and the effective policy through [`T5Backend::with_sandbox`].
 pub struct T5Backend {
     pub lang: String,
     pub build: Vec<String>,
     pub run: Vec<String>,
     pub cwd: PathBuf,
+    sandbox: Option<Arc<dyn SandboxBackend>>,
+    policy: Option<SandboxPolicy>,
 }
 
 static T5_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Variables a pack-declared toolchain needs in order to find its compiler and
+/// runtime. `CommandSpec` clears the environment, so these are copied
+/// explicitly and then filtered again through the stage policy's allowlist.
+const T5_TOOLCHAIN_ENV_KEYS: &[&str] = &["PATH", "SystemRoot", "TEMP", "TMP", "PATHEXT", "COMSPEC"];
+
+/// Exclusive, unpredictable scratch directory with RAII cleanup. The random
+/// component comes from `RandomState`'s OS seed; `create` (never
+/// `create_dir_all`) makes collision attempts fail rather than reuse another
+/// process's directory.
+struct ScratchDir {
+    path: PathBuf,
+}
+
+impl ScratchDir {
+    fn create(lang: &str, seq: u64) -> Result<Self> {
+        let pid = std::process::id();
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        let label: String = lang
+            .chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                    ch
+                } else {
+                    '_'
+                }
+            })
+            .take(24)
+            .collect();
+        let label = if label.is_empty() { "lang" } else { &label };
+        for attempt in 0..8u64 {
+            let entropy = RandomState::new().hash_one((pid, seq, nanos, attempt));
+            let path =
+                env::temp_dir().join(format!("meld-t5-{label}-{pid}-{seq:x}-{entropy:016x}"));
+            let mut builder = fs::DirBuilder::new();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            match builder.create(&path) {
+                Ok(()) => return Ok(Self { path }),
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(MeldError::Io(error)),
+            }
+        }
+        Err(MeldError::SandboxDenied(
+            "could not create an exclusive T5 scratch directory".to_string(),
+        ))
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for ScratchDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+fn sandbox_error(stage: &str, error: SandboxError) -> MeldError {
+    MeldError::SandboxDenied(format!("T5 {stage}: {}", error.denial_message()))
+}
+
+fn canonical_or_original(path: PathBuf) -> PathBuf {
+    fs::canonicalize(&path).unwrap_or(path)
+}
+
+/// Resolve a program to an absolute path so the sandbox policy can grant exec
+/// on the real file rather than on a PATH lookup that the backend cannot see.
+fn resolve_program(program: &str, cwd: &Path) -> PathBuf {
+    let raw = Path::new(program);
+    if raw.components().count() > 1 || raw.is_absolute() {
+        let candidate = if raw.is_absolute() {
+            raw.to_path_buf()
+        } else {
+            cwd.join(raw)
+        };
+        return canonical_or_original(candidate);
+    }
+    if let Some(paths) = env::var_os("PATH") {
+        #[allow(unused_mut)] // Windows appends PATHEXT candidates.
+        let mut names = vec![raw.to_path_buf()];
+        #[cfg(windows)]
+        {
+            let extensions = env::var("PATHEXT").unwrap_or_else(|_| ".EXE;.CMD;.BAT".to_string());
+            for extension in extensions.split(';').filter(|ext| !ext.is_empty()) {
+                names.push(PathBuf::from(format!("{program}{extension}")));
+            }
+        }
+        for directory in env::split_paths(&paths) {
+            for name in &names {
+                let candidate = directory.join(name);
+                if candidate.is_file() {
+                    return canonical_or_original(candidate);
+                }
+            }
+        }
+    }
+    raw.to_path_buf()
+}
 
 impl T5Backend {
     pub fn new(
@@ -257,7 +447,32 @@ impl T5Backend {
             build,
             run,
             cwd,
+            sandbox: None,
+            policy: None,
         }
+    }
+
+    /// Attach the enforcement backend and effective policy. Every build/run
+    /// argv is then handed to `SandboxBackend::spawn` as a `CommandSpec`;
+    /// without this call [`compile_and_run`](Self::compile_and_run) denies.
+    pub fn with_sandbox<B>(mut self, backend: B, policy: SandboxPolicy) -> Self
+    where
+        B: SandboxBackend + 'static,
+    {
+        self.sandbox = Some(Arc::new(backend));
+        self.policy = Some(policy);
+        self
+    }
+
+    /// Variant for callers that need to share one backend instance.
+    pub fn with_shared_sandbox(
+        mut self,
+        backend: Arc<dyn SandboxBackend>,
+        policy: SandboxPolicy,
+    ) -> Self {
+        self.sandbox = Some(backend);
+        self.policy = Some(policy);
+        self
     }
 
     fn fill(template: &str, dir: &Path) -> String {
@@ -275,23 +490,150 @@ impl T5Backend {
             .replace("{dir}", &root)
     }
 
-    fn run_stage(program: &str, args: &[String], cwd: &Path, stage: &str) -> Result<Vec<String>> {
-        let output = Command::new(program)
-            .args(args)
-            .current_dir(cwd)
-            .output()
-            .map_err(|e| MeldError::WorkerCrashed(format!("T5 {stage} spawn: {e}")))?;
-        if !output.status.success() {
+    /// Derive the stage policy from the caller's effective policy.
+    ///
+    /// JUDGMENT CALL: the scratch directory is host-managed, not a region file
+    /// grant. A random path cannot be named in a static manifest, so T5 grants
+    /// read/write/exec only on that fresh directory and on the exact toolchain
+    /// executables. Limits, network and environment allowlists are inherited
+    /// unchanged; no other filesystem authority is added.
+    fn stage_policy(
+        base: &SandboxPolicy,
+        scratch: &Path,
+        programs: &[PathBuf],
+        seq: u64,
+    ) -> Result<SandboxPolicy> {
+        let mut policy = SandboxPolicy::deny_all(format!("{}:t5-{seq}", base.name));
+        policy.limits = base.limits;
+        policy.network = base.network.clone();
+        policy.env = base.env.clone();
+        for key in T5_TOOLCHAIN_ENV_KEYS {
+            policy.env.insert((*key).to_string());
+        }
+        policy.capabilities.allow(Capability::FsRead);
+        policy.capabilities.allow(Capability::FsWrite);
+        policy.capabilities.allow(Capability::FsExec);
+
+        let scratch_root = format!("t5-scratch-{seq}");
+        policy
+            .fs
+            .add_root(
+                SafeRoot::new(scratch_root.clone(), scratch)
+                    .map_err(|e| sandbox_error("policy", e))?,
+            )
+            .map_err(|e| sandbox_error("policy", e))?;
+        policy
+            .fs
+            .grant(&scratch_root, "/**", Access::Read)
+            .map_err(|e| sandbox_error("policy", e))?;
+        policy
+            .fs
+            .grant(&scratch_root, "/**", Access::Write)
+            .map_err(|e| sandbox_error("policy", e))?;
+        policy
+            .fs
+            .grant(&scratch_root, "/**", Access::Exec)
+            .map_err(|e| sandbox_error("policy", e))?;
+
+        let mut parents = std::collections::BTreeSet::new();
+        for (index, program) in programs.iter().enumerate() {
+            if program.starts_with(scratch) {
+                continue;
+            }
+            let parent = program.parent().unwrap_or_else(|| Path::new("/"));
+            if !parents.insert(parent.to_path_buf()) {
+                continue;
+            }
+            let name = format!("t5-tool-{seq}-{index}");
+            policy
+                .fs
+                .add_root(
+                    SafeRoot::new(name.clone(), parent).map_err(|e| sandbox_error("policy", e))?,
+                )
+                .map_err(|e| sandbox_error("policy", e))?;
+            let file = program
+                .file_name()
+                .and_then(|value| value.to_str())
+                .ok_or_else(|| {
+                    MeldError::SandboxDenied(
+                        "T5 toolchain path has no representable file name".to_string(),
+                    )
+                })?;
+            policy
+                .fs
+                .grant(&name, file, Access::Exec)
+                .map_err(|e| sandbox_error("policy", e))?;
+        }
+        policy.validate().map_err(|e| sandbox_error("policy", e))?;
+        Ok(policy)
+    }
+
+    fn spawn_stage(
+        backend: &dyn SandboxBackend,
+        policy: &SandboxPolicy,
+        cwd: &Path,
+        argv: &[String],
+        stage: &str,
+    ) -> Result<SpawnedProcess> {
+        let program = argv
+            .first()
+            .ok_or_else(|| MeldError::SandboxDenied(format!("T5 {stage} command is empty")))?;
+        let mut spec = CommandSpec::new(program, argv[1..].iter().cloned()).with_cwd(cwd);
+        for key in T5_TOOLCHAIN_ENV_KEYS {
+            if let Some(value) = env::var_os(key) {
+                spec = spec.with_env(*key, value.to_string_lossy().into_owned());
+            }
+        }
+        backend
+            .spawn(&spec, policy)
+            .map_err(|e| sandbox_error(stage, e))
+    }
+
+    /// Run one stage with bounded line reads and a bounded wait. The backend's
+    /// `SpawnedProcess` kills the whole process tree on any violation.
+    fn collect_stage(
+        backend: &dyn SandboxBackend,
+        policy: &SandboxPolicy,
+        cwd: &Path,
+        argv: &[String],
+        stage: &str,
+    ) -> Result<Vec<String>> {
+        let mut child = Self::spawn_stage(backend, policy, cwd, argv, stage)?;
+        child.close_stdin();
+        let mut lines = Vec::new();
+        loop {
+            match child.read_line() {
+                Ok(Some(line)) => lines.push(line),
+                Ok(None) => break,
+                Err(error) => {
+                    let stderr = child.drain_stderr();
+                    return Err(MeldError::SandboxDenied(format!(
+                        "T5 {stage}: {}; stderr: {}",
+                        error.denial_message(),
+                        stderr.trim()
+                    )));
+                }
+            }
+        }
+        let status = match child.wait() {
+            Ok(status) => status,
+            Err(error) => {
+                let stderr = child.drain_stderr();
+                return Err(MeldError::SandboxDenied(format!(
+                    "T5 {stage}: {}; stderr: {}",
+                    error.denial_message(),
+                    stderr.trim()
+                )));
+            }
+        };
+        if !status.success() {
+            let stderr = child.drain_stderr();
             return Err(MeldError::WorkerCrashed(format!(
-                "T5 {stage} failed ({}): {}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr)
+                "T5 {stage} failed ({status}): {}",
+                stderr.trim()
             )));
         }
-        Ok(String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect())
+        Ok(lines)
     }
 
     /// Compile and execute a region. A final stdout line beginning `@meld `
@@ -303,28 +645,57 @@ impl T5Backend {
         code: &str,
         args: &[Value],
     ) -> Result<(Vec<String>, Option<Value>)> {
+        let backend = self.sandbox.as_deref().ok_or_else(|| {
+            MeldError::SandboxDenied(
+                "T5 requires a sandbox backend; attach one with with_sandbox".to_string(),
+            )
+        })?;
+        let attached_policy = self.policy.as_ref().ok_or_else(|| {
+            MeldError::SandboxDenied("T5 requires an effective sandbox policy".to_string())
+        })?;
+
         let seq = T5_COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("meld-t5-{}-{seq}", self.lang));
-        fs::create_dir_all(&dir)?;
-        fs::write(dir.join("region.src"), code)?;
+        let scratch = ScratchDir::create(&self.lang, seq)?;
+        fs::write(scratch.path().join("region.src"), code)?;
 
-        let build_args: Vec<String> = self.build.iter().map(|a| Self::fill(a, &dir)).collect();
-        let build_prog = build_args
-            .first()
-            .cloned()
-            .ok_or_else(|| MeldError::Wasm("T5 build command is empty".to_string()))?;
-        Self::run_stage(&build_prog, &build_args[1..], &self.cwd, "build")?;
+        let mut build_args: Vec<String> = self
+            .build
+            .iter()
+            .map(|a| Self::fill(a, scratch.path()))
+            .collect();
+        let build_program = {
+            let program = build_args
+                .first()
+                .ok_or_else(|| MeldError::SandboxDenied("T5 build command is empty".to_string()))?;
+            resolve_program(program, &self.cwd)
+        };
+        build_args[0] = build_program.to_string_lossy().into_owned();
 
-        let mut run_args: Vec<String> = self.run.iter().map(|a| Self::fill(a, &dir)).collect();
+        let mut run_args: Vec<String> = self
+            .run
+            .iter()
+            .map(|a| Self::fill(a, scratch.path()))
+            .collect();
+        let run_program = {
+            let program = run_args
+                .first()
+                .ok_or_else(|| MeldError::SandboxDenied("T5 run command is empty".to_string()))?;
+            resolve_program(program, &self.cwd)
+        };
+        run_args[0] = run_program.to_string_lossy().into_owned();
         // JUDGMENT CALL: JSON arguments are passed as one trailing argv value,
         // not shell text, so quotes and spaces in strings cannot be reinterpreted.
         let wire: Vec<Json> = args.iter().map(Value::to_json).collect();
         run_args.push(serde_json::to_string(&wire).map_err(|e| MeldError::Wasm(e.to_string()))?);
-        let run_prog = run_args
-            .first()
-            .cloned()
-            .ok_or_else(|| MeldError::Wasm("T5 run command is empty".to_string()))?;
-        let stdout = Self::run_stage(&run_prog, &run_args[1..], &self.cwd, "run")?;
+
+        let policy = Self::stage_policy(
+            attached_policy,
+            scratch.path(),
+            &[build_program, run_program],
+            seq,
+        )?;
+        Self::collect_stage(backend, &policy, &self.cwd, &build_args, "build")?;
+        let stdout = Self::collect_stage(backend, &policy, &self.cwd, &run_args, "run")?;
 
         let mut value = None;
         let mut lines = stdout;

@@ -296,6 +296,64 @@ fn allowlisted_host_calls_are_resolved_and_unknown_names_are_denied() {
 }
 
 #[test]
+fn set_host_call_preserves_exact_allowlist_entries() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let script = format!(
+        "{HANDSHAKE}\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L2', 'caps': ['values', 'stdout']}}}})\n\
+         req = json.loads(sys.stdin.readline())\n\
+         emit({{'id': -1, 'method': '__host_call', 'params': {{'fn': 'meld:custom/echo', 'args': []}}}})\n\
+         response = json.loads(sys.stdin.readline())\n\
+         emit({{'id': req['id'], 'result': {{'stdout': [response['result']['value']], 'exports': []}}}})\n"
+    );
+    let mut backend = spawn(&script);
+    backend
+        .allow_host_call("meld:custom/echo")
+        .expect("exact entry before callback");
+    backend.set_host_call(|name, _| Ok(Value::String(format!("ok:{name}"))));
+    let stdout = backend
+        .run(&job("order"), &mut Bridge::default())
+        .expect("execute");
+    assert_eq!(stdout, vec!["ok:meld:custom/echo".to_string()]);
+}
+
+#[test]
+fn pre_initialization_host_calls_are_charged_to_the_cap() {
+    if !python3_available() {
+        eprintln!("skipping: python3 is unavailable");
+        return;
+    }
+    let script = format!(
+        "{HANDSHAKE}\n\
+         req = json.loads(sys.stdin.readline())\n\
+         for i in range(70):\n\
+         \x20   emit({{'id': -(i + 1), 'method': '__host_call', 'params': {{'fn': 'meld:t3/add', 'args': []}}}})\n\
+         emit({{'id': req['id'], 'result': {{'protocol': 'meld-t2/1', 'level': 'L2', 'caps': ['values', 'stdout']}}}})\n\
+         sys.stdin.readline()\n"
+    );
+    let mut backend = spawn(&script);
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    backend.set_host_call(move |_, _| {
+        observed.fetch_add(1, Ordering::SeqCst);
+        Ok(Value::int(1))
+    });
+
+    let error = backend.ensure_initialized("python").unwrap_err();
+    assert!(matches!(error, MeldError::SandboxDenied(_)), "{error:?}");
+    assert!(error.to_string().contains("host call limit"));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "pre-init calls must never reach the callback"
+    );
+}
+
+#[test]
 fn host_call_timeout_terminates_worker() {
     if !python3_available() {
         eprintln!("skipping: python3 is unavailable");
