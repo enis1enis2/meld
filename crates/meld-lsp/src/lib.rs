@@ -17,39 +17,39 @@ use std::path::PathBuf;
 /// Canonicalized exactly like the CLI so policy paths, pack rebasing and
 /// `file:` URIs do not depend on a caller's `..` segments or symlinks.
 pub fn project_root() -> PathBuf {
-    let canonical = |path: PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
-    if let Ok(root) = std::env::var("MELD_ROOT") {
-        return canonical(PathBuf::from(root));
-    }
-    std::env::current_dir()
-        .ok()
-        .and_then(|c| {
-            c.ancestors()
-                .find(|p| p.join("project.md").is_file() || p.join("Cargo.toml").is_file())
-                .map(PathBuf::from)
-        })
-        .map(canonical)
-        .unwrap_or_else(|| canonical(PathBuf::from(".")))
+    meld_lib::workspace_root(None)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Mutex;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     static ROOT_ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn meld_root_is_canonicalized_like_the_cli() {
         let _guard = ROOT_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let root = std::env::current_dir().unwrap().join("..");
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("meld-lsp-root-{}-{nanos}", std::process::id()));
+        std::fs::create_dir_all(root.join("sub")).unwrap();
+        std::fs::write(root.join("project.md"), "# test\n").unwrap();
         let expected = std::fs::canonicalize(&root).unwrap();
         let previous = std::env::var_os("MELD_ROOT");
-        std::env::set_var("MELD_ROOT", &root);
-        assert_eq!(project_root(), expected);
+        // Include a `..` segment to verify the shared resolver normalizes and
+        // canonicalizes MELD_ROOT instead of returning the raw value.
+        std::env::set_var("MELD_ROOT", root.join("sub/.."));
+        let actual = project_root();
         match previous {
             Some(value) => std::env::set_var("MELD_ROOT", value),
             None => std::env::remove_var("MELD_ROOT"),
         }
+        std::fs::remove_dir_all(&root).unwrap();
+        assert_eq!(actual, expected);
     }
 }

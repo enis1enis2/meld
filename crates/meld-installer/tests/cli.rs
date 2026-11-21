@@ -107,15 +107,41 @@ fn packtool(args: &[&str]) -> Output {
 }
 
 fn installer(tmp: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_meld-pack"))
+    command_install(tmp, args).output().expect("run meld-pack")
+}
+
+fn remote_install(repo: &Repo, tmp: &Path, root: &Path, project: &Path) -> Output {
+    command_install(
+        tmp,
+        &[
+            "install",
+            "shell",
+            "--source",
+            &repo.source(),
+            "--root",
+            &root.to_string_lossy(),
+            "--project",
+            &project.to_string_lossy(),
+        ],
+    )
+    .env("MELD_TRUST_ROOTS", &repo.trust_roots)
+    .env("MELD_REVOCATIONS", &repo.revocations)
+    .output()
+    .expect("run meld-pack")
+}
+
+fn command_install(tmp: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_meld-pack"));
+    command
         .args(args)
         .env("MELD_PACK_TMP", tmp)
         .env_remove("MELD_PACK_SOURCE")
         .env_remove("MELD_PACK_REF")
         .env_remove("MELD_PACK_TRUST_ROOTS")
         .env_remove("MELD_PACK_REVOCATIONS")
-        .output()
-        .expect("run meld-pack")
+        .env_remove("MELD_TRUST_ROOTS")
+        .env_remove("MELD_REVOCATIONS");
+    command
 }
 
 fn key_pair(base: &Path, name: &str) -> (PathBuf, PathBuf) {
@@ -258,6 +284,36 @@ fn make_repo(base: &Path, name: &str, private: &Path, public: &Path) -> Repo {
     }
 }
 
+/// Publish the fixture into the registry and sign its canonical metadata so a
+/// caller can opt into tree-supplied roots (H7). The attestation is committed
+/// with the rest of the test repository.
+fn attest_repo(repo: &Repo, private: &Path) {
+    let registry = repo.path.join("packs/registry");
+    let registry_arg = registry.to_string_lossy();
+    let publish = packtool(&[
+        "publish",
+        repo.pack().to_str().unwrap(),
+        "--registry",
+        &registry_arg,
+        "--trust-roots",
+        repo.trust_roots.to_str().unwrap(),
+        "--revocations",
+        repo.revocations.to_str().unwrap(),
+    ]);
+    assert!(publish.status.success(), "{}", text(&publish));
+    let mirrors = packtool(&["mirrors", "--registry", &registry_arg]);
+    assert!(mirrors.status.success(), "{}", text(&mirrors));
+    let attest = packtool(&[
+        "attest",
+        "--registry",
+        &registry_arg,
+        "--private-key",
+        private.to_str().unwrap(),
+    ]);
+    assert!(attest.status.success(), "{}", text(&attest));
+    commit(&repo.path, "attest registry");
+}
+
 #[test]
 fn install_remove_and_self_install_round_trip() {
     let dir = temp_dir("round-trip");
@@ -279,27 +335,15 @@ fn install_remove_and_self_install_round_trip() {
         text(&list)
     );
 
-    // No explicit trust flags: remote installs read both files from the clone.
-    let install = installer(
-        &dir,
-        &[
-            "install",
-            "shell",
-            "--source",
-            &source,
-            "--root",
-            &root_arg,
-            "--project",
-            &project_arg,
-        ],
-    );
+    // Trust roots are pinned out of band; the clone is untrusted metadata.
+    let install = remote_install(&repo, &dir, &libs, &project);
     assert!(install.status.success(), "{}", text(&install));
     let installed = libs.join("shell/0.1.0");
     assert!(installed.join("library.toml").is_file());
     let lock = fs::read_to_string(project.join("meld.lock")).unwrap();
     assert!(lock.contains("\"shell\": \"0.1.0\""), "{lock}");
 
-    let verify = installer(
+    let verify = command_install(
         &dir,
         &[
             "verify",
@@ -309,7 +353,9 @@ fn install_remove_and_self_install_round_trip() {
             "--revocations",
             repo.revocations.to_str().unwrap(),
         ],
-    );
+    )
+    .output()
+    .expect("run meld-pack");
     assert!(verify.status.success(), "{}", text(&verify));
     assert!(
         String::from_utf8_lossy(&verify.stdout).contains("signature: verified"),
@@ -317,19 +363,7 @@ fn install_remove_and_self_install_round_trip() {
         text(&verify)
     );
 
-    let again = installer(
-        &dir,
-        &[
-            "install",
-            "shell",
-            "--source",
-            &source,
-            "--root",
-            &root_arg,
-            "--project",
-            &project_arg,
-        ],
-    );
+    let again = remote_install(&repo, &dir, &libs, &project);
     assert!(again.status.success(), "{}", text(&again));
     assert!(String::from_utf8_lossy(&again.stdout).contains("already installed"));
 
@@ -375,8 +409,6 @@ fn tampered_payloads_are_rejected() {
     let libs = dir.join("libs");
     let project = dir.join("project");
     fs::create_dir_all(&project).unwrap();
-    let root_arg = libs.to_string_lossy().into_owned();
-    let project_arg = project.to_string_lossy().into_owned();
 
     // Payload edited after checksumming: checksum verification fails first.
     let stale_checksums = make_repo(&dir, "stale-checksums", &private, &public);
@@ -384,20 +416,7 @@ fn tampered_payloads_are_rejected() {
     let original = fs::read_to_string(&worker).unwrap();
     fs::write(&worker, format!("{original}# tampered\n")).unwrap();
     commit(&stale_checksums.path, "tampered payload");
-    let source = stale_checksums.source();
-    let install = installer(
-        &dir,
-        &[
-            "install",
-            "shell",
-            "--source",
-            &source,
-            "--root",
-            &root_arg,
-            "--project",
-            &project_arg,
-        ],
-    );
+    let install = remote_install(&stale_checksums, &dir, &libs, &project);
     assert!(!install.status.success(), "{}", text(&install));
     assert!(
         String::from_utf8_lossy(&install.stderr).contains("checksum mismatch: worker.sh"),
@@ -411,20 +430,7 @@ fn tampered_payloads_are_rejected() {
     fs::write(&worker, format!("{original}# tampered\n")).unwrap();
     refresh_checksums(&stale_signature.pack());
     commit(&stale_signature.path, "tampered signature");
-    let source = stale_signature.source();
-    let install = installer(
-        &dir,
-        &[
-            "install",
-            "shell",
-            "--source",
-            &source,
-            "--root",
-            &root_arg,
-            "--project",
-            &project_arg,
-        ],
-    );
+    let install = remote_install(&stale_signature, &dir, &libs, &project);
     assert!(!install.status.success(), "{}", text(&install));
     assert!(
         String::from_utf8_lossy(&install.stderr).contains("signature mismatch"),
@@ -449,7 +455,7 @@ fn unknown_and_revoked_signers_are_rejected() {
     let root_arg = libs.to_string_lossy().into_owned();
     let project_arg = project.to_string_lossy().into_owned();
 
-    let unknown = installer(
+    let unknown = command_install(
         &dir,
         &[
             "install",
@@ -460,10 +466,12 @@ fn unknown_and_revoked_signers_are_rejected() {
             &root_arg,
             "--project",
             &project_arg,
-            "--trust-roots",
-            other_roots.to_str().unwrap(),
         ],
-    );
+    )
+    .env("MELD_TRUST_ROOTS", &other_roots)
+    .env("MELD_REVOCATIONS", &repo.revocations)
+    .output()
+    .expect("run meld-pack");
     assert!(!unknown.status.success(), "{}", text(&unknown));
     assert!(
         String::from_utf8_lossy(&unknown.stderr).contains("is not in the trust roots"),
@@ -473,7 +481,7 @@ fn unknown_and_revoked_signers_are_rejected() {
 
     let revoked = revocations(&dir, "revoked.json");
     revoke(&revoked, &signature_key_id(&repo.pack()));
-    let revoked_case = installer(
+    let revoked_case = command_install(
         &dir,
         &[
             "install",
@@ -484,10 +492,12 @@ fn unknown_and_revoked_signers_are_rejected() {
             &root_arg,
             "--project",
             &project_arg,
-            "--revocations",
-            revoked.to_str().unwrap(),
         ],
-    );
+    )
+    .env("MELD_TRUST_ROOTS", &repo.trust_roots)
+    .env("MELD_REVOCATIONS", &revoked)
+    .output()
+    .expect("run meld-pack");
     assert!(!revoked_case.status.success(), "{}", text(&revoked_case));
     assert!(
         String::from_utf8_lossy(&revoked_case.stderr).contains("is revoked"),
@@ -509,24 +519,23 @@ fn remote_install_requires_valid_trust_root_metadata() {
     let source = repo.source();
     let root_arg = libs.to_string_lossy().into_owned();
     let project_arg = project.to_string_lossy().into_owned();
-    let clone_roots = repo.path.join("packs/registry/trust-roots.toml");
-    let clone_revs = repo.path.join("packs/registry/revocations.json");
+    let install_args = [
+        "install",
+        "shell",
+        "--source",
+        &source,
+        "--root",
+        &root_arg,
+        "--project",
+        &project_arg,
+    ];
 
-    fs::remove_file(&clone_roots).unwrap();
-    commit(&repo.path, "remove trust roots");
-    let missing = installer(
-        &dir,
-        &[
-            "install",
-            "shell",
-            "--source",
-            &source,
-            "--root",
-            &root_arg,
-            "--project",
-            &project_arg,
-        ],
-    );
+    let missing_roots = dir.join("missing-roots.toml");
+    let missing = command_install(&dir, &install_args)
+        .env("MELD_TRUST_ROOTS", &missing_roots)
+        .env("MELD_REVOCATIONS", &repo.revocations)
+        .output()
+        .expect("run meld-pack");
     assert!(!missing.status.success(), "{}", text(&missing));
     assert!(
         String::from_utf8_lossy(&missing.stderr).contains("no trust roots"),
@@ -537,21 +546,17 @@ fn remote_install_requires_valid_trust_root_metadata() {
     let valid_roots = fs::read_to_string(&repo.trust_roots).unwrap();
     let key_id = signature_key_id(&repo.pack());
     let broken_id = &key_id[..8];
-    fs::write(&clone_roots, valid_roots.replacen(broken_id, "00000000", 1)).unwrap();
-    commit(&repo.path, "malformed trust roots");
-    let malformed = installer(
-        &dir,
-        &[
-            "install",
-            "shell",
-            "--source",
-            &source,
-            "--root",
-            &root_arg,
-            "--project",
-            &project_arg,
-        ],
-    );
+    let malformed_roots = dir.join("malformed-roots.toml");
+    fs::write(
+        &malformed_roots,
+        valid_roots.replacen(broken_id, "00000000", 1),
+    )
+    .unwrap();
+    let malformed = command_install(&dir, &install_args)
+        .env("MELD_TRUST_ROOTS", &malformed_roots)
+        .env("MELD_REVOCATIONS", &repo.revocations)
+        .output()
+        .expect("run meld-pack");
     assert!(!malformed.status.success(), "{}", text(&malformed));
     assert!(
         String::from_utf8_lossy(&malformed.stderr).contains("does not match public key"),
@@ -559,28 +564,218 @@ fn remote_install_requires_valid_trust_root_metadata() {
         text(&malformed)
     );
 
-    fs::copy(&repo.trust_roots, &clone_roots).unwrap();
-    fs::remove_file(&clone_revs).unwrap();
-    commit(&repo.path, "remove revocations");
-    let missing_revs = installer(
+    let missing_revs = dir.join("missing-revocations.json");
+    let missing_revs_case = command_install(&dir, &install_args)
+        .env("MELD_TRUST_ROOTS", &repo.trust_roots)
+        .env("MELD_REVOCATIONS", &missing_revs)
+        .output()
+        .expect("run meld-pack");
+    assert!(
+        !missing_revs_case.status.success(),
+        "{}",
+        text(&missing_revs_case)
+    );
+    assert!(
+        String::from_utf8_lossy(&missing_revs_case.stderr).contains("no revocations"),
+        "{}",
+        text(&missing_revs_case)
+    );
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn tree_supplied_roots_require_a_valid_attestation() {
+    let dir = temp_dir("tree-roots");
+    let (private, public) = key_pair(&dir, "signer");
+    let repo = make_repo(&dir, "source", &private, &public);
+    attest_repo(&repo, &private);
+    let libs = dir.join("libs");
+    let project = dir.join("project");
+    fs::create_dir_all(&project).unwrap();
+    let attestation = repo.path.join("packs/registry/attestation.ed25519");
+    let signed = fs::read(&attestation).unwrap();
+
+    fs::remove_file(&attestation).unwrap();
+    commit(&repo.path, "remove attestation");
+    let rejected = command_install(
         &dir,
         &[
             "install",
             "shell",
             "--source",
-            &source,
+            &repo.source(),
             "--root",
-            &root_arg,
+            &libs.to_string_lossy(),
             "--project",
-            &project_arg,
+            &project.to_string_lossy(),
+            "--allow-tree-roots",
+        ],
+    )
+    .output()
+    .expect("run meld-pack");
+    assert!(!rejected.status.success(), "{}", text(&rejected));
+    assert!(
+        String::from_utf8_lossy(&rejected.stderr).contains("attestation"),
+        "{}",
+        text(&rejected)
+    );
+
+    fs::write(&attestation, signed).unwrap();
+    commit(&repo.path, "restore attestation");
+    let accepted = command_install(
+        &dir,
+        &[
+            "install",
+            "shell",
+            "--source",
+            &repo.source(),
+            "--root",
+            &libs.to_string_lossy(),
+            "--project",
+            &project.to_string_lossy(),
+            "--allow-tree-roots",
+        ],
+    )
+    .output()
+    .expect("run meld-pack");
+    assert!(accepted.status.success(), "{}", text(&accepted));
+    // Tree roots are deliberately not promoted to a local trust anchor.
+    assert!(!libs.join("trust-roots.toml").exists());
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn pinned_install_persists_a_local_trust_store() {
+    let dir = temp_dir("trust-store");
+    let (private, public) = key_pair(&dir, "signer");
+    let repo = make_repo(&dir, "source", &private, &public);
+    let libs = dir.join("libs");
+    let project = dir.join("project");
+    fs::create_dir_all(&project).unwrap();
+    let install = remote_install(&repo, &dir, &libs, &project);
+    assert!(install.status.success(), "{}", text(&install));
+    let roots = fs::read_to_string(libs.join("trust-roots.toml")).unwrap();
+    let revs = fs::read_to_string(libs.join("revocations.json")).unwrap();
+    assert!(roots.contains(signature_key_id(&repo.pack()).as_str()));
+    assert!(revs.contains("revoked"));
+
+    // A later install can reuse the authenticated local trust store without
+    // repeating the out-of-band flag/environment pin.
+    let reuse = command_install(
+        &dir,
+        &[
+            "install",
+            "shell",
+            "--source",
+            &repo.source(),
+            "--root",
+            &libs.to_string_lossy(),
+            "--project",
+            &project.to_string_lossy(),
+        ],
+    )
+    .output()
+    .expect("reuse persisted trust store");
+    assert!(reuse.status.success(), "{}", text(&reuse));
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn lock_writes_can_be_opted_out_and_local_only_rejects_remote_sources() {
+    let dir = temp_dir("lock-opts");
+    let (private, public) = key_pair(&dir, "signer");
+    let repo = make_repo(&dir, "source", &private, &public);
+    let libs = dir.join("libs");
+    let project = dir.join("project");
+    fs::create_dir_all(&project).unwrap();
+
+    for extra in ["--no-import", "--keep-import", "--local-only"] {
+        let root = libs.join(extra.trim_start_matches("-"));
+        let output = command_install(
+            &dir,
+            &[
+                "install",
+                "shell",
+                "--source",
+                &repo.source(),
+                "--root",
+                &root.to_string_lossy(),
+                "--project",
+                &project.to_string_lossy(),
+                extra,
+            ],
+        )
+        .env("MELD_TRUST_ROOTS", &repo.trust_roots)
+        .env("MELD_REVOCATIONS", &repo.revocations)
+        .output()
+        .expect("run meld-pack");
+        assert!(output.status.success(), "{}", text(&output));
+        assert!(!project.join("meld.lock").exists(), "{extra}");
+    }
+
+    let remote = command_install(
+        &dir,
+        &[
+            "install",
+            "shell",
+            "--source",
+            "https://example.invalid/repo.git",
+            "--root",
+            &libs.join("blocked").to_string_lossy(),
+            "--project",
+            &project.to_string_lossy(),
+            "--local-only",
+        ],
+    )
+    .output()
+    .expect("run meld-pack");
+    assert!(!remote.status.success(), "{}", text(&remote));
+    assert!(
+        String::from_utf8_lossy(&remote.stderr).contains("local-only"),
+        "{}",
+        text(&remote)
+    );
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn hostile_installed_index_paths_are_rejected_before_deletion() {
+    let dir = temp_dir("hostile-index");
+    let (private, public) = key_pair(&dir, "signer");
+    let repo = make_repo(&dir, "source", &private, &public);
+    let libs = dir.join("libs");
+    let project = dir.join("project");
+    fs::create_dir_all(&project).unwrap();
+    let install = remote_install(&repo, &dir, &libs, &project);
+    assert!(install.status.success(), "{}", text(&install));
+
+    let index_path = libs.join("index.json");
+    let original = fs::read_to_string(&index_path).unwrap();
+    let hostile = original.replace("\"path\": \"shell/0.1.0\"", "\"path\": \"../../outside\"");
+    assert_ne!(original, hostile, "index should contain the installed path");
+    fs::write(&index_path, hostile).unwrap();
+    let removed = installer(
+        &dir,
+        &[
+            "remove",
+            "shell",
+            "--root",
+            &libs.to_string_lossy(),
+            "--project",
+            &project.to_string_lossy(),
         ],
     );
-    assert!(!missing_revs.status.success(), "{}", text(&missing_revs));
+    assert!(!removed.status.success(), "{}", text(&removed));
     assert!(
-        String::from_utf8_lossy(&missing_revs.stderr).contains("no revocations"),
+        String::from_utf8_lossy(&removed.stderr).contains("unsafe library path in index"),
         "{}",
-        text(&missing_revs)
+        text(&removed)
     );
+    assert!(libs.join("shell/0.1.0/library.toml").is_file());
 
     fs::remove_dir_all(dir).unwrap();
 }
