@@ -43,6 +43,12 @@ jobs:
           python-version: "3.12"
       - name: Install Python test dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-ci.txt
+      # Populate every locked dependency source, including target-specific
+      # crates that clippy/test do not download on this runner. The notices
+      # generator reads crate manifests from the registry cache and must not
+      # see target-specific dependencies as unresolved license metadata.
+      - name: Fetch all locked dependencies
+        run: cargo fetch --locked
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Clippy

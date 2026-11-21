@@ -1,0 +1,38 @@
+name: Documentation issue
+description: Report missing, unclear, stale, or incorrect documentation.
+title: "[Docs]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for improving Meld's documentation. By submitting this issue you agree to follow the [Code of Conduct](https://github.com/enis1enis2/meld/blob/main/CODE_OF_CONDUCT.md).
+  - type: input
+    id: location
+    attributes:
+      label: Location
+      description: File path, URL, section heading, or generated book page.
+      placeholder: spec/lang-pack.md or docs/src/SUMMARY.md
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is wrong or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change
+      description: Include a draft edit or the facts that should be added when possible.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked the latest documentation on `main`.
+          required: true
+        - label: I agree to follow this project's Code of Conduct.
+          required: true

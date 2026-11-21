@@ -27,7 +27,7 @@ All forms lower to the same `Region { id, lang, start, end, body, kind }`.
 
 ### 2.1 Block switch
 
-```
+```text
 @<lang> { <body> }
 @<lang> as <id> { <body> }
 @<lang>#"<hash>" <body> "#<hash>    (raw delimiter)
@@ -50,7 +50,7 @@ even for packs that declare a scanner, and bypass the registry entirely.
 
 ### 2.2 Inline switch
 
-```
+```text
 ⟦<lang>: <expression>⟧
 ```
 
@@ -66,11 +66,11 @@ infinite split loop.
 
 ### 2.3 Fence switch
 
-```
+````text
 ```<lang>
 <body>
 ```
-```
+````
 
 Fences are the literate-file form. A fence must start at the beginning of a
 line. Closing fence must be alone on its line. **JUDGMENT CALL:** fences are
@@ -91,7 +91,7 @@ is not configurable in Phase 1 to avoid silent guessing.
 Only three glue forms exist; Meld does not invent host semantics (project.md
 §13 default).
 
-```
+```text
 export <name> [as <bridge-name>]        # publishes from current region
 import <name> from <region-id>           # binds into current region
 ```
@@ -105,7 +105,7 @@ reserved but unimplemented through Phase 3.
 
 ## 4. Grammar sketch (EBNF)
 
-```
+```ebnf
 file          := header? region* ;
 header        := '#meld' WS lang-id NEWLINE ;
 region        := block | inline | fence | untagged ;

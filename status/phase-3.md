@@ -11,7 +11,7 @@
 - Generated 3×3 round-trip matrix in `tools/t2_ref.py`, 15 canonical values per
   pair, all green:
 
-  ```
+  ```text
   python->python / javascript / lua: ok
   javascript->python / javascript / lua: ok
   lua->python / javascript / lua: ok

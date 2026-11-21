@@ -1,0 +1,60 @@
+name: Lang Pack request
+description: Request support for a new language through a Lang Pack.
+title: "[Lang Pack]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Meld adds languages through data-driven Lang Packs, not core rewrites. Read the [Lang Pack spec](https://github.com/enis1enis2/meld/blob/main/spec/lang-pack.md) before filing. By submitting this issue you agree to follow the [Code of Conduct](https://github.com/enis1enis2/meld/blob/main/CODE_OF_CONDUCT.md).
+  - type: input
+    id: language
+    attributes:
+      label: Language and requested id
+      placeholder: Example -> example
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: Requested tier
+      options:
+        - L0 syntax only
+        - L1 stdout only
+        - L2 value bridge
+        - T3 compiled component
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: grammar
+    attributes:
+      label: Tree-sitter grammar crate and version
+      description: Use an exact crates.io version, not a floating range.
+      placeholder: tree-sitter-example 1.2.3
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+      description: Show the mixed-language file or workflow you want to enable.
+    validations:
+      required: true
+  - type: textarea
+    id: conformance
+    attributes:
+      label: Proposed conformance cases
+      description: Include representative snippets, region-end edge cases, and expected values where relevant.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked whether the language is already covered by an existing pack.
+          required: true
+        - label: I understand that grammar revisions must be pinned and queries copied under review.
+          required: true
+        - label: I agree to follow this project's Code of Conduct.
+          required: true

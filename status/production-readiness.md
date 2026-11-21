@@ -54,21 +54,21 @@ Observed output:
 
 ```text
 head_sha query total: 5
-  sha-query  44822484998	Supply-chain audit	completed	success
-  sha-query  44822485023	MSRV	completed	success
-  sha-query  44822485305	Docs	completed	success
-  sha-query  44822485137	CI	completed	success
-  sha-query  44822484969	Fuzz	completed	success
+  sha-query  44822484998    Supply-chain audit    completed    success
+  sha-query  44822485023    MSRV    completed    success
+  sha-query  44822485305    Docs    completed    success
+  sha-query  44822485137    CI    completed    success
+  sha-query  44822484969    Fuzz    completed    success
 branch query exact-SHA matches: 5
-  branch     44822484998	Supply-chain audit	completed	success	https://github.com/enis1enis2/meld/actions/runs/44822484998
-  branch     44822485023	MSRV	completed	success	https://github.com/enis1enis2/meld/actions/runs/44822485023
-  branch     44822485305	Docs	completed	success	https://github.com/enis1enis2/meld/actions/runs/44822485305
-  branch     44822485137	CI	completed	success	https://github.com/enis1enis2/meld/actions/runs/44822485137
-  branch     44822484969	Fuzz	completed	success	https://github.com/enis1enis2/meld/actions/runs/44822484969
+  branch     44822484998    Supply-chain audit    completed    success    https://github.com/enis1enis2/meld/actions/runs/44822484998
+  branch     44822485023    MSRV    completed    success    https://github.com/enis1enis2/meld/actions/runs/44822485023
+  branch     44822485305    Docs    completed    success    https://github.com/enis1enis2/meld/actions/runs/44822485305
+  branch     44822485137    CI    completed    success    https://github.com/enis1enis2/meld/actions/runs/44822485137
+  branch     44822484969    Fuzz    completed    success    https://github.com/enis1enis2/meld/actions/runs/44822484969
 ```
 
 | Run ID | Workflow | Conclusion |
-|---|---|---|
+| --- | --- | --- |
 | 44822485137 | CI | `success` |
 | 44822485305 | Docs | `success` |
 | 44822485023 | MSRV | `success` |

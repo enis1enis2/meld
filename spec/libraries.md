@@ -14,7 +14,7 @@ verbatim.
 
 ## 1. Why a library is data
 
-```
+```text
 packs/<lang-id>/
   pack.toml          # Lang Pack contract (lang-pack.md §2)
   library.toml       # install/import manifest (this document)
@@ -94,7 +94,7 @@ The default root is resolved in this order:
 
 Installed layout:
 
-```
+```text
 <root>/
   index.json              # canonical JSON, sorted keys, trailing LF, no timestamps
   <id>/<version>/         # complete copied Lang Library, including integrity files
@@ -163,7 +163,7 @@ dependency.
 
 ## 4. Terminal installer (`meld-pack`)
 
-```
+```text
 meld-pack remote-list [--source <repo>] [--ref <ref>]
 meld-pack install <lang>... [--source <repo>] [--ref <ref>]
                             [--trust-roots <file>] [--revocations <file>]
@@ -280,7 +280,7 @@ Hard rules inherited from `project.md` §9 and `registry.md` §4:
   revocations) for local authenticity checks.
 
 | Condition | Result |
-|---|---|
+| --- | --- |
 | Missing/wrong `api` or `kind` | unsupported API or library kind |
 | Missing/empty `name`, invalid id/version/alias | manifest validation error |
 | `library.toml` disagrees with `pack.toml` id/version/aliases | consistency error |
