@@ -155,12 +155,12 @@ jobs:
           sh scripts/verify_install.sh \
             --bin-dir "$payload/bin" \
             --share-dir "$payload/share/meld-lang"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: archive-${{ matrix.os }}
           path: dist/release/*
           if-no-files-found: error
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: repro-${{ matrix.os }}
           path: dist/repro-artifact/*
@@ -259,7 +259,7 @@ jobs:
           sh scripts/generate_sbom.sh \
             --version "$MELD_VERSION" \
             --out "dist/release/meld-lang-$MELD_VERSION-sbom.cdx.json"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sbom
           path: dist/release/*.cdx.json
@@ -331,7 +331,7 @@ jobs:
             --repo "$MELD_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
             --issuer "$MELD_ISSUER"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-release
           path: dist/release/*
@@ -374,7 +374,7 @@ jobs:
           }
           version="${GITHUB_REF_NAME#v}"
           cp "$bundle" "dist/release/meld-lang-$version.intoto.jsonl"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-with-provenance
           path: dist/release/*
