@@ -8,14 +8,14 @@ use meld_core::splitter;
 use meld_core::syntax::SyntaxLayer;
 use meld_sandbox::{
     effective_policy, parse_grant, parse_pack, parse_runner, platform_backend, Access, Capability,
-    CommandSpec, Grant, SafeRoot, SandboxError, SandboxPolicy,
+    CommandSpec, Grant, SafeRoot, SandboxBackend, SandboxError, SandboxPolicy,
 };
 use meld_value::SourceStyle;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::{Component, Path, PathBuf};
-use std::process::Command;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const HELP: &str = r#"Manage and run Meld documents.
@@ -28,7 +28,7 @@ Commands:
   run <file>            Execute a Meld document
   fmt [--check] [file]  Format regions; --check reports needed changes without writing
   repl                  Start the interactive REPL
-  doctor                Report toolchain, sandbox and pack health (never installs)
+  doctor [--strict]     Report toolchain, sandbox and pack health (never installs)
   lib | library         Show installed and imported language libraries
   pack new <lang>       Create a new pack scaffold under packs/<lang>
 
@@ -56,33 +56,108 @@ fn diagnostic_error(message: impl std::fmt::Display) {
     eprintln!("meld: error: {message}");
 }
 
+/// Reject ignored arguments instead of silently running with a different
+/// meaning than the caller intended (exit code 2, like other usage errors).
+fn usage_error(command: &str, detail: &str) -> i32 {
+    diagnostic_error(format!("{command}: {detail}; run 'meld --help' for usage"));
+    2
+}
+
+fn unexpected_args(
+    command: &str,
+    args: &[String],
+    allowed_flags: &[&str],
+    max_positional: usize,
+) -> Option<i32> {
+    let mut positional = 0usize;
+    for arg in args {
+        if arg.starts_with('-') {
+            if !allowed_flags.contains(&arg.as_str()) {
+                return Some(usage_error(command, &format!("unknown option '{arg}'")));
+            }
+        } else {
+            positional += 1;
+            if positional > max_positional {
+                return Some(usage_error(command, "too many arguments"));
+            }
+        }
+    }
+    None
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    let rest = args.get(1..).unwrap_or(&[]);
     let code = match args.first().map(String::as_str) {
         Some("-h") | Some("--help") => {
-            print_help();
-            0
+            if let Some(code) = unexpected_args("help", rest, &[], 0) {
+                code
+            } else {
+                print_help();
+                0
+            }
         }
         Some("-V") | Some("--version") => {
-            println!("meld {VERSION}");
-            0
+            if let Some(code) = unexpected_args("version", rest, &[], 0) {
+                code
+            } else {
+                println!("meld {VERSION}");
+                0
+            }
         }
-        Some("check") => cmd_check(args.get(1).map(String::as_str)),
-        Some("run") => cmd_run(args.get(1).map(String::as_str)),
-        Some("doctor") => cmd_doctor(),
-        Some("lib") | Some("library") => cmd_library(),
+        Some("check") => {
+            if let Some(code) = unexpected_args("check", rest, &[], 1) {
+                code
+            } else {
+                cmd_check(rest.first().map(String::as_str))
+            }
+        }
+        Some("run") => {
+            if let Some(code) = unexpected_args("run", rest, &[], 1) {
+                code
+            } else {
+                cmd_run(rest.first().map(String::as_str))
+            }
+        }
+        Some("doctor") => {
+            if let Some(code) = unexpected_args("doctor", rest, &["--strict"], 0) {
+                code
+            } else {
+                cmd_doctor(rest.iter().any(|a| a == "--strict"))
+            }
+        }
+        Some("lib") | Some("library") => {
+            if let Some(code) = unexpected_args("library", rest, &[], 0) {
+                code
+            } else {
+                cmd_library()
+            }
+        }
         Some("fmt") => {
-            let check = args.iter().any(|a| a == "--check");
-            let path = args
-                .iter()
-                .skip(1)
-                .find(|a| a.as_str() != "--check")
-                .map(String::as_str);
-            cmd_fmt(path, check)
+            if let Some(code) = unexpected_args("fmt", rest, &["--check"], 1) {
+                code
+            } else {
+                cmd_fmt(
+                    rest.iter()
+                        .find(|a| a.as_str() != "--check")
+                        .map(String::as_str),
+                    rest.iter().any(|a| a == "--check"),
+                )
+            }
         }
-        Some("repl") => cmd_repl(),
+        Some("repl") => {
+            if let Some(code) = unexpected_args("repl", rest, &[], 0) {
+                code
+            } else {
+                cmd_repl()
+            }
+        }
         Some("pack") if args.get(1).map(String::as_str) == Some("new") => {
-            cmd_pack_new(args.get(2).map(String::as_str))
+            if let Some(code) = unexpected_args("pack new", &args[2..], &[], 1) {
+                code
+            } else {
+                cmd_pack_new(args.get(2).map(String::as_str))
+            }
         }
         _ => {
             let command = args.first().map(String::as_str).unwrap_or("<none>");
@@ -133,23 +208,9 @@ impl PackInfo {
 }
 
 fn project_root() -> PathBuf {
-    // JUDGMENT CALL: manifest paths are validated as declarative paths, so the
-    // root itself must be canonical before it is passed to the policy parser.
-    // `MELD_ROOT` normally contains `..` in test harnesses because it is
-    // derived from CARGO_MANIFEST_DIR plus a relative parent.
-    let canonical = |path: PathBuf| std::fs::canonicalize(&path).unwrap_or(path);
-    if let Ok(root) = std::env::var("MELD_ROOT") {
-        return canonical(PathBuf::from(root));
-    }
-    std::env::current_dir()
-        .ok()
-        .and_then(|c| {
-            c.ancestors()
-                .find(|p| p.join("project.md").is_file() || p.join("Cargo.toml").is_file())
-                .map(Path::to_path_buf)
-        })
-        .map(canonical)
-        .unwrap_or_else(|| canonical(PathBuf::from(".")))
+    // One shared resolver for CLI/LSP/installer: canonicalized, ignores an
+    // empty MELD_ROOT and skips member Cargo.toml manifests.
+    meld_lib::workspace_root(None)
 }
 
 fn rebase_arg(arg: &str, root: &Path, pack_dir: &Path) -> String {
@@ -321,18 +382,23 @@ fn discover_packs(root: &Path) -> HashMap<String, PackInfo> {
         }
     }
     // JUDGMENT CALL: imported libraries are inserted last so a project lock
-    // wins over a same-named built-in pack. A malformed lock is reported as a
-    // warning instead of breaking check/run; `meld-pack list` gives details.
-    match meld_lib::discover_imported(root, &extra_roots) {
+    // wins over a same-named built-in pack. They are re-verified *here*, at the
+    // point where their declared commands become executable: a signed pack
+    // without a pinned trust anchor is refused, and checksum drift after
+    // install is a hard error rather than a warning.
+    let policy = meld_lib::verification_policy_from_env(&meld_lib::library_root());
+    match meld_lib::discover_imported_verified(root, &extra_roots, &policy) {
         Ok(imported) => {
             for (_, dir) in imported {
                 insert_pack(&mut out, root, &dir);
             }
         }
-        Err(e) => diagnostic_warn(format!(
-            "cannot read {} ({e}); run 'meld-pack list' for lock details",
-            meld_lib::LOCK_FILE
-        )),
+        Err(e) => {
+            diagnostic_error(format!(
+                "refusing imported library: {e}; inspect it with 'meld lib' and repair with \
+                 'meld-pack verify/remove'"
+            ));
+        }
     }
     out
 }
@@ -1018,30 +1084,29 @@ fn format_glue(body: &str) -> String {
 }
 
 // JUDGMENT CALL: formatter commands are pack data. When a pack ships
-// `formatter.toml`, Meld writes the region body to a temp file, runs the
-// command with {src}/{out} placeholders and reads the formatted bytes back.
-// Without that file Meld formats only glue; it never guesses a formatter.
-fn format_region_body(pack: Option<&PackInfo>, body: &str) -> String {
+// `formatter.toml`, Meld writes the region body to an exclusive temporary
+// directory, runs the argv-only command under the same sandbox backend used
+// for workers, and reads the formatted bytes back. A configured formatter that
+// fails is a hard error: silently returning the unformatted body would make
+// `meld fmt --check` report a clean file.
+fn format_region_body(pack: Option<&PackInfo>, body: &str) -> Result<String, String> {
     let Some(pack) = pack else {
-        return format_glue(body);
+        return Ok(format_glue(body));
     };
-    let config = match std::fs::read_to_string(pack.dir.join("formatter.toml")) {
+    let config_path = pack.dir.join("formatter.toml");
+    let config = match std::fs::read_to_string(&config_path) {
         Ok(text) => text,
-        Err(_) => return format_glue(body),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(format_glue(body)),
+        Err(e) => return Err(format!("cannot read {}: {e}", config_path.display())),
     };
-    let doc: toml::Value = match toml::from_str(&config) {
-        Ok(v) => v,
-        Err(_) => return format_glue(body),
-    };
-    let Some(command) = doc
-        .get("formatter")
+    let doc: toml::Value =
+        toml::from_str(&config).map_err(|e| format!("invalid {}: {e}", config_path.display()))?;
+    let section = doc.get("formatter");
+    let command = section
         .and_then(|v| v.get("command"))
         .and_then(toml::Value::as_str)
-    else {
-        return format_glue(body);
-    };
-    let args = doc
-        .get("formatter")
+        .ok_or_else(|| format!("{} has no formatter command", config_path.display()))?;
+    let args = section
         .and_then(|v| v.get("args"))
         .and_then(toml::Value::as_array)
         .map(|xs| {
@@ -1053,25 +1118,106 @@ fn format_region_body(pack: Option<&PackInfo>, body: &str) -> String {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let dir = std::env::temp_dir().join(format!("meld-fmt-{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
+    let (program, args) = resolve_runner_program(command, &args);
+
+    // Every invocation gets its own directory. A fixed per-process name lets a
+    // concurrently running formatter (or another user on a shared host) race
+    // on region.src/region.out and read back somebody else's output.
+    static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir = std::env::temp_dir().join(format!("meld-fmt-{}-{nanos}-{seq}", std::process::id()));
+    {
+        let mut builder = std::fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder
+            .create(&dir)
+            .map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+    }
+    let result = run_formatter(pack, &program, &args, &dir, body);
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+fn run_formatter(
+    pack: &PackInfo,
+    program: &str,
+    args: &[String],
+    dir: &Path,
+    body: &str,
+) -> Result<String, String> {
     let src = dir.join("region.src");
     let out = dir.join("region.out");
-    if std::fs::write(&src, format_glue(body)).is_err() {
-        return format_glue(body);
-    }
-    let status = Command::new(command)
-        .args(args.iter().map(|a| {
+    std::fs::write(&src, format_glue(body))
+        .map_err(|e| format!("cannot write {}: {e}", src.display()))?;
+    let expanded: Vec<String> = args
+        .iter()
+        .map(|a| {
             a.replace("{src}", &src.to_string_lossy())
                 .replace("{out}", &out.to_string_lossy())
-        }))
-        .status();
-    let formatted = std::fs::read_to_string(&out).ok();
-    let _ = std::fs::remove_dir_all(&dir);
-    match (status, formatted) {
-        (Ok(s), Some(text)) if s.success() => text,
-        _ => format_glue(body),
+        })
+        .collect();
+    let mut spec = CommandSpec::new(program, expanded).with_cwd(dir);
+    worker_environment(&mut spec);
+
+    let status = if test_unsandboxing_enabled() {
+        diagnostic_warn(format!(
+            "MELD_TEST_UNSANDBOXED is set; formatter for {} is NOT OS-confined (debug builds only)",
+            pack.id
+        ));
+        spec.to_command()
+            .status()
+            .map_err(|e| format!("spawn formatter '{}': {e}", spec.program.display()))?
+    } else {
+        let mut policy = SandboxPolicy::deny_all("formatter");
+        policy.capabilities.allow(Capability::FsRead);
+        policy.capabilities.allow(Capability::FsWrite);
+        policy
+            .fs
+            .add_root(
+                SafeRoot::new("fmt-tmp", dir).map_err(|e| format!("formatter temp root: {e}"))?,
+            )
+            .map_err(|e| format!("formatter temp root: {e}"))?;
+        policy
+            .fs
+            .grant("fmt-tmp", "region.src", Access::Read)
+            .map_err(|e| format!("formatter policy: {e}"))?;
+        policy
+            .fs
+            .grant("fmt-tmp", "region.out", Access::Write)
+            .map_err(|e| format!("formatter policy: {e}"))?;
+        policy
+            .validate()
+            .map_err(|e| format!("formatter policy: {e}"))?;
+        let backend = platform_backend();
+        backend
+            .probe()
+            .require(&policy)
+            .map_err(|e| format!("formatter sandbox unavailable: {e}"))?;
+        let mut process = backend
+            .spawn(&spec, &policy)
+            .map_err(|e| format!("spawn formatter '{}': {e}", spec.program.display()))?;
+        process
+            .wait()
+            .map_err(|e| format!("wait for formatter '{}': {e}", spec.program.display()))?
+    };
+    if !status.success() {
+        return Err(format!(
+            "formatter for {} failed: {} {} -> {status}",
+            pack.id,
+            spec.program.display(),
+            spec.args.join(" ")
+        ));
     }
+    std::fs::read_to_string(&out)
+        .map_err(|e| format!("formatter for {} produced no output: {e}", pack.id))
 }
 
 fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
@@ -1091,7 +1237,13 @@ fn cmd_fmt(path: Option<&str>, check: bool) -> i32 {
     let mut out = String::new();
     for region in &doc.regions {
         out.push_str(&region.open_marker);
-        let formatted = format_region_body(packs.get(&region.lang), region.body(&src));
+        let formatted = match format_region_body(packs.get(&region.lang), region.body(&src)) {
+            Ok(text) => text,
+            Err(e) => {
+                diagnostic_error(format!("{}: {e}", p.display()));
+                return 1;
+            }
+        };
         out.push_str(&formatted);
         out.push_str(&region.close_marker);
     }
@@ -1269,11 +1421,15 @@ fn tool_on_path(tool: &str) -> bool {
     path_has_executable(&path, tool, &extensions)
 }
 
-fn cmd_doctor() -> i32 {
+fn cmd_doctor(strict: bool) -> i32 {
+    let mut issues = 0usize;
     // JUDGMENT CALL: `sh` is included because the built-in Bash pack executes
     // through it; doctor reports only, never installs (project.md §9).
     for tool in ["rustc", "cargo", "python3", "node", "lua", "sh"] {
         let found = tool_on_path(tool);
+        if !found {
+            issues += 1;
+        }
         println!(
             "{tool}: {}",
             if found {
@@ -1302,6 +1458,9 @@ fn cmd_doctor() -> i32 {
         "sandbox available: {}",
         if probe.available { "ok" } else { "NO" }
     );
+    if !probe.available {
+        issues += 1;
+    }
     for note in &probe.notes {
         println!("sandbox note: {note}");
     }
@@ -1312,7 +1471,10 @@ fn cmd_doctor() -> i32 {
             .map(|_| policy.fingerprint())
     }) {
         Ok(fingerprint) => println!("sandbox default policy: {fingerprint}"),
-        Err(e) => println!("sandbox default policy: ENFORCEMENT UNAVAILABLE ({e})"),
+        Err(e) => {
+            issues += 1;
+            println!("sandbox default policy: ENFORCEMENT UNAVAILABLE ({e})");
+        }
     }
     let packs = discover_packs(&project_root());
     let mut ids: Vec<_> = packs
@@ -1328,20 +1490,25 @@ fn cmd_doctor() -> i32 {
     match meld_lib::InstalledIndex::load(&root) {
         Ok(index) => {
             for entry in index.libraries.values() {
-                let status = if root.join(&entry.path).is_dir() {
-                    "ok"
-                } else {
-                    "MISSING"
-                };
+                let installed = meld_lib::entry_installed_dir(&root, entry)
+                    .map(|p| p.is_dir())
+                    .unwrap_or(false);
+                let status = if installed { "ok" } else { "MISSING" };
+                if !installed {
+                    issues += 1;
+                }
                 println!(
                     "library {}: {} (tier={} level={} status={})",
                     entry.id, entry.version, entry.tier, entry.level, status
                 );
             }
         }
-        Err(e) => diagnostic_warn(format!(
-            "invalid library index: {e}; run 'meld-pack list' for details"
-        )),
+        Err(e) => {
+            issues += 1;
+            diagnostic_warn(format!(
+                "invalid library index: {e}; run 'meld-pack list' for details"
+            ));
+        }
     }
     match meld_lib::ProjectLock::load(&project_root()) {
         Ok(lock) => {
@@ -1349,10 +1516,20 @@ fn cmd_doctor() -> i32 {
                 println!("import {id}: {version}");
             }
         }
-        Err(e) => diagnostic_warn(format!(
-            "invalid {}: {e}; run 'meld-pack list' to inspect imports",
-            meld_lib::LOCK_FILE
-        )),
+        Err(e) => {
+            issues += 1;
+            diagnostic_warn(format!(
+                "invalid {}: {e}; run 'meld-pack list' to inspect imports",
+                meld_lib::LOCK_FILE
+            ));
+        }
+    }
+    if strict && issues > 0 {
+        diagnostic_error(format!("doctor found {issues} problem(s)"));
+        return 1;
+    }
+    if strict {
+        println!("doctor: strict checks passed");
     }
     0
 }
@@ -1386,7 +1563,10 @@ fn cmd_library() -> i32 {
         println!("installed: (none; use meld-pack install <lang>)");
     }
     for entry in index.libraries.values() {
-        let status = if root.join(&entry.path).is_dir() {
+        let status = if meld_lib::entry_installed_dir(&root, entry)
+            .map(|p| p.is_dir())
+            .unwrap_or(false)
+        {
             "ok"
         } else {
             "MISSING"
@@ -1405,6 +1585,15 @@ fn cmd_library() -> i32 {
     0
 }
 
+fn valid_pack_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+}
+
 fn cmd_pack_new(lang: Option<&str>) -> i32 {
     let lang = match lang {
         Some(l) => l,
@@ -1413,6 +1602,12 @@ fn cmd_pack_new(lang: Option<&str>) -> i32 {
             return 2;
         }
     };
+    if !valid_pack_id(lang) {
+        return usage_error(
+            "pack new",
+            "pack id must be 1-64 lowercase letters, digits, '_' or '-', starting with a letter",
+        );
+    }
     let dir = Path::new("packs").join(lang);
     if dir.exists() {
         diagnostic_error(format!(
@@ -1431,7 +1626,13 @@ fn cmd_pack_new(lang: Option<&str>) -> i32 {
     let manifest = format!(
         "id = \"{lang}\"\naliases = []\nextensions = []\ntier = \"T2\"\nlevel = \"L1\"\ncapabilities = [\"stdout\"]\n"
     );
-    let _ = std::fs::write(dir.join("pack.toml"), manifest);
+    if let Err(e) = std::fs::write(dir.join("pack.toml"), manifest) {
+        diagnostic_error(format!(
+            "cannot write {}: {e}",
+            dir.join("pack.toml").display()
+        ));
+        return 1;
+    }
     println!("created {}", dir.display());
     0
 }

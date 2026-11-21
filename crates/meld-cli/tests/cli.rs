@@ -104,7 +104,7 @@ fn pydeps() -> PathBuf {
         .join("pydeps")
 }
 
-fn key_pair(base: &Path) -> PathBuf {
+fn key_pair(base: &Path) -> (PathBuf, PathBuf) {
     let private = base.join("temporary.private.pem");
     let public = base.join("temporary.public.pem");
     let output = Command::new("python3")
@@ -124,7 +124,34 @@ fn key_pair(base: &Path) -> PathBuf {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    private
+    (private, public)
+}
+
+fn trust_roots(base: &Path, public: &Path) -> PathBuf {
+    let target = base.join("temporary.roots.toml");
+    let output = Command::new("python3")
+        .arg(root().join("tools/packtool.py"))
+        .args([
+            "trust-roots",
+            "init",
+            "--trust-roots",
+            target.to_str().unwrap(),
+            "--public-key",
+            public.to_str().unwrap(),
+            "--label",
+            "CLI test key",
+            "--created",
+            "2026-11-20",
+        ])
+        .env("PYTHONPATH", pydeps())
+        .output()
+        .expect("create trust roots");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    target
 }
 
 #[test]
@@ -283,7 +310,9 @@ fn imported_library_overrides_a_same_named_builtin_pack() {
     assert_ne!(original, patched, "fixture worker line changed");
     std::fs::write(&worker, patched).unwrap();
 
-    let private_key = key_pair(&dir);
+    let (private_key, public_key) = key_pair(&dir);
+    let roots = trust_roots(&dir, &public_key);
+    let roots_arg = roots.to_string_lossy().into_owned();
     let checksums = Command::new("python3")
         .arg("-c")
         .arg("import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import packtool; packtool.write_checksums(Path(sys.argv[2]))")
@@ -326,7 +355,11 @@ fn imported_library_overrides_a_same_named_builtin_pack() {
         &["run", "examples/08-shell-pack.meld"],
         None,
         None,
-        &[("MELD_ROOT", &project_arg), ("MELD_LIB_ROOT", &libs_arg)],
+        &[
+            ("MELD_ROOT", &project_arg),
+            ("MELD_LIB_ROOT", &libs_arg),
+            ("MELD_TRUST_ROOTS", &roots_arg),
+        ],
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(

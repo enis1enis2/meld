@@ -24,6 +24,9 @@ use std::time::Duration;
 /// Upper bound for a single external-server request (initialize/completion).
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_millis(750);
+/// A malformed or hostile server must not make us allocate an arbitrary buffer.
+pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
+const MAX_HEADER_LINE_BYTES: usize = 16 * 1024;
 
 /// Environment keys forwarded to an external language server. Everything else
 /// is cleared so a pack cannot read unrelated host secrets through its server.
@@ -140,6 +143,13 @@ impl ExternalLsp {
             json!({ "textDocument": {
                 "uri": uri, "languageId": language_id, "version": version, "text": text,
             }}),
+        )
+    }
+
+    pub fn did_close(&mut self, uri: &str) -> Result<(), String> {
+        self.notify(
+            "textDocument/didClose",
+            json!({ "textDocument": { "uri": uri } }),
         )
     }
 
@@ -332,6 +342,9 @@ fn read_message_from(reader: &mut impl BufRead) -> Result<Value, String> {
         if n == 0 {
             return Err("language server closed stdout".to_string());
         }
+        if line.len() > MAX_HEADER_LINE_BYTES {
+            return Err("LSP header line too long".to_string());
+        }
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if trimmed.is_empty() {
             break;
@@ -341,6 +354,11 @@ fn read_message_from(reader: &mut impl BufRead) -> Result<Value, String> {
         }
     }
     let len = length.ok_or("missing Content-Length")?;
+    if len > MAX_MESSAGE_BYTES {
+        return Err(format!(
+            "LSP frame too large ({len} bytes, limit {MAX_MESSAGE_BYTES})"
+        ));
+    }
     let mut buf = vec![0u8; len];
     reader.read_exact(&mut buf).map_err(|e| e.to_string())?;
     serde_json::from_slice(&buf).map_err(|e| format!("invalid LSP JSON: {e}"))
@@ -364,6 +382,14 @@ mod tests {
 
         assert_eq!(file_uri(path), expected);
         assert_eq!(uri_component("a b/c#d"), "a%20b%2Fc%23d");
+    }
+
+    #[test]
+    fn oversized_lsp_frames_are_rejected_before_allocation() {
+        let frame = format!("Content-Length: {}\r\n\r\n", MAX_MESSAGE_BYTES + 1);
+        let error = read_message_from(&mut std::io::Cursor::new(frame.into_bytes()))
+            .expect_err("oversized frame must be refused");
+        assert!(error.contains("too large"), "{error}");
     }
 
     #[test]

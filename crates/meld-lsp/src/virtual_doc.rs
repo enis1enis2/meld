@@ -27,7 +27,16 @@ pub struct VirtualDocument {
 }
 
 impl VirtualDocument {
-    pub fn new(doc: &SplitDocument, region: &Region, language_id: &str, extension: &str) -> Self {
+    /// `doc_uri` is the editor's URI for the containing `.meld` file. It is
+    /// part of the virtual URI so two documents with the same region id cannot
+    /// share an external server's virtual document (H9).
+    pub fn new(
+        doc_uri: &str,
+        doc: &SplitDocument,
+        region: &Region,
+        language_id: &str,
+        extension: &str,
+    ) -> Self {
         let origin = position_at_byte(&doc.source, region.start);
         let mut text = "\n".repeat(origin.line as usize);
         text.push_str(&" ".repeat(origin.character as usize));
@@ -43,7 +52,8 @@ impl VirtualDocument {
         };
         Self {
             uri: format!(
-                "meld-virtual:///{}.{}",
+                "meld-virtual:///{}/{}.{}",
+                crate::external::uri_component(doc_uri),
                 crate::external::uri_component(&region.id),
                 crate::external::uri_component(ext)
             ),
@@ -164,7 +174,7 @@ mod tests {
     #[test]
     fn virtual_document_preserves_global_coordinates() {
         let (doc, r) = region();
-        let vd = VirtualDocument::new(&doc, &r, "javascript", "js");
+        let vd = VirtualDocument::new("file:///a.meld", &doc, &r, "javascript", "js");
         let global = Position {
             line: 3,
             character: 11,
@@ -185,7 +195,7 @@ mod tests {
             .iter()
             .find(|r| r.kind == meld_core::splitter::RegionKind::Inline)
             .unwrap();
-        let vd = VirtualDocument::new(&doc, r, "python", "py");
+        let vd = VirtualDocument::new("file:///a.meld", &doc, r, "python", "py");
         // Character 12 is the `h` in `'héllo'`; LSP columns count `é` as one
         // UTF-16 unit, while Rust byte offsets need two bytes.
         let p = Position {
@@ -221,7 +231,7 @@ mod tests {
             .iter()
             .find(|r| r.kind == meld_core::splitter::RegionKind::Inline)
             .unwrap();
-        let vd = VirtualDocument::new(&doc, r, "python", "py");
+        let vd = VirtualDocument::new("file:///a.meld", &doc, r, "python", "py");
 
         // Byte just after the closing quote following the surrogate pair.
         let byte = src.find("'; y").unwrap() + 1;
@@ -233,9 +243,14 @@ mod tests {
     }
 
     #[test]
-    fn virtual_uri_percent_encodes_extension() {
+    fn virtual_uri_percent_encodes_extension_and_is_document_scoped() {
         let (doc, r) = region();
-        let vd = VirtualDocument::new(&doc, &r, "javascript", "j s#1");
-        assert_eq!(vd.uri, "meld-virtual:///js.j%20s%231");
+        let vd = VirtualDocument::new("file:///a b.meld", &doc, &r, "javascript", "j s#1");
+        assert_eq!(
+            vd.uri,
+            "meld-virtual:///file%3A%2F%2F%2Fa%20b.meld/js.j%20s%231"
+        );
+        let other = VirtualDocument::new("file:///c.meld", &doc, &r, "javascript", "j s#1");
+        assert_ne!(vd.uri, other.uri);
     }
 }

@@ -62,8 +62,13 @@ Options:
                           temporary clones use TMPDIR or MELD_PACK_TMP if set
   --bin-dir <dir>        destination for self-install
   --force                replace a different install at the same coordinates
-  --no-import            install files without updating meld.lock
-  --keep-import          remove files without updating meld.lock
+  --no-import            install library files only; do not write meld.lock
+  --keep-import          remove library files only; do not write meld.lock
+  --allow-tree-roots     INSECURE: take trust roots/revocations from the fetched
+                          tree after verifying its registry attestation; by
+                          default roots must be pinned out-of-band
+  --local-only           offline mode: require a local source and never write
+                          a project lock (implies --no-import/--keep-import)
   --json                 machine-readable output for list
   -h, --help             show this help
 
@@ -98,6 +103,8 @@ struct Options {
     force: bool,
     no_import: bool,
     keep_import: bool,
+    allow_tree_roots: bool,
+    local_only: bool,
     json: bool,
     removed_hmac_key: bool,
 }
@@ -160,6 +167,8 @@ fn parse_options(args: &[String]) -> AppResult<(Vec<String>, Options)> {
             "--force" => opts.force = true,
             "--no-import" => opts.no_import = true,
             "--keep-import" => opts.keep_import = true,
+            "--allow-tree-roots" => opts.allow_tree_roots = true,
+            "--local-only" => opts.local_only = true,
             "--json" => opts.json = true,
             _ if arg.starts_with('-') => return usage_fail(format!("unknown option {arg}")),
             _ => positional.push(args[i].clone()),
@@ -203,36 +212,33 @@ fn library_root(opts: &Options) -> PathBuf {
 }
 
 fn project_root(opts: &Options) -> PathBuf {
-    if let Some(root) = &opts.project {
-        return root.clone();
-    }
-    if let Ok(root) = env::var("MELD_ROOT") {
-        if !root.is_empty() {
-            return PathBuf::from(root);
-        }
-    }
-    let cwd = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    cwd.ancestors()
-        .find(|p| p.join("project.md").is_file() || p.join("Cargo.toml").is_file())
-        .unwrap_or(&cwd)
-        .to_path_buf()
+    meld_lib::workspace_root(opts.project.as_deref())
 }
 
-fn trust_roots_path(opts: &Options) -> Option<PathBuf> {
-    opts.trust_roots.clone().or_else(|| {
-        env::var("MELD_PACK_TRUST_ROOTS")
+fn env_path(keys: &[&str]) -> Option<PathBuf> {
+    keys.iter().find_map(|key| {
+        env::var(key)
             .ok()
-            .filter(|s| !s.is_empty())
+            .filter(|value| !value.trim().is_empty())
             .map(PathBuf::from)
     })
 }
 
-fn revocations_path(opts: &Options) -> Option<PathBuf> {
+fn trust_roots_path(opts: &Options, root: &Path) -> Option<PathBuf> {
+    opts.trust_roots.clone().or_else(|| {
+        env_path(&["MELD_PACK_TRUST_ROOTS", "MELD_TRUST_ROOTS"]).or_else(|| {
+            let stored = root.join(meld_lib::TRUST_STORE_ROOTS);
+            stored.is_file().then_some(stored)
+        })
+    })
+}
+
+fn revocations_path(opts: &Options, root: &Path) -> Option<PathBuf> {
     opts.revocations.clone().or_else(|| {
-        env::var("MELD_PACK_REVOCATIONS")
-            .ok()
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
+        env_path(&["MELD_PACK_REVOCATIONS", "MELD_REVOCATIONS"]).or_else(|| {
+            let stored = root.join(meld_lib::TRUST_STORE_REVOCATIONS);
+            stored.is_file().then_some(stored)
+        })
     })
 }
 
@@ -575,7 +581,18 @@ fn source_spec(opts: &Options) -> AppResult<SourceSpec> {
         .clone()
         .or_else(|| env::var("MELD_PACK_SOURCE").ok().filter(|s| !s.is_empty()))
         .unwrap_or_else(|| DEFAULT_SOURCE.to_string());
+    if opts.local_only && !Path::new(&source).is_dir() {
+        return usage_fail(format!(
+            "--local-only requires an existing local repository path, got {source:?}"
+        ));
+    }
     SourceSpec::parse(&source, opts.reference.as_deref())
+}
+
+/// `--no-import`/`--keep-import`/`--local-only` affect *only* lockfile writes.
+/// They never weaken verification or skip filesystem installation.
+fn skip_lock_write(opts: &Options) -> bool {
+    opts.no_import || opts.keep_import || opts.local_only
 }
 
 fn checksums_bytes(dir: &Path) -> AppResult<Vec<u8>> {
@@ -587,30 +604,93 @@ fn checksums_bytes(dir: &Path) -> AppResult<Vec<u8>> {
     })
 }
 
-/// Remote installs require a verified Ed25519 signature by default. Trust
-/// roots and revocations come from the fetched tree unless explicitly pinned.
-fn install_policy(opts: &Options, clone_dir: &Path) -> AppResult<VerificationPolicy> {
-    let trust_roots =
-        trust_roots_path(opts).unwrap_or_else(|| clone_dir.join("packs/registry/trust-roots.toml"));
-    if !trust_roots.is_file() {
-        return fail(format!(
-            "remote source has no trust roots at {}; pass --trust-roots",
-            trust_roots.display()
-        ));
+/// Remote installs require a verified Ed25519 signature with roots pinned
+/// out-of-band (flag or environment). Trust metadata from the fetched tree is
+/// attacker-controlled: it may only be used with the explicit, insecure
+/// `--allow-tree-roots` opt-in, and even then its registry attestation must
+/// verify against those same roots.
+fn install_policy(
+    opts: &Options,
+    clone_dir: &Path,
+    root: &Path,
+) -> AppResult<(VerificationPolicy, bool)> {
+    let pinned_roots = trust_roots_path(opts, root);
+    let pinned_revocations = revocations_path(opts, root);
+    let (trust_roots, revocations, from_tree) = if let Some(roots) = pinned_roots {
+        if !roots.is_file() {
+            return fail(format!("no trust roots at {}", roots.display()));
+        }
+        if let Some(revs) = &pinned_revocations {
+            if !revs.is_file() {
+                return fail(format!("no revocations at {}", revs.display()));
+            }
+        }
+        (roots, pinned_revocations, false)
+    } else if opts.allow_tree_roots {
+        let roots = clone_dir.join("packs/registry/trust-roots.toml");
+        let revs = clone_dir.join("packs/registry/revocations.json");
+        if !roots.is_file() {
+            return fail(format!(
+                "remote source has no trust roots at {}; pass --trust-roots",
+                roots.display()
+            ));
+        }
+        if !revs.is_file() {
+            return fail(format!(
+                "remote source has no revocations at {}; pass --revocations",
+                revs.display()
+            ));
+        }
+        meld_lib::verify_registry_attestation(&clone_dir.join("packs/registry"), &roots, &revs)
+            .map_err(|e| (1, format!("insecure tree-supplied roots rejected: {e}")))?;
+        (roots, Some(revs), true)
+    } else {
+        return fail(
+            "remote installs require pinned trust roots: pass --trust-roots (or set \
+             MELD_PACK_TRUST_ROOTS), or use the local library trust store; --allow-tree-roots \
+             accepts fetched metadata only after registry attestation verification",
+        );
+    };
+    Ok((
+        VerificationPolicy {
+            trust_roots: Some(trust_roots.clone()),
+            revocations,
+            require_trusted: true,
+        },
+        from_tree,
+    ))
+}
+
+/// Persist pinned (out-of-band) public metadata into the library root so later
+/// CLI/LSP runs can re-verify imports without re-fetching the registry. Tree
+/// roots are never promoted into a local trust anchor.
+fn persist_trust_store(root: &Path, opts: &Options, from_tree: bool) -> AppResult {
+    if from_tree {
+        eprintln!(
+            "meld-pack: warning: tree-supplied trust roots are not persisted as a local trust \
+             anchor; pass pinned --trust-roots for runtime verification"
+        );
+        return Ok(());
     }
-    let revocations =
-        revocations_path(opts).unwrap_or_else(|| clone_dir.join("packs/registry/revocations.json"));
-    if !revocations.is_file() {
-        return fail(format!(
-            "remote source has no revocations at {}; pass --revocations",
-            revocations.display()
-        ));
+    fs::create_dir_all(root).map_err(|e| {
+        (
+            1,
+            format!("cannot create library root {}: {e}", root.display()),
+        )
+    })?;
+    if let Some(roots) = trust_roots_path(opts, root) {
+        let dest = root.join(meld_lib::TRUST_STORE_ROOTS);
+        if roots != dest {
+            fs::copy(&roots, &dest).map_err(|e| (1, format!("cannot save trust roots: {e}")))?;
+        }
     }
-    Ok(VerificationPolicy {
-        trust_roots: Some(trust_roots),
-        revocations: Some(revocations),
-        require_trusted: true,
-    })
+    if let Some(revs) = revocations_path(opts, root) {
+        let dest = root.join(meld_lib::TRUST_STORE_REVOCATIONS);
+        if revs != dest {
+            fs::copy(&revs, &dest).map_err(|e| (1, format!("cannot save revocations: {e}")))?;
+        }
+    }
+    Ok(())
 }
 
 fn cmd_install(names: &[String], opts: &Options) -> AppResult {
@@ -623,13 +703,14 @@ fn cmd_install(names: &[String], opts: &Options) -> AppResult {
     let selected = select_remote(&libraries, names)?;
     let root = library_root(opts);
     let project = project_root(opts);
-    let policy = install_policy(opts, &clone.dir)?;
+    let (policy, from_tree) = install_policy(opts, &clone.dir, &root)?;
     let mut index = InstalledIndex::load(&root).map_err(|e| (1, e))?;
-    let mut lock = if opts.no_import {
+    let mut lock = if skip_lock_write(opts) {
         None
     } else {
         Some(ProjectLock::load(&project).map_err(|e| (1, e))?)
     };
+    persist_trust_store(&root, opts, from_tree)?;
 
     for lib in selected {
         // JUDGMENT CALL: every selected pack is verified in the clone *and* in
@@ -705,20 +786,24 @@ fn cmd_remove(names: &[String], opts: &Options) -> AppResult {
     let root = library_root(opts);
     let project = project_root(opts);
     let mut index = InstalledIndex::load(&root).map_err(|e| (1, e))?;
-    let mut lock = if opts.keep_import {
+    let mut lock = if skip_lock_write(opts) {
         None
     } else {
         Some(ProjectLock::load(&project).map_err(|e| (1, e))?)
     };
     for name in names {
         let entry = index.resolve(name).map_err(|e| (1, e))?.clone();
-        let target = root.join(&entry.path);
+        // Never delete `entry.path` verbatim even though the index loader
+        // validated it: derive the target from id/version and re-confine at the
+        // deletion site so a swapped symlink or hostile index cannot escape.
+        let declared = meld_lib::entry_installed_dir(&root, &entry).map_err(|e| (1, e))?;
+        let target = meld_lib::confined_under(&root, &declared).map_err(|e| (1, e))?;
         if target.is_dir() {
             fs::remove_dir_all(&target).map_err(|e| (1, format!("{}: {e}", target.display())))?;
         } else if target.exists() {
             fs::remove_file(&target).map_err(|e| (1, format!("{}: {e}", target.display())))?;
         }
-        let parent = root.join(&entry.id);
+        let parent = meld_lib::confined_under(&root, &root.join(&entry.id)).map_err(|e| (1, e))?;
         if parent.is_dir()
             && fs::read_dir(&parent)
                 .map(|mut d| d.next().is_none())
@@ -836,9 +921,10 @@ fn cmd_verify(names: &[String], opts: &Options) -> AppResult {
         return usage_fail("verify needs a library directory");
     };
     let path = PathBuf::from(dir);
+    let root = library_root(opts);
     let policy = VerificationPolicy {
-        trust_roots: trust_roots_path(opts),
-        revocations: revocations_path(opts),
+        trust_roots: trust_roots_path(opts, &root),
+        revocations: revocations_path(opts, &root),
         require_trusted: false,
     };
     let manifest = validate_library_dir_with_policy(&path, &policy).map_err(|e| (1, e))?;

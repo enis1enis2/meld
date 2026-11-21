@@ -41,16 +41,19 @@ pub fn discover_with(root: &Path, extra: &[PathBuf]) -> HashMap<String, LspSpec>
     roots.extend(extra.iter().cloned());
 
     // Match the CLI: libraries pinned by meld.lock are inserted last so they
-    // override same-named built-ins. A malformed lock is reported, not fatal.
-    match meld_lib::discover_imported(root, extra) {
+    // override same-named built-ins. Imported packs are re-verified here, at
+    // the point where their workers can be executed, not just at install time.
+    // A refusal drops the pack (and its LSP command) rather than executing it.
+    let roots_for_policy = meld_lib::library_root();
+    let policy = meld_lib::verification_policy_from_env(&roots_for_policy);
+    match meld_lib::discover_imported_verified(root, extra, &policy) {
         Ok(imported) => {
             for (_, dir) in imported {
                 roots.push(dir);
             }
         }
         Err(e) => eprintln!(
-            "meld-lsp: warning: cannot read {} ({e}); run 'meld-pack list' for lock details",
-            meld_lib::LOCK_FILE
+            "meld-lsp: refusing imported libraries: {e}; run 'meld-pack list' for lock details"
         ),
     }
 
@@ -186,6 +189,29 @@ mod tests {
 
     static LIB_ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    fn refresh_checksums(pack: &Path) {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let pydeps = std::fs::canonicalize(&root)
+            .expect("canonical workspace root")
+            .parent()
+            .expect("workspace parent")
+            .join("pydeps");
+        let script = "import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); import packtool; packtool.write_checksums(Path(sys.argv[2]))";
+        let output = std::process::Command::new("python3")
+            .arg("-c")
+            .arg(script)
+            .arg(root.join("tools"))
+            .arg(pack)
+            .env("PYTHONPATH", pydeps)
+            .output()
+            .expect("refresh checksums");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     fn write_pack(dir: &Path, id: &str, keyword: &str) {
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(
@@ -198,6 +224,9 @@ mod tests {
             format!("[lsp]\nkeywords = [\"{keyword}\"]\n"),
         )
         .unwrap();
+        // Imported packs are now re-verified when discovered, so even tiny test
+        // fixtures must carry a valid checksum manifest.
+        refresh_checksums(dir);
     }
 
     #[test]

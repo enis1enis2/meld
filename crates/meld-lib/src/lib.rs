@@ -16,10 +16,11 @@
 //! outside the repository; this crate only ever handles public key bytes.
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 pub const LIBRARY_API: &str = "meld-lang-library/1";
 pub const INDEX_SCHEMA: &str = "meld-lang-library-index/1";
@@ -31,15 +32,21 @@ pub const SIGNATURE_FILE: &str = "signature.ed25519";
 pub const SIGNATURE_SCHEME: &str = "meld-pack/ed25519/v1";
 pub const TRUST_ROOTS_SCHEMA: &str = "meld-trust-roots/1";
 pub const REVOCATIONS_SCHEMA: &str = "meld-revocations/1";
+pub const ATTESTATION_SCHEME: &str = "meld-registry/attestation/ed25519/v1";
+pub const ATTESTATION_FILE: &str = "attestation.ed25519";
 pub const LOCK_FILE: &str = "meld.lock";
+/// Out-of-band trust store files written next to `index.json` by an install
+/// that used pinned roots. They are metadata, never pack payload.
+pub const TRUST_STORE_ROOTS: &str = "trust-roots.toml";
+pub const TRUST_STORE_REVOCATIONS: &str = "revocations.json";
+/// Insecure escape hatch for imported packs whose signer is not in a local
+/// trust store. Only this exact value disables the trusted-signature check.
+pub const ALLOW_UNTRUSTED_IMPORTS_ENV: &str = "MELD_ALLOW_UNTRUSTED_IMPORTS";
 
-const SKIP_DIRS: [&str; 5] = [
-    ".git",
-    "__pycache__",
-    ".mypy_cache",
-    ".pytest_cache",
-    "target",
-];
+/// Keep the payload directory set byte-for-byte identical to `packtool.py`.
+/// In particular `target/` is *payload*, not a cache: skipping it in Rust let
+/// a build directory change the signed checksum set without detection.
+const SKIP_DIRS: [&str; 4] = [".git", "__pycache__", ".mypy_cache", ".pytest_cache"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LibraryManifest {
@@ -133,10 +140,7 @@ impl InstalledIndex {
             if key != &entry.id || !valid_name(&entry.id) || !valid_name(&entry.version) {
                 return Err(format!("invalid library index entry for {key:?}"));
             }
-            let rel = Path::new(&entry.path);
-            if rel.is_absolute() || rel.components().any(|c| c.as_os_str() == "..") {
-                return Err(format!("unsafe library path in index: {}", entry.path));
-            }
+            validate_entry_path(entry)?;
         }
         Ok(index)
     }
@@ -240,6 +244,67 @@ pub fn installed_dir(root: &Path, id: &str, version: &str) -> PathBuf {
     root.join(id).join(version)
 }
 
+/// The only directory an installed entry may own. Deriving the target from
+/// validated id/version (instead of trusting `entry.path`) is what keeps a
+/// hostile index from deleting arbitrary host directories.
+pub fn entry_installed_dir(root: &Path, entry: &InstalledEntry) -> Result<PathBuf, String> {
+    validate_entry_path(entry)?;
+    Ok(installed_dir(root, &entry.id, &entry.version))
+}
+
+fn validate_entry_path(entry: &InstalledEntry) -> Result<(), String> {
+    let rel = Path::new(&entry.path);
+    let expected = Path::new(&entry.id).join(&entry.version);
+    let unsafe_component = |c: Component<'_>| {
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) | Component::CurDir
+        )
+    };
+    if entry.path.is_empty()
+        || rel.components().any(unsafe_component)
+        || entry.path.contains('\\')
+        || rel != expected
+    {
+        return Err(format!(
+            "unsafe library path in index for {}: {:?} (expected {})",
+            entry.id,
+            entry.path,
+            expected.display()
+        ));
+    }
+    Ok(())
+}
+
+/// Re-confine a path at the point of a destructive operation. Canonicalizing
+/// the existing parent catches symlink swaps that happened after the index was
+/// loaded; a missing path is still checked lexically against the root.
+pub fn confined_under(root: &Path, target: &Path) -> Result<PathBuf, String> {
+    let root = root
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", root.display()))?;
+    let existing_parent = target
+        .ancestors()
+        .find(|p| p.exists())
+        .ok_or_else(|| format!("cannot resolve target {}", target.display()))?;
+    let canonical_parent = existing_parent
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", existing_parent.display()))?;
+    let suffix: PathBuf = target
+        .strip_prefix(existing_parent)
+        .map_err(|e| e.to_string())?
+        .to_path_buf();
+    let resolved = canonical_parent.join(suffix);
+    if !resolved.starts_with(&root) {
+        return Err(format!(
+            "refusing to touch {} outside library root {}",
+            target.display(),
+            root.display()
+        ));
+    }
+    Ok(resolved)
+}
+
 /// Paths of installed libraries imported by a project.
 ///
 /// JUDGMENT CALL: a lock entry whose installed directory is missing is skipped
@@ -270,6 +335,160 @@ pub fn discover_imported(
         }
     }
     Ok(out)
+}
+
+/// Verification policy used when a pack is about to be *executed* rather than
+/// merely listed. Trust roots are pinned out-of-band (env or the local trust
+/// store written by an authenticated install), never taken from the project
+/// tree or from the pack itself.
+pub fn verification_policy_from_env(library_root: &Path) -> VerificationPolicy {
+    let env_path = |key: &str| {
+        std::env::var(key)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+    };
+    let trust_roots = env_path("MELD_TRUST_ROOTS")
+        .or_else(|| env_path("MELD_PACK_TRUST_ROOTS"))
+        .or_else(|| {
+            let path = library_root.join(TRUST_STORE_ROOTS);
+            path.is_file().then_some(path)
+        });
+    let revocations = env_path("MELD_REVOCATIONS")
+        .or_else(|| env_path("MELD_PACK_REVOCATIONS"))
+        .or_else(|| {
+            let path = library_root.join(TRUST_STORE_REVOCATIONS);
+            path.is_file().then_some(path)
+        });
+    VerificationPolicy {
+        require_trusted: trust_roots.is_some(),
+        trust_roots,
+        revocations,
+    }
+}
+
+/// Discover imports and re-verify them *at the trust boundary*.
+///
+/// Checksums are always checked. A signed pack with no local trust anchor is
+/// refused unless the caller explicitly opts into insecure operation; with a
+/// trust anchor configured, only a verified signature is accepted. This closes
+/// the gap where a pack was verified once at install time and then modified or
+/// replaced before `meld run`/the LSP launched its worker.
+pub fn discover_imported_verified(
+    project_root: &Path,
+    extra_roots: &[PathBuf],
+    policy: &VerificationPolicy,
+) -> Result<Vec<(String, PathBuf)>, String> {
+    let found = discover_imported(project_root, extra_roots)?;
+    let allow_untrusted = std::env::var(ALLOW_UNTRUSTED_IMPORTS_ENV).as_deref() == Ok("1");
+    let mut problems = Vec::new();
+    for (id, dir) in &found {
+        match verify_pack(dir, policy) {
+            Ok(verification) => {
+                if policy.require_trusted && verification.signature != "verified" {
+                    problems.push(format!(
+                        "{id} at {}: signature is not verified against configured trust roots",
+                        dir.display()
+                    ));
+                } else if verification.signature == "present-unverified" && !allow_untrusted {
+                    problems.push(format!(
+                        "{id} at {}: signed but unverified; set MELD_TRUST_ROOTS (or install \
+                         with --trust-roots), or set {ALLOW_UNTRUSTED_IMPORTS_ENV}=1 to accept it \
+                         without provenance",
+                        dir.display()
+                    ));
+                }
+            }
+            Err(e) => problems.push(format!("{id} at {}: {e}", dir.display())),
+        }
+    }
+    if problems.is_empty() {
+        Ok(found)
+    } else {
+        Err(problems.join("; "))
+    }
+}
+
+/// One workspace-root resolver shared by the CLI, the LSP and the installer.
+///
+/// `MELD_ROOT` is normalized (empty values are ignored) and an explicit
+/// argument wins. Otherwise the nearest ancestor containing `project.md` or a
+/// real `[workspace]` manifest is used. Member `Cargo.toml` files are skipped
+/// so running from a workspace member cannot silently narrow the policy root.
+pub fn workspace_root(explicit: Option<&Path>) -> PathBuf {
+    let normalize =
+        |path: PathBuf| std::fs::canonicalize(&path).unwrap_or_else(|_| normalize_lexically(path));
+    if let Some(root) = explicit {
+        if !root.as_os_str().is_empty() {
+            return resolve_explicit_root(&normalize(root.to_path_buf()));
+        }
+    }
+    if let Ok(root) = std::env::var("MELD_ROOT") {
+        if !root.trim().is_empty() {
+            return resolve_explicit_root(&normalize(PathBuf::from(root)));
+        }
+    }
+    find_workspace_root(&normalize(
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+    ))
+}
+
+/// Honor an explicit root, except when it names a Cargo workspace *member*.
+/// In that case the enclosing workspace is the policy root; otherwise we must
+/// not silently climb from an explicitly chosen directory (e.g. a test fixture
+/// containing only `meld.lock`).
+fn resolve_explicit_root(root: &Path) -> PathBuf {
+    let dir = if root.is_file() {
+        root.parent().unwrap_or(root)
+    } else {
+        root
+    };
+    let member_manifest = dir.join("Cargo.toml").is_file() && !is_workspace_manifest(dir);
+    if member_manifest {
+        find_workspace_root(dir)
+    } else {
+        root.to_path_buf()
+    }
+}
+
+fn find_workspace_root(start: &Path) -> PathBuf {
+    start
+        .ancestors()
+        .find(|p| p.join("project.md").is_file() || is_workspace_manifest(p))
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| start.to_path_buf())
+}
+
+fn is_workspace_manifest(dir: &Path) -> bool {
+    let path = dir.join("Cargo.toml");
+    std::fs::read_to_string(path)
+        .map(|text| {
+            text.lines().any(|line| {
+                let line = line.trim();
+                line == "[workspace]" || line.starts_with("[workspace.")
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn normalize_lexically(path: PathBuf) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !out.pop() && !path.is_absolute() {
+                    out.push("..");
+                }
+            }
+            other => out.push(other.as_os_str()),
+        }
+    }
+    if out.as_os_str().is_empty() {
+        PathBuf::from(".")
+    } else {
+        out
+    }
 }
 
 pub fn read_library_manifest(pack_dir: &Path) -> Result<LibraryManifest, String> {
@@ -435,6 +654,7 @@ pub fn verify_pack(pack_dir: &Path, policy: &VerificationPolicy) -> Result<Verif
         .get("strict")
         .and_then(toml::Value::as_bool)
         .unwrap_or(false);
+    check_pinned_rev(&manifest, pack_dir)?;
     let pack_id = manifest
         .get("id")
         .and_then(toml::Value::as_str)
@@ -445,6 +665,12 @@ pub fn verify_pack(pack_dir: &Path, policy: &VerificationPolicy) -> Result<Verif
         .and_then(toml::Value::as_str)
         .unwrap_or("0.0.0")
         .to_string();
+    if !valid_name(&pack_id) || !valid_name(&version) {
+        return Err(format!(
+            "invalid id or version in {}/pack.toml",
+            pack_dir.display()
+        ));
+    }
 
     let checksum_path = pack_dir.join(CHECKSUM_FILE);
     let checksum_bytes =
@@ -476,18 +702,20 @@ pub fn verify_pack(pack_dir: &Path, policy: &VerificationPolicy) -> Result<Verif
     }
     let mut signature_state = "absent".to_string();
     let mut signature_key_id = None;
+    // Revocations are an independent input: a revoked key must be rejected
+    // even in presence-only mode or when no trust roots are configured.
+    let revoked = match &policy.revocations {
+        Some(path) => load_revocations(path)?,
+        None => BTreeSet::new(),
+    };
     if let Some((key_id, signature_bytes)) = signature {
+        if revoked.contains(&key_id) {
+            return Err(format!("signature key-id {key_id} is revoked"));
+        }
         signature_key_id = Some(key_id.clone());
         signature_state = "present-unverified".to_string();
         if let Some(roots_path) = &policy.trust_roots {
             let roots = load_trust_roots(roots_path)?;
-            let revoked = match &policy.revocations {
-                Some(path) => load_revocations(path)?,
-                None => BTreeSet::new(),
-            };
-            if revoked.contains(&key_id) {
-                return Err(format!("signature key-id {key_id} is revoked"));
-            }
             let public = roots.get(&key_id).ok_or_else(|| {
                 format!(
                     "signature key-id {key_id} is not in the trust roots; rotate trust roots \
@@ -521,6 +749,55 @@ pub fn verify_pack(pack_dir: &Path, policy: &VerificationPolicy) -> Result<Verif
         signature: signature_state,
         key_id: signature_key_id,
     })
+}
+
+/// Parity with `packtool._check_pinned_rev`: strict packs must pin their
+/// grammar source. A bare `rev = "main"` or `rev = "pinned"` is mutable and
+/// therefore not a stable supply-chain claim.
+fn check_pinned_rev(manifest: &toml::Value, pack_dir: &Path) -> Result<(), String> {
+    if !manifest
+        .get("strict")
+        .and_then(toml::Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
+    let rev = manifest
+        .get("tree_sitter")
+        .and_then(|v| v.get("rev"))
+        .and_then(toml::Value::as_str)
+        .unwrap_or("");
+    let pinned_ref = rev
+        .strip_prefix("pinned:")
+        .is_some_and(|rest| !rest.is_empty());
+    if pinned_ref || is_exact_version(rev) {
+        return Ok(());
+    }
+    Err(format!(
+        "strict pack requires a pinned [tree_sitter].rev (`pinned:<ref>` or exact version) in {}/pack.toml",
+        pack_dir.display()
+    ))
+}
+
+fn is_exact_version(text: &str) -> bool {
+    let text = text.strip_prefix('=').unwrap_or(text);
+    let bytes = text.as_bytes();
+    let split = bytes
+        .iter()
+        .position(|b| *b == b'-' || *b == b'+')
+        .unwrap_or(bytes.len());
+    let core = &bytes[..split];
+    let parts: Vec<&[u8]> = core.split(|b| *b == b'.').collect();
+    let valid_core = parts.len() == 3
+        && parts
+            .iter()
+            .all(|part| !part.is_empty() && part.iter().all(u8::is_ascii_digit));
+    let valid_suffix = split == bytes.len()
+        || (bytes.len() > split + 1
+            && bytes[split + 1..]
+                .iter()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(*b, b'.' | b'-' | b'+')));
+    valid_core && valid_suffix
 }
 
 /// Exact bytes signed by `packtool sign`; keep in sync with Python.
@@ -647,6 +924,115 @@ pub fn load_revocations(path: &Path) -> Result<BTreeSet<String>, String> {
         }
     }
     Ok(revoked)
+}
+
+/// Verify the registry attestation that binds index, trust roots, revocations
+/// and mirrors. Used when a caller deliberately accepts tree-supplied trust
+/// metadata; the attestation must be signed by one of those same roots.
+pub fn verify_registry_attestation(
+    registry_dir: &Path,
+    trust_roots: &Path,
+    revocations: &Path,
+) -> Result<String, String> {
+    let read_canonical_json = |name: &str| -> Result<Vec<u8>, String> {
+        let path = registry_dir.join(name);
+        let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let value: serde_json::Value =
+            serde_json::from_str(&text).map_err(|e| format!("invalid {}: {e}", path.display()))?;
+        if canonical_json(&value)? != text {
+            return Err(format!(
+                "{} is not canonical (sorted keys, two-space indent, LF)",
+                path.display()
+            ));
+        }
+        Ok(text.into_bytes())
+    };
+    let index = read_canonical_json("index.json")?;
+    let mirrors = read_canonical_json("mirrors.json")?;
+    let revocations_bytes =
+        fs::read(revocations).map_err(|e| format!("{}: {e}", revocations.display()))?;
+    let revocations_value: serde_json::Value = serde_json::from_slice(&revocations_bytes)
+        .map_err(|e| format!("invalid revocations: {e}"))?;
+    if canonical_json(&revocations_value)? != String::from_utf8_lossy(&revocations_bytes) {
+        return Err("revocations.json is not canonical".to_string());
+    }
+    let roots_text =
+        fs::read_to_string(trust_roots).map_err(|e| format!("{}: {e}", trust_roots.display()))?;
+    let roots_doc: TrustRootsFile = toml::from_str(&roots_text)
+        .map_err(|e| format!("invalid trust roots {}: {e}", trust_roots.display()))?;
+    if roots_doc.schema != TRUST_ROOTS_SCHEMA
+        || canonical_trust_roots_text(&roots_doc) != roots_text
+    {
+        return Err(format!(
+            "{} is not canonical {TRUST_ROOTS_SCHEMA}",
+            trust_roots.display()
+        ));
+    }
+    let roots = load_trust_roots(trust_roots)?;
+    let revoked = load_revocations(revocations)?;
+    let attestation_path = registry_dir.join(ATTESTATION_FILE);
+    let text = fs::read_to_string(&attestation_path)
+        .map_err(|e| format!("{}: {e}", attestation_path.display()))?;
+    let (key_id, signature_bytes) = parse_signature_with_scheme(&text, ATTESTATION_SCHEME)?;
+    if revoked.contains(&key_id) {
+        return Err(format!("registry attestation signer {key_id} is revoked"));
+    }
+    let public = roots
+        .get(&key_id)
+        .ok_or_else(|| format!("registry attestation key-id {key_id} is not in the trust roots"))?;
+    let verifying_key = VerifyingKey::from_bytes(public)
+        .map_err(|e| format!("invalid attestation trust root public key: {e}"))?;
+    verifying_key
+        .verify_strict(
+            &attestation_message(&index, roots_text.as_bytes(), &revocations_bytes, &mirrors),
+            &Signature::from_bytes(&signature_bytes),
+        )
+        .map_err(|_| {
+            "registry attestation mismatch: index, trust roots, revocations or mirrors were modified".to_string()
+        })?;
+    Ok(key_id)
+}
+
+fn canonical_trust_roots_text(doc: &TrustRootsFile) -> String {
+    let mut lines = vec![format!("schema = \"{TRUST_ROOTS_SCHEMA}\""), String::new()];
+    for entry in &doc.keys {
+        lines.push("[[keys]]".to_string());
+        lines.push(format!("key_id = \"{}\"", entry.key_id));
+        lines.push(format!("public_key = \"{}\"", entry.public_key));
+        lines.push(format!(
+            "label = {}",
+            serde_json::to_string(&entry.label).unwrap_or_else(|_| "\"\"".to_string())
+        ));
+        lines.push(format!("created = \"{}\"", entry.created));
+        lines.push(String::new());
+    }
+    lines.join("\n")
+}
+
+fn attestation_message(
+    index: &[u8],
+    trust_roots: &[u8],
+    revocations: &[u8],
+    mirrors: &[u8],
+) -> Vec<u8> {
+    let mut files = BTreeMap::new();
+    for (name, bytes) in [
+        ("index.json", index),
+        ("mirrors.json", mirrors),
+        ("revocations.json", revocations),
+        ("trust-roots.toml", trust_roots),
+    ] {
+        files.insert(
+            name.to_string(),
+            json!({"bytes": bytes.len(), "sha256": hex(&sha256(bytes))}),
+        );
+    }
+    let payload = json!({"schema": ATTESTATION_SCHEME, "files": files});
+    let compact = serde_json::to_string(&payload).unwrap_or_default();
+    let mut message = ATTESTATION_SCHEME.as_bytes().to_vec();
+    message.push(b'\n');
+    message.extend_from_slice(compact.as_bytes());
+    message
 }
 
 fn decode_hex(text: &str, bytes: usize, field: &str) -> Result<Vec<u8>, String> {
@@ -795,15 +1181,19 @@ fn collect_files(
 }
 
 fn parse_signature(text: &str) -> Result<(String, [u8; 64]), String> {
+    parse_signature_with_scheme(text, SIGNATURE_SCHEME)
+}
+
+fn parse_signature_with_scheme(text: &str, scheme: &str) -> Result<(String, [u8; 64]), String> {
     if !text.ends_with('\n') || text.match_indices('\n').count() != 1 {
         return Err(format!(
-            "malformed {SIGNATURE_FILE} (expected one LF-terminated line)"
+            "malformed signature file (expected one LF-terminated line with scheme {scheme})"
         ));
     }
     let parts: Vec<_> = text.trim_end_matches('\n').split_whitespace().collect();
-    if parts.len() != 3 || parts[0] != SIGNATURE_SCHEME {
+    if parts.len() != 3 || parts[0] != scheme {
         return Err(format!(
-            "malformed {SIGNATURE_FILE} (expected '{SIGNATURE_SCHEME} <key-id> <128 hex chars>')"
+            "malformed signature file (expected '{scheme} <key-id> <128 hex chars>')"
         ));
     }
     let key_id = decode_hex(parts[1], 8, "key-id")?;
@@ -888,6 +1278,7 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[test]
     fn hmac_is_removed() {
@@ -960,6 +1351,118 @@ mod tests {
         lock.save(&project).unwrap();
         assert!(discover_imported(&project, &[]).unwrap().is_empty());
         fs::remove_dir_all(root).unwrap();
+    }
+
+    fn temp(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        let dir =
+            std::env::temp_dir().join(format!("meld-lib-{name}-{}-{nanos}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn hostile_installed_index_paths_are_rejected() {
+        let root = temp("hostile-index");
+        let entry = InstalledEntry {
+            id: "ruby".to_string(),
+            version: "0.1.0".to_string(),
+            source: "test".to_string(),
+            path: "../../outside".to_string(),
+            aliases: vec![],
+            tier: "L0".to_string(),
+            level: "L0".to_string(),
+        };
+        assert!(validate_entry_path(&entry).is_err());
+        assert!(entry_installed_dir(&root, &entry).is_err());
+        assert!(confined_under(&root, &root.join("../../outside")).is_err());
+
+        let mut index = InstalledIndex::empty();
+        index.upsert(entry);
+        index.save(&root).unwrap();
+        assert!(InstalledIndex::load(&root).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn packtool_parity_still_excludes_only_known_scratch_dirs() {
+        assert!(!SKIP_DIRS.contains(&"target"));
+        assert!(SKIP_DIRS.contains(&".git"));
+        assert!(SKIP_DIRS.contains(&"__pycache__"));
+    }
+
+    #[test]
+    fn workspace_root_skips_a_member_manifest() {
+        let root = temp("workspace-root");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"member\"]\n",
+        )
+        .unwrap();
+        fs::create_dir_all(root.join("member")).unwrap();
+        fs::write(
+            root.join("member/Cargo.toml"),
+            "[package]\nname = \"member\"\nversion = \"0.1.0\"\n",
+        )
+        .unwrap();
+        let found = workspace_root(Some(&root.join("member")));
+        assert_eq!(found, fs::canonicalize(&root).unwrap());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn workspace_root_honors_an_explicit_plain_directory() {
+        let root = temp("explicit-root");
+        fs::write(
+            root.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"member\"]\n",
+        )
+        .unwrap();
+        let plain = root.join("fixtures");
+        fs::create_dir_all(&plain).unwrap();
+        assert_eq!(
+            workspace_root(Some(&plain)),
+            fs::canonicalize(&plain).unwrap()
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn exact_pin_rejects_ranges_and_partial_versions() {
+        assert!(is_exact_version("1.2.3"));
+        assert!(is_exact_version("0.1.0-rc.5"));
+        assert!(!is_exact_version("1.2"));
+        assert!(!is_exact_version(">=1.2.3"));
+        assert!(!is_exact_version(" 1.2.3"));
+    }
+
+    #[test]
+    fn revocations_load_without_any_trust_roots() {
+        let root = temp("revocations");
+        let path = root.join("revocations.json");
+        fs::write(
+            &path,
+            format!(
+                "{{\n  \"revoked\": [\n    {{\n      \"key_id\": \"0123456789abcdef\",\n      \"reason\": \"test\",\n      \"revoked\": \"2026-11-20\"\n    }}\n  ],\n  \"schema\": \"{REVOCATIONS_SCHEMA}\"\n}}\n"
+            ),
+        )
+        .unwrap();
+        let revoked = load_revocations(&path).unwrap();
+        assert!(revoked.contains("0123456789abcdef"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn attestation_message_uses_packtool_field_order() {
+        let message = attestation_message(b"index", b"roots", b"revs", b"mirrors");
+        let text = String::from_utf8(message).unwrap();
+        assert!(text.starts_with(&format!("{ATTESTATION_SCHEME}\n{{")));
+        assert!(text.contains("\"files\":{"));
+        assert!(text.contains("\"index.json\""));
+        assert!(text.contains("\"schema\":\"meld-registry/attestation/ed25519/v1\""));
     }
 
     #[test]
