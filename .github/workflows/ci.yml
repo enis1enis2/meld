@@ -110,7 +110,7 @@ jobs:
       # @cargo-deny branch installed 0.21.0, which still reports unmaintained
       # fxhash as an error; the pinned 0.22.0 honours deny.toml and passes.
       - name: Install cargo-audit and cargo-deny
-        uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+        uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-audit@0.23.0,cargo-deny@0.22.0
           fallback: cargo-install

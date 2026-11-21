@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 0
       - name: Install nightly for cargo-fuzz
         run: rustup toolchain install nightly --profile minimal
-      - uses: taiki-e/install-action@0e09747a63ae497bf945b3dcaf38fef0050d0109 # v2.62.0
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: cargo-fuzz@0.13.2
           fallback: cargo-install
