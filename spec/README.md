@@ -218,10 +218,11 @@ Additional judgment calls (also inline in the affected specs/code):
     pack-owned, data-only scanner profiles selected by `region_end.toml` and
     implemented as built-in Rust algorithms. Pack `region_end.*` code is never
     executed; raw hash delimiters remain the normative escape hatch.
-30\. The first public signed release candidate is `v0.2.0-rc.1`, versions follow
-    SemVer 2.0.0, and the system package name is `meld-lang` to avoid collision
-    with the existing Meld diff tool. Binaries remain `meld`, `meld-lsp`, and
-    `meld-pack`.
+30\. The current public signed release is `v0.2.0-rc.5`, published as a stable
+    GitHub Release with a historical tag name; future releases use stable
+    `vX.Y.Z` tags. Versions follow SemVer 2.0.0, and the system package name is
+    `meld-lang` to avoid collision with the existing Meld diff tool. Binaries
+    remain `meld`, `meld-lsp`, and `meld-pack`.
 31\. OS sandbox backends are selected per host: Linux uses namespaces, seccomp,
     Landlock where available, cgroups, and a probed OCI fallback; macOS uses
     Seatbelt via `sandbox-exec`; Windows uses Job Objects plus AppContainer. A

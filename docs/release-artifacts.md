@@ -35,15 +35,18 @@ flag. `meld` itself and `meld doctor` never install anything.
 
 ## Verify a download
 
+The example verifies the currently published release. For future releases,
+substitute the exact stable `vX.Y.Z` tag.
+
 ```sh
 # 1. Integrity
 sha256sum -c --strict SHA256SUMS
 
 # 2. Signature and manifest + archive payload checks
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.1 \
+  --tag v0.2.0-rc.5 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.1.intoto.jsonl
+  --attestation meld-lang-0.2.0-rc.5.intoto.jsonl
 
 # 3. Installed files
 sh scripts/verify_install.sh --root <install-prefix>

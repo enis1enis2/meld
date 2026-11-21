@@ -46,7 +46,12 @@ for bin in meld meld-lsp meld-pack; do
 done
 printf 'verify_install.sh: PASS three binaries are present and executable\n'
 
+# Installed prefixes keep packs under share/meld-lang/packs; raw release
+# archives keep them next to bin/. Accept both layouts.
 PACKS="$SHARE_DIR/packs"
+if [ ! -d "$PACKS" ] && [ -d "$SHARE_DIR/../../packs" ]; then
+    PACKS="$SHARE_DIR/../../packs"
+fi
 [ -f "$PACKS/python/pack.toml" ] || { printf 'verify_install.sh: missing Python pack data\n' >&2; exit 1; }
 [ -f "$PACKS/bash/pack.toml" ] || { printf 'verify_install.sh: missing Bash pack data\n' >&2; exit 1; }
 [ -f "$PACKS/python/queries/highlights.scm" ] || { printf 'verify_install.sh: missing Python queries\n' >&2; exit 1; }
