@@ -1131,7 +1131,10 @@ fn format_region_body(pack: Option<&PackInfo>, body: &str) -> Result<String, Str
     let seq = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!("meld-fmt-{}-{nanos}-{seq}", std::process::id()));
     {
+        #[cfg(unix)]
         let mut builder = std::fs::DirBuilder::new();
+        #[cfg(not(unix))]
+        let builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {
             use std::os::unix::fs::DirBuilderExt;
