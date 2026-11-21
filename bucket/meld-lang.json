@@ -1,14 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
-  "version": "0.2.0-rc.4",
+  "version": "0.2.0-rc.5",
   "description": "Meld language-composition compiler, CLI and language server",
   "homepage": "https://github.com/enis1enis2/meld",
   "license": "MIT OR Apache-2.0",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/enis1enis2/meld/releases/download/v0.2.0-rc.4/meld-lang-0.2.0-rc.4-x86_64-pc-windows-msvc.zip",
+      "url": "https://github.com/enis1enis2/meld/releases/download/v0.2.0-rc.5/meld-lang-0.2.0-rc.5-x86_64-pc-windows-msvc.zip",
       "hash": "TODO_VERIFY_SHA256",
-      "extract_dir": "meld-lang-0.2.0-rc.4-x86_64-pc-windows-msvc"
+      "extract_dir": "meld-lang-0.2.0-rc.5-x86_64-pc-windows-msvc"
     }
   },
   "bin": [

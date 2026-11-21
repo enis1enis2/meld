@@ -11,7 +11,7 @@ body:
     attributes:
       label: Version or commit
       description: Release candidate tag, or the full output of `git rev-parse HEAD`.
-      placeholder: v0.2.0-rc.4 or 964774e23328c9fa66f584d715936be3cd40d8d9
+      placeholder: v0.2.0-rc.5 or 964774e23328c9fa66f584d715936be3cd40d8d9
     validations:
       required: true
   - type: dropdown

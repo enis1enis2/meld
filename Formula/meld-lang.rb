@@ -3,12 +3,12 @@
 # meld-lsp and meld-pack.
 #
 # SHA256 values must be filled from the published, cosign-signed release after
-# the v0.2.0-rc.4 artifacts exist. The guard below intentionally fails until
+# the v0.2.0-rc.5 artifacts exist. The guard below intentionally fails until
 # then; there is no placeholder that pretends to be a verified checksum.
 class MeldLang < Formula
   desc "Meld language-composition compiler, CLI and language server"
   homepage "https://github.com/enis1enis2/meld"
-  version "0.2.0-rc.4"
+  version "0.2.0-rc.5"
   license "MIT OR Apache-2.0"
 
   arch = Hardware::CPU.arm? ? "aarch64" : "x86_64"

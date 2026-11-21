@@ -28,11 +28,11 @@ All notable changes to Meld are documented here. Meld follows
 - Both installers now detect and install missing language runtimes and cosign
   by default, with `--skip-dependencies`/`-SkipDependencies` to opt out.
 
-## [0.2.0-rc.4] - 2026-11-21
+## [0.2.0-rc.5] - 2026-11-21
 
-This is the first published candidate signed with Sigstore keyless signing and
-published from CI. It is a release candidate, not a final release. The workspace
-version, lockfiles, notices and package metadata all report `0.2.0-rc.4`.
+This is the current candidate signed with Sigstore keyless signing and published
+from CI. It is a release candidate, not a final release. The workspace version,
+lockfiles, notices and package metadata all report `0.2.0-rc.5`.
 
 - The `v0.2.0-rc.1`, `v0.2.0-rc.2` and `v0.2.0-rc.3` tags were created but never
   published. `rc.1` failed before uploading any asset because the tag gates did
@@ -41,7 +41,9 @@ version, lockfiles, notices and package metadata all report `0.2.0-rc.4`.
   archives lacked the top-level payload directory, so install-layout verification
   failed. `rc.3` fixed the archives and all build/signing jobs passed, but the
   publish job passed mutually exclusive `gh attestation verify` identity flags.
-  All fixes are included here, so `rc.4` supersedes the earlier candidates.
+  `rc.4` published successfully, but real Windows testing found that
+  `install.ps1` did not create the pack destination directory before copying
+  pack data. All fixes are included here, so `rc.5` supersedes earlier candidates.
 
 ### Added
 

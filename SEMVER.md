@@ -2,7 +2,7 @@
 
 Meld declares [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0.html).
 Given `MAJOR.MINOR.PATCH`, pre-release identifiers follow `-` and build
-metadata follows `+`. The first published signed candidate is `v0.2.0-rc.4`;
+metadata follows `+`. The current signed candidate is `v0.2.0-rc.5`;
 `rc.1` is a pre-release identifier, so it ranks below `0.2.0`.
 
 ## Public contract

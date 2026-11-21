@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "meld-core"
-version = "0.2.0-rc.4"
+version = "0.2.0-rc.5"
 dependencies = [
  "meld-value",
  "thiserror",
@@ -136,7 +136,7 @@ dependencies = [
 
 [[package]]
 name = "meld-sandbox"
-version = "0.2.0-rc.4"
+version = "0.2.0-rc.5"
 dependencies = [
  "libc",
  "seccompiler",
@@ -147,7 +147,7 @@ dependencies = [
 
 [[package]]
 name = "meld-t2"
-version = "0.2.0-rc.4"
+version = "0.2.0-rc.5"
 dependencies = [
  "meld-core",
  "meld-sandbox",
@@ -159,7 +159,7 @@ dependencies = [
 
 [[package]]
 name = "meld-value"
-version = "0.2.0-rc.4"
+version = "0.2.0-rc.5"
 dependencies = [
  "serde_json",
  "thiserror",

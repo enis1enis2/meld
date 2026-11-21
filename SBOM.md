@@ -12,7 +12,7 @@ directory.
 ## Generation
 
 ```sh
-sh scripts/generate_sbom.sh --version 0.2.0-rc.4 --out dist/release/sbom.cdx.json
+sh scripts/generate_sbom.sh --version 0.2.0-rc.5 --out dist/release/sbom.cdx.json
 ```
 
 The script invokes the real `cargo sbom` tool (pinned to 0.10.0 in CI) against
@@ -48,7 +48,7 @@ cosign verify-blob --bundle sbom.cdx.json.bundle \
   sbom.cdx.json
 ```
 
-`sh scripts/verify_artifacts.sh --dir <release-dir> --tag v0.2.0-rc.4` performs
+`sh scripts/verify_artifacts.sh --dir <release-dir> --tag v0.2.0-rc.5` performs
 these checks together with an anchored, tag-specific identity (use `--offline`
 for integrity checks only). No SBOM, hash or signature is fabricated by the
 scripts; each is produced by a real tool and verified before publication.

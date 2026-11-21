@@ -1,10 +1,11 @@
 # Release process
 
-The first published signed candidate is `v0.2.0-rc.4`. Meld follows SemVer 2.0.0
+The current signed candidate is `v0.2.0-rc.5`. Meld follows SemVer 2.0.0
 ([SEMVER.md](SEMVER.md)). This document describes what CI does and what a human
 must verify before a tag is considered good. Publication is automated from `v*`
-tags after every gate below passes. The earlier `v0.2.0-rc.1`, `v0.2.0-rc.2`
-and `v0.2.0-rc.3` tags were never published and are superseded by `rc.4`.
+tags after every gate below passes. The earlier `v0.2.0-rc.1`, `v0.2.0-rc.2` and
+`v0.2.0-rc.3` tags were never published; `rc.4` was published but superseded by
+`rc.5` after real Windows testing found an installer pack-directory bug.
 
 ## Preconditions
 
@@ -15,7 +16,7 @@ and `v0.2.0-rc.3` tags were never published and are superseded by `rc.4`.
 3. Dependency policy files (`deny.toml`, `audit.toml`, `about.toml`) and grammar
    pins (`grammar-sources.json`) pass their checks. Any `TODO_VERIFY` value
    fails the grammar checker by design.
-4. The workspace version is `0.2.0-rc.4`, matching the candidate tag and the
+4. The workspace version is `0.2.0-rc.5`, matching the candidate tag and the
    release manifest. Lockfiles, third-party notices and package metadata are
    regenerated as part of the bump; no version mismatch is shipped.
 5. There is no standard Linux aarch64 GitHub-hosted runner. `install.sh` fails
@@ -70,17 +71,17 @@ A `v*` tag triggers, in order:
 ```sh
 export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
 target=$(rustc -vV | sed -n 's/^host: //p')
-sh scripts/build_matrix.sh --version 0.2.0-rc.4 --targets "$target"
-sh scripts/package_release.sh --version 0.2.0-rc.4 --target "$target"
-sh scripts/check_reproducibility.sh --version 0.2.0-rc.4 --target "$target"
-sh scripts/generate_sbom.sh --version 0.2.0-rc.4 --out dist/release/meld-lang-0.2.0-rc.4-sbom.cdx.json
-python3 scripts/generate_release_manifest.py --version 0.2.0-rc.4 \
+sh scripts/build_matrix.sh --version 0.2.0-rc.5 --targets "$target"
+sh scripts/package_release.sh --version 0.2.0-rc.5 --target "$target"
+sh scripts/check_reproducibility.sh --version 0.2.0-rc.5 --target "$target"
+sh scripts/generate_sbom.sh --version 0.2.0-rc.5 --out dist/release/meld-lang-0.2.0-rc.5-sbom.cdx.json
+python3 scripts/generate_release_manifest.py --version 0.2.0-rc.5 \
   --artifacts-dir dist/release \
-  --sbom dist/release/meld-lang-0.2.0-rc.4-sbom.cdx.json \
+  --sbom dist/release/meld-lang-0.2.0-rc.5-sbom.cdx.json \
   --commit "$(git rev-parse HEAD)" \
   --source-date-epoch "$SOURCE_DATE_EPOCH" \
   --expected-target "$target" \
-  --out dist/release/meld-lang-0.2.0-rc.4.release-manifest.json
+  --out dist/release/meld-lang-0.2.0-rc.5.release-manifest.json
 sh scripts/generate_checksums.sh --dir dist/release --out dist/release/SHA256SUMS
 sh scripts/verify_artifacts.sh --dir dist/release --offline
 ```
@@ -96,9 +97,9 @@ Use the exact tag; do not accept a broad `refs/tags/.*` identity regex:
 
 ```sh
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.4 \
+  --tag v0.2.0-rc.5 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.4.intoto.jsonl
+  --attestation meld-lang-0.2.0-rc.5.intoto.jsonl
 ```
 
 `--attestation` requires a `gh` build that supports `gh attestation verify
