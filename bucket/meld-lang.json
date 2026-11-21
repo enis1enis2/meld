@@ -7,7 +7,7 @@
   "architecture": {
     "64bit": {
       "url": "https://github.com/enis1enis2/meld/releases/download/v0.2.0/meld-lang-0.2.0-x86_64-pc-windows-msvc.zip",
-      "hash": "9c68e8b88621fe8273471b46220def98a2c25949c14388be0ba88122400b3202",
+      "hash": "1e8704eb5f1eed7a9057cf74b9bbc3d8905ce89b85e4e917b6ee3bc627920cc3",
       "extract_dir": "meld-lang-0.2.0-x86_64-pc-windows-msvc"
     }
   },
