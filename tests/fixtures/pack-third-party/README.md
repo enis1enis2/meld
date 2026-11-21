@@ -12,7 +12,7 @@ the Phase 7 done-when criterion in `project.md` §11.
 | `runner.toml` | T2 launch profile: `sh worker.sh`, JSON-line protocol, project-relative path |
 | `toolchain.toml` | Detect hints only; `install = "never"` (project.md §9) |
 | `worker.sh` | Self-contained newline-delimited JSON worker; `initialize`, `execute`, `shutdown` |
-| `region_end.sh` | Scanner stub; signals "use raw hash delimiters" |
+| `region_end.sh` | Reference-only stub; the host uses its brace fallback, and the promoted `packs/bash` ships `region_end.toml` |
 | `grammar/REFERENCE.md`, `queries/highlights.scm` | Pinned grammar reference and L0 highlight query |
 | `tests/conformance.json` | Data-driven behavioral cases (no code in the manifest) |
 | `tests/feed.meld` | Mixed-language feeder fixture |

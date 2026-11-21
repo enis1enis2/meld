@@ -2,12 +2,18 @@
 
 ## Mirror labels are not immutable pins
 
-`mirrors.json` currently lists `github:enis1enis2/meld@main`. That is a
-discovery label, not an immutable commit or tag. No immutable ref was added
-because the repository does not provide a justified tag/commit for that label.
-Remote consumers must pin their own trust roots (`trust-roots.toml`) and an
-exact ref (tag or commit) when fetching a mirror; do not treat the mirror label
-as a supply-chain trust root.
+`mirrors.json` now lists `github:enis1enis2/meld@v0.2.0`, the upcoming stable
+release tag, instead of the moving `@main` label. A tag is still a ref, not an
+immutable commit: remote consumers must pin their own trust roots
+(`trust-roots.toml`) and an exact commit when fetching a mirror; do not treat
+the mirror label as a supply-chain trust root.
+
+## Address `bash` and `shell` by exact id
+
+Both `bash` and the third-party `shell` pack claim the `sh` and `posix-sh`
+aliases. Alias-only lookups are therefore ambiguous and are rejected; address
+these packs by their exact ids instead — `bash` for the bundled shell pack and
+`shell` for the worked example. An exact id match always wins over aliases.
 
 ## Revocation drill plan
 
