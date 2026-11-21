@@ -6,8 +6,10 @@ on:
   pull_request:
   workflow_call:
 
+# Workflow-specific group: github.workflow is the caller's name under
+# workflow_call, which would collide with the other Release callers.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: msrv-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:

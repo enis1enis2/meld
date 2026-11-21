@@ -6,8 +6,11 @@ on:
   pull_request:
   workflow_call:
 
+# Use a workflow-specific group: github.workflow is the caller's name when this
+# file is used via workflow_call, so all Release callers would otherwise share
+# one group and cancel each other before running any step.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: audit-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
