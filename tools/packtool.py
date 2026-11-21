@@ -158,10 +158,17 @@ def read_checksums(pack_dir: Path) -> dict[str, str]:
     if not path.is_file():
         raise PackToolError(f"missing {CHECKSUM_FILE} in {pack_dir}")
     data = path.read_bytes()
+    # JUDGMENT CALL: the pack spec allows LF or uniformly CRLF checksum files.
+    # Signature verification consumes the RAW bytes of this file, so parsing may
+    # normalize line endings but must never rewrite what gets signed.
     if b"\r" in data:
-        raise PackToolError(f"{CHECKSUM_FILE} must use LF line endings (CRLF is not canonical) in {pack_dir}")
+        if data.count(b"\r") != data.count(b"\r\n") or data.count(b"\n") != data.count(b"\r\n"):
+            raise PackToolError(f"{CHECKSUM_FILE} has mixed line endings in {pack_dir}")
+        normalized = data.replace(b"\r\n", b"\n")
+    else:
+        normalized = data
     entries: dict[str, str] = {}
-    for lineno, line in enumerate(data.split(b"\n"), 1):
+    for lineno, line in enumerate(normalized.split(b"\n"), 1):
         if not line:
             continue
         match = re.fullmatch(rb"([0-9a-f]{64})  (\S.*)", line)
@@ -177,8 +184,8 @@ def read_checksums(pack_dir: Path) -> dict[str, str]:
         if Path(rel).is_absolute() or ".." in Path(rel).parts or "\\" in rel:
             raise PackToolError(f"unsafe path in {CHECKSUM_FILE}: {rel}")
         entries[rel] = digest_bytes.decode("ascii")
-    if data != _checksums_bytes(entries):
-        raise PackToolError(f"{CHECKSUM_FILE} is not canonical (sorted paths, LF, two spaces)")
+    if normalized != _checksums_bytes(entries):
+        raise PackToolError(f"{CHECKSUM_FILE} is not canonical (sorted paths, LF/CRLF, two spaces)")
     return entries
 
 
@@ -827,6 +834,26 @@ def attest_registry(registry_dir: Path, private_key_path: Path | None,
     return target
 
 
+def _verify_index_pack_metadata(src: Path, entry: dict) -> None:
+    """Pin untrusted registry index metadata to the verified pack on disk.
+
+    Shared by install_pack and verify_registry --verify-packs so both paths
+    reject a hand-edited index that points at different bytes or a different
+    signature than the pack actually contains.
+    """
+    if _sha256_file(src / CHECKSUM_FILE) != entry.get("checksums_sha256"):
+        raise PackToolError("registry index checksum does not match the staged pack")
+    staged_sig = _read_signature(src)
+    index_sig = entry.get("signature")
+    if index_sig is None:
+        if staged_sig is not None:
+            raise PackToolError("registry index signature does not match the staged pack")
+    elif (staged_sig is None or index_sig.get("scheme") != SIGNATURE_SCHEME
+          or index_sig.get("key_id") != staged_sig[0]
+          or index_sig.get("signature") != staged_sig[1]):
+        raise PackToolError("registry index signature does not match the staged pack")
+
+
 def verify_registry(registry_dir: Path, trust_roots_path: Path | None = None,
                     revocations_path: Path | None = None,
                     mirrors_path: Path | None = None, verify_packs: bool = False) -> dict:
@@ -861,6 +888,7 @@ def verify_registry(registry_dir: Path, trust_roots_path: Path | None = None,
                 src, paths[TRUST_ROOTS_FILE], paths[REVOCATIONS_FILE],
                 require_trusted=entry.get("signature") is not None,
             )
+            _verify_index_pack_metadata(src, entry)
     return {
         "registry": registry_dir,
         "packs": len(doc["packs"]),
@@ -887,17 +915,7 @@ def install_pack(lang: str, registry_dir: Path, into_dir: Path,
     verify_pack(src, trust_roots_path, revocations_path, require_trusted)
     # The index itself is untrusted data too: pin it to the staged pack so a
     # hand-edited index cannot swap in different bytes.
-    if _sha256_file(src / CHECKSUM_FILE) != entry.get("checksums_sha256"):
-        raise PackToolError("registry index checksum does not match the staged pack")
-    staged_sig = _read_signature(src)
-    index_sig = entry.get("signature")
-    if index_sig is None:
-        if staged_sig is not None:
-            raise PackToolError("registry index signature does not match the staged pack")
-    elif (staged_sig is None or index_sig.get("scheme") != SIGNATURE_SCHEME
-          or index_sig.get("key_id") != staged_sig[0]
-          or index_sig.get("signature") != staged_sig[1]):
-        raise PackToolError("registry index signature does not match the staged pack")
+    _verify_index_pack_metadata(src, entry)
     target = Path(into_dir) / entry["id"]
     if target.exists():
         # JUDGMENT CALL: no silent overwrite of an installed pack; the caller

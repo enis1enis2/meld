@@ -17,6 +17,7 @@ import tempfile
 import tomllib
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 TOOLS = ROOT / "tools"
@@ -41,7 +42,7 @@ import sync_grammars  # noqa: E402
 
 @unittest.skipIf(packtool is None, "cryptography is not importable")
 class ChecksumByteTests(unittest.TestCase):
-    def test_checksums_are_bytes_and_reject_crlf(self):
+    def test_checksums_are_bytes_and_accept_uniform_crlf(self):
         with tempfile.TemporaryDirectory() as td:
             pack = Path(td) / "demo"
             pack.mkdir()
@@ -56,8 +57,18 @@ class ChecksumByteTests(unittest.TestCase):
             self.assertEqual(packtool.read_checksums(pack)["payload.txt"],
                              packtool._sha256_file(pack / "payload.txt"))
 
-            (pack / "checksums.sha256").write_bytes(data.replace(b"\n", b"\r\n"))
-            with self.assertRaisesRegex(packtool.PackToolError, "LF line endings"):
+            # Uniform CRLF is accepted for parsing; the raw bytes are still
+            # what signature verification consumes.
+            crlf = data.replace(b"\n", b"\r\n")
+            (pack / "checksums.sha256").write_bytes(crlf)
+            self.assertEqual(packtool.read_checksums(pack)["payload.txt"],
+                             packtool._sha256_file(pack / "payload.txt"))
+            self.assertEqual((pack / "checksums.sha256").read_bytes(), crlf)
+
+            # Mixed line endings remain rejected.
+            mixed = crlf.replace(b"\r\n", b"\n", 1)
+            (pack / "checksums.sha256").write_bytes(mixed)
+            with self.assertRaisesRegex(packtool.PackToolError, "mixed line endings"):
                 packtool.read_checksums(pack)
 
 
@@ -144,6 +155,51 @@ class SpdxExpressionTests(unittest.TestCase):
                     "see LICENSE in archive"):
             with self.subTest(bad=bad), self.assertRaises(notices.SpdxExpressionError):
                 notices.normalize_spdx(bad)
+
+
+class LicenseFileTests(unittest.TestCase):
+    """Synthetic registry fixtures prove license-file handling fails closed."""
+
+    def make_root(self, base: Path, license_text: str) -> Path:
+        root = base / "project"
+        root.mkdir()
+        home = base / "cargo-home"
+        crate = home / "registry" / "src" / "index.crates.io-test" / "licensed-crate-1.0.0"
+        crate.mkdir(parents=True)
+        (root / "about.toml").write_bytes((ROOT / "about.toml").read_bytes())
+        (root / "grammar-sources.json").write_text('{"crates": []}\n', encoding="utf-8")
+        (root / "Cargo.lock").write_text(
+            '[[package]]\nname = "licensed-crate"\nversion = "1.0.0"\n'
+            'source = "registry+https://github.com/rust-lang/crates.io-index"\n'
+            'checksum = "' + "a" * 64 + '"\n',
+            encoding="utf-8",
+        )
+        (crate / "Cargo.toml").write_text(
+            '[package]\nname = "licensed-crate"\nversion = "1.0.0"\nlicense-file = "LICENSE"\n',
+            encoding="utf-8",
+        )
+        (crate / "LICENSE").write_text(license_text, encoding="utf-8")
+        self.home = home
+        return root
+
+    def test_explicit_spdx_marker_is_used(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self.make_root(Path(td), "Copyright example\nSPDX-License-Identifier: MIT\n")
+            with mock.patch.dict(os.environ, {"CARGO_HOME": str(self.home)}):
+                text = notices.render(root)
+            self.assertIn("| MIT |", text)
+
+    def test_prose_or_missing_file_fails_closed(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = self.make_root(Path(td), "This looks like a permissive license.\n")
+            with mock.patch.dict(os.environ, {"CARGO_HOME": str(self.home)}):
+                with self.assertRaisesRegex(SystemExit, "TODO_VERIFY"):
+                    notices.render(root)
+            (self.home / "registry" / "src" / "index.crates.io-test"
+             / "licensed-crate-1.0.0" / "LICENSE").unlink()
+            with mock.patch.dict(os.environ, {"CARGO_HOME": str(self.home)}):
+                with self.assertRaisesRegex(SystemExit, "TODO_VERIFY"):
+                    notices.render(root)
 
 
 EXAMPLE_COUNTS = {

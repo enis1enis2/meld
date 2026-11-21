@@ -378,6 +378,44 @@ class PackToolTests(unittest.TestCase):
             self.assertEqual(ambiguous.returncode, 1)
             self.assertIn("ambiguous alias 'sh'", ambiguous.stderr)
 
+    def test_verify_registry_verify_packs_checks_index_metadata(self):
+        """Regression: --verify-packs must pin index metadata to pack bytes."""
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            private, public = key_pair(base)
+            roots = trust_roots(base, public)
+            revoked = revocations(base)
+            pack, _ = self.make_pack(td, strict=True, private_key=private, signed=True)
+            registry = base / "registry"
+            result = cli("publish", pack, "--registry", registry,
+                         "--trust-roots", roots, "--revocations", revoked)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            (registry / "trust-roots.toml").write_bytes(roots.read_bytes())
+            (registry / "revocations.json").write_bytes(revoked.read_bytes())
+            result = cli("mirrors", "--registry", registry,
+                         "--mirror", "https://mirror.example/meld")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = cli("attest", "--registry", registry, "--private-key", private)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            args = ("verify-registry", registry, "--trust-roots", roots,
+                    "--revocations", revoked, "--verify-packs")
+            result = cli(*args)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("packs verified: 1", result.stdout)
+
+            index_path = registry / "index.json"
+            doc = json.loads(index_path.read_text(encoding="utf-8"))
+            doc["packs"][0]["checksums_sha256"] = "0" * 64
+            write_canonical_json(index_path, doc)
+            # Re-attest so the only failure is the index-vs-pack binding.
+            result = cli("attest", "--registry", registry, "--private-key", private,
+                         "--trust-roots", roots)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            result = cli(*args)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("registry index checksum does not match", result.stderr)
+
     def test_registry_attestation_binding_and_revocation(self):
         with tempfile.TemporaryDirectory() as td:
             base = Path(td)

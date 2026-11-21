@@ -27,9 +27,44 @@ def registry_roots() -> list[pathlib.Path]:
     return hashed or [src]
 
 
+_SPDX_MARKER_RE = re.compile(
+    r"SPDX-License-Identifier:\s*([A-Za-z0-9][A-Za-z0-9.+-]*"
+    r"(?:\s+(?:AND|OR|WITH)\s+[A-Za-z0-9][A-Za-z0-9.+-]*)*)",
+    flags=re.IGNORECASE,
+)
+
+
+def license_from_file(crate_dir: pathlib.Path, license_file: str) -> str:
+    """Resolve a Cargo `license-file` without inventing an attribution.
+
+    A license file is only machine-readable when it carries an explicit
+    `SPDX-License-Identifier:` marker. Prose that merely resembles a license
+    is rejected, and a missing file is rejected: both fail closed with a
+    TODO_VERIFY marker instead of a guessed SPDX expression.
+    """
+    if not isinstance(license_file, str) or not license_file.strip():
+        return f"{PLACEHOLDER} (empty license-file entry)"
+    relative = pathlib.PurePosixPath(license_file.replace("\\", "/"))
+    if relative.is_absolute() or ".." in relative.parts:
+        return f"{PLACEHOLDER} (unsafe license-file path {license_file!r})"
+    path = crate_dir.joinpath(*relative.parts)
+    if not path.is_file():
+        return f"{PLACEHOLDER} (license-file {license_file!r} missing locally)"
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        return f"{PLACEHOLDER} (cannot read license-file {license_file!r}: {exc})"
+    for line in text.splitlines()[:80]:
+        match = _SPDX_MARKER_RE.search(line)
+        if match:
+            return match.group(1).strip()
+    return f"{PLACEHOLDER} (license-file {license_file!r} has no SPDX marker)"
+
+
 def license_for(name: str, version: str, roots: list[pathlib.Path]) -> str:
     for root in roots:
-        candidate = root / f"{name}-{version}" / "Cargo.toml"
+        crate_dir = root / f"{name}-{version}"
+        candidate = crate_dir / "Cargo.toml"
         if candidate.is_file():
             data = tomllib.loads(candidate.read_text(encoding="utf-8"))
             package = data.get("package", {})
@@ -37,7 +72,8 @@ def license_for(name: str, version: str, roots: list[pathlib.Path]) -> str:
             if isinstance(license_id, str) and license_id.strip():
                 return license_id.strip()
             if package.get("license-file"):
-                return f"see {package['license-file']} in the crate archive"
+                return license_from_file(crate_dir, str(package["license-file"]))
+            return f"{PLACEHOLDER} (Cargo.toml has neither license nor license-file)"
     return f"{PLACEHOLDER} (license metadata unavailable locally)"
 
 
