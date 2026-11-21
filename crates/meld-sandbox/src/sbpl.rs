@@ -109,8 +109,8 @@ mod tests {
     use crate::capability::{ProtocolCapability, SafeRoot};
     use std::path::Path;
 
-    fn policy() -> (SandboxPolicy, std::path::PathBuf) {
-        let root = std::env::temp_dir().join(format!("meld-sbpl-{}", std::process::id()));
+    fn policy(label: &str) -> (SandboxPolicy, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("meld-sbpl-{}-{label}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         let mut policy = SandboxPolicy::deny_all("sbpl");
         policy
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn exact_rules_use_literal_and_subtrees_use_subpath() {
-        let (policy, root) = policy();
+        let (policy, root) = policy("exact");
         let spec = CommandSpec::new("/usr/bin/python3", ["-u"]);
         let profile = seatbelt_profile(&spec, &policy).unwrap();
         let exact = root.join("src/exact.txt");
@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn hostname_allowlists_fail_closed() {
-        let (mut policy, root) = policy();
+        let (mut policy, root) = policy("hosts");
         policy.network.protocols = ProtocolCapability::parse("tcp").unwrap();
         policy
             .capabilities

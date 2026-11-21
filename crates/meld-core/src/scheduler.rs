@@ -114,13 +114,11 @@ pub fn dedent(code: &str) -> String {
                 return &line[indent_bytes..];
             }
             let mut cut = line.len();
-            let mut removed = 0;
-            for (byte_index, ch) in line.char_indices() {
+            for (removed, (byte_index, ch)) in line.char_indices().enumerate() {
                 if removed >= indent_chars || !ch.is_whitespace() {
                     cut = byte_index;
                     break;
                 }
-                removed += 1;
                 cut = byte_index + ch.len_utf8();
             }
             &line[cut..]

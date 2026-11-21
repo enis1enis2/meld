@@ -46,7 +46,7 @@ const T3_MAX_COMPONENT_HANDLES: usize = 256;
 /// Refuse oversized binaries before JIT compilation, which is itself costly.
 const T3_MAX_COMPONENT_BYTES: usize = 16 * 1024 * 1024;
 /// SHA-256 of the committed `component/demo.component.wasm`. The release gate
-/// is enforced by [`demo`], not merely documented for CI.
+/// is enforced by [`T3Backend::demo`], not merely documented for CI.
 pub const DEMO_COMPONENT_SHA256: &str =
     "1f4ad3f28b77075cded9a3c0dcf3bca5cd91a7595a57da3079bfd4104e7f30e1";
 
@@ -315,7 +315,7 @@ impl T3Backend {
 /// by Meld) with `{src}`, `{out}` and `{dir}` placeholders substituted.
 ///
 /// JUDGMENT CALL 56: a T5 backend without an attached
-/// [`SandboxBackend`](meld_sandbox::SandboxBackend) is not a "best effort"
+/// [`SandboxBackend`] is not a "best effort"
 /// fallback. It fails closed. The host must supply both the enforcement backend
 /// and the effective policy through [`T5Backend::with_sandbox`].
 pub struct T5Backend {
