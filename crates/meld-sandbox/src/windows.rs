@@ -241,7 +241,15 @@ impl WindowsBackend {
                 process_group_kill: false,
                 ..Default::default()
             },
-            notes: vec!["Windows backend is compile-only on Linux".to_string()],
+            notes: if cfg!(target_os = "windows") {
+                vec![concat!(
+                    "AppContainer token is not applied; policies needing network, ",
+                    "filesystem or syscall enforcement fail closed"
+                )
+                .to_string()]
+            } else {
+                vec!["Windows backend is compile-only on Linux".to_string()]
+            },
         }
     }
 }

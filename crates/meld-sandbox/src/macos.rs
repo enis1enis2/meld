@@ -173,7 +173,11 @@ impl MacosBackend {
     pub fn probe(&self) -> BackendProbe {
         let executable = std::path::Path::new("/usr/bin/sandbox-exec");
         let available = executable.is_file();
-        let mut notes = vec!["macOS Seatbelt: compile-only on Linux".to_string()];
+        let mut notes = if cfg!(target_os = "macos") {
+            vec!["macOS Seatbelt requires /usr/bin/sandbox-exec".to_string()]
+        } else {
+            vec!["macOS Seatbelt: compile-only on Linux".to_string()]
+        };
         if !available {
             notes.push("/usr/bin/sandbox-exec not found".to_string());
         }
