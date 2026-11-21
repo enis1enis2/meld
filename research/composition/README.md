@@ -50,7 +50,7 @@ concept at all.
 
 Measured on the demo in `prototype.py`:
 
-```
+```text
 body_start          = 7
 intended region end = 54  (byte offset of the final '}')
 generic brace end   = 31  -> WRONG

@@ -21,7 +21,7 @@ than defining a second integrity format.
 
 Each pack carries two extra files next to `pack.toml`:
 
-```
+```text
 checksums.sha256      # SHA-256 of every payload file
 signature.ed25519     # public-key Ed25519 signature over checksums.sha256
 ```
@@ -30,7 +30,7 @@ signature.ed25519     # public-key Ed25519 signature over checksums.sha256
 
 One line per payload file:
 
-```
+```text
 <64 lowercase hex chars>  <posix-relative path>
 ```
 
@@ -61,7 +61,7 @@ checked-in grammar packs use the exact-version form because
 
 Exactly one LF-terminated line:
 
-```
+```text
 meld-pack/ed25519/v1 <key-id> <128 lowercase hex chars>
 ```
 
@@ -100,7 +100,7 @@ stays outside every repository and worktree. Consequences:
 
 A registry directory:
 
-```
+```text
 <registry>/
   index.json              # canonical JSON, sorted keys, no timestamps
   trust-roots.toml        # meld-trust-roots/1 public keys
@@ -190,7 +190,7 @@ attestation signer must itself be an unrevoked trust root.
 
 ## 3. CLI
 
-```
+```text
 python3 tools/packtool.py verify <pack-dir> [--trust-roots <file>] [--revocations <file>] [--require-trusted]
 python3 tools/packtool.py sign <pack-dir> --private-key <file>
 python3 tools/packtool.py publish <pack-dir> --registry <dir> [--trust-roots <file>] [--revocations <file>]

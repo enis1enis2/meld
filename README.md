@@ -1,8 +1,8 @@
+# Meld
+
 <p align="center">
   <img src="docs/assets/logo.svg" alt="Meld mark" width="96" />
 </p>
-
-# Meld
 
 > One file. Many languages. Typed values.
 

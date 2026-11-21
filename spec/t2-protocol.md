@@ -151,7 +151,7 @@ compiled out of release builds and never changes production launch behavior.
 
 ## 7. Example session (Python worker)
 
-```
+```text
 → {"id":1,"method":"initialize",...}
 ← {"id":1,"result":{"protocol":"meld-t2/1","level":"L2",...}}
 → {"id":2,"method":"execute","params":{"region_id":"r0","code":"print('hi')","env":{}}}

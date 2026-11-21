@@ -170,6 +170,7 @@ Rust for the core: tree-sitter has a first-class Rust binding, wasmtime provides
 Key dependencies: tree-sitter, wasmtime (+ component model), a JSON-RPC lib, tower-lsp (or equivalent) for the language server.
 
 ## 11. Phased roadmap
+
 | Phase | Deliverable | Done when |
 | --- | --- | --- |
 | 0. Spec | Syntax spec (§3.1), Value Model spec (§6), Lang Pack spec (§4), protocol spec for T2 | Specs reviewed; 3 example .meld files hand-written |
@@ -182,6 +183,7 @@ Key dependencies: tree-sitter, wasmtime (+ component model), a JSON-RPC lib, tow
 | 7. Ecosystem | Pack registry, signing, pack generator polish, docs | A third party adds a language without touching core |
 
 ## 12. Risks and mitigations
+
 | Risk | Mitigation |
 | --- | --- |
 | "Any language" is unbounded | Open pack contract; syntax-only tier L0 for the long tail (§4) |

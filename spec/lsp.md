@@ -51,7 +51,7 @@ contract testable without installing one server per language.
 
 For each relevant region, `VirtualDocument::new` builds an isolated file:
 
-```
+```text
 <newline> * global_line
 <space>   * global_column
 sanitized_source[region.start..region.end]

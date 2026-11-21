@@ -47,10 +47,12 @@ no runnable CLI would be L0 instead (project.md §5 honesty note).
 - **Signature key:** `signature.ed25519` is produced with a private key that is
   intentionally **not distributed** with the fixture. Only its public key is in
   `packs/registry/trust-roots.toml`. To re-sign after editing files, run:
-  ```
+
+  ```text
   python3 tools/packtool.py sign tests/fixtures/pack-third-party \
     --private-key /path/to/ed25519-private.pem
   ```
+
   and regenerate `checksums.sha256` first if payloads changed. Verification
   without `--trust-roots` checks signature presence only; passing the public
   trust roots authenticates the exact signed message (see `spec/registry.md`).
@@ -60,7 +62,7 @@ no runnable CLI would be L0 instead (project.md §5 honesty note).
 
 From the project root:
 
-```
+```text
 python3 tools/packtool.py verify tests/fixtures/pack-third-party \
   --trust-roots packs/registry/trust-roots.toml \
   --revocations packs/registry/revocations.json
