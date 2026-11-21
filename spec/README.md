@@ -218,7 +218,7 @@ Additional judgment calls (also inline in the affected specs/code):
     pack-owned, data-only scanner profiles selected by `region_end.toml` and
     implemented as built-in Rust algorithms. Pack `region_end.*` code is never
     executed; raw hash delimiters remain the normative escape hatch.
-30\. The first public signed release candidate is `v0.2.0-rc.3`, versions follow
+30\. The first public signed release candidate is `v0.2.0-rc.4`, versions follow
     SemVer 2.0.0, and the system package name is `meld-lang` to avoid collision
     with the existing Meld diff tool. Binaries remain `meld`, `meld-lsp`, and
     `meld-pack`.
