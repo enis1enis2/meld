@@ -12,7 +12,7 @@ copied, and no raster preview is fabricated here.
 ## Palette
 
 | Role | Hex | Use |
-|---|---|---|
+| --- | --- | --- |
 | Ink | `#102A43` | Dark background and primary text |
 | Paper | `#F7F5EF` | Light text and light surfaces |
 | Teal | `#0F8B8D` | First language region / primary accent |

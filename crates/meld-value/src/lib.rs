@@ -437,7 +437,7 @@ fn unbase64(s: &str) -> Result<Vec<u8>, ValueError> {
         return Err(invalid());
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
+    for chunk in bytes.as_chunks::<4>().0 {
         let mut values = [0u8; 4];
         let mut data = 0usize;
         let mut padding = 0usize;

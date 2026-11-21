@@ -1,0 +1,7 @@
+# Convenience aliases for the optimized profile used by the release workflow.
+# `cargo build` stays dev/unoptimized; these aliases opt into release output.
+[alias]
+rbuild = "build --workspace --release --locked"
+rtest = "test --workspace --all-targets --release --locked"
+rcheck = "check --workspace --all-targets --release --locked"
+rclippy = "clippy --workspace --all-targets --release --locked"
