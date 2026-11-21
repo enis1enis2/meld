@@ -55,11 +55,16 @@ for bin in meld meld-lsp meld-pack; do
     [ -f "$BUILT/bin/$bin$ext" ] || { printf 'package_release.sh: missing binary %s\n' "$bin$ext" >&2; exit 1; }
 done
 
-for required in README.md CHANGELOG.md RELEASE.md SBOM.md SECURITY.md \
-    THIRD-PARTY-NOTICES.md LICENSE-APACHE LICENSE-MIT NOTICE docs/schema-stability.md \
-    docs/release-artifacts.md packs/registry/index.json; do
+# One shared payload manifest keeps packaging and smoke verification aligned.
+PAYLOAD_MANIFEST="$ROOT/scripts/release_payload.txt"
+[ -f "$PAYLOAD_MANIFEST" ] || { printf 'package_release.sh: missing %s\n' "$PAYLOAD_MANIFEST" >&2; exit 1; }
+while IFS= read -r required || [ -n "$required" ]; do
+    case "$required" in ''|'#'*) continue ;; esac
     [ -f "$ROOT/$required" ] || { printf 'package_release.sh: missing required payload %s\n' "$required" >&2; exit 1; }
-done
+done < "$PAYLOAD_MANIFEST"
+[ -f "$ROOT/packs/registry/index.json" ] || {
+    printf 'package_release.sh: missing required payload packs/registry/index.json\n' >&2; exit 1
+}
 
 mkdir -p "$OUT"
 PACKAGE="meld-lang-$VERSION-$TARGET"
@@ -75,11 +80,11 @@ for bin in meld meld-lsp meld-pack; do
 done
 cp -R "$ROOT/packs/." "$STAGE/$PACKAGE/packs/"
 cp -R "$ROOT/examples/." "$STAGE/$PACKAGE/share/meld-lang/examples/"
-for doc in README.md CHANGELOG.md RELEASE.md SBOM.md SECURITY.md THIRD-PARTY-NOTICES.md \
-    LICENSE-APACHE LICENSE-MIT NOTICE docs/schema-stability.md docs/release-artifacts.md; do
+while IFS= read -r doc || [ -n "$doc" ]; do
+    case "$doc" in ''|'#'*) continue ;; esac
     mkdir -p "$STAGE/$PACKAGE/share/doc/meld-lang/$(dirname "$doc")"
     cp "$ROOT/$doc" "$STAGE/$PACKAGE/share/doc/meld-lang/$doc"
-done
+done < "$PAYLOAD_MANIFEST"
 cp "$BUILT/BUILD_INFO" "$STAGE/$PACKAGE/share/doc/meld-lang/BUILD_INFO.txt"
 
 # Portable metadata normalization: fixed mtimes for every file and directory.
@@ -118,6 +123,9 @@ if fmt == 'tar.gz':
                     ti.uid = ti.gid = 0
                     ti.uname = ti.gname = ''
                     ti.mtime = epoch
+                    # Set modes explicitly: the staging umask and platform must
+                    # not leak into the archive. Only symlinks are 0755.
+                    ti.mode = 0o755 if path.is_symlink() else (0o755 if path.is_dir() else 0o644)
                     if path.is_symlink():
                         ti.type = tarfile.SYMTYPE
                         ti.linkname = path.readlink().as_posix()
@@ -145,7 +153,7 @@ else:
             name = f'{package}/{path.relative_to(base).as_posix()}'
             zi = zipfile.ZipInfo(name, date_time=date_time)
             zi.create_system = 0
-            zi.external_attr = 0o644 << 16
+            zi.external_attr = 0o644 << 16  # explicit, umask-independent file mode
             zi.compress_type = zipfile.ZIP_DEFLATED
             with path.open('rb') as fh:
                 zf.writestr(zi, fh.read())

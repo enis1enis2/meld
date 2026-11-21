@@ -29,6 +29,10 @@ mkdir -p "$(dirname "$OUT")"
 python3 - "$DIR" "$OUT" <<'PY'
 import hashlib, pathlib, sys
 root, out = pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2])
+root = root.resolve()
+# A custom --out must never be hashed into its own output, even when it lives
+# inside --dir under a name that is not SHA256SUMS.
+out_resolved = out.resolve()
 excluded_suffixes = ('.sig', '.bundle', '.intoto.jsonl', '.sha256')
 excluded_names = {'SHA256SUMS', 'SHA256SUMS.sig', 'SHA256SUMS.bundle'}
 
@@ -39,6 +43,8 @@ if len(manifests) != 1:
 lines = []
 for path in sorted((p for p in root.rglob('*') if p.is_file()), key=lambda p: p.relative_to(root).as_posix()):
     name = path.relative_to(root).as_posix()
+    if path.resolve() == out_resolved:
+        continue
     if name in excluded_names or name.endswith(excluded_suffixes):
         continue
     digest = hashlib.sha256(path.read_bytes()).hexdigest()

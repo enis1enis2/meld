@@ -1,20 +1,25 @@
 #!/bin/sh
-# Verify a downloaded release: strict checksums, manifest consistency, archive
-# payload, one cosign signature+bundle per signed artifact, and optionally the
-# GitHub build-provenance attestation. --offline is integrity-only and never
-# claims signature or attestation verification.
+# Verify a downloaded release: strict checksums, manifest consistency, expected
+# targets, archive payload, one cosign signature+bundle per signed artifact with
+# matching signature bytes, and (optionally or mandatorily) the GitHub
+# build-provenance attestation. --offline is integrity-only and never claims
+# signature or attestation trust.
 set -eu
 
 usage() {
     cat <<'EOF'
 usage: scripts/verify_artifacts.sh --dir DIR [--tag TAG] [--repo OWNER/REPO]
-                                    [--identity-regexp REGEXP] [--issuer URL]
-                                    [--attestation FILE] [--offline]
+                                     [--identity-regexp REGEXP] [--issuer URL]
+                                     [--attestation FILE] [--require-attestation]
+                                     [--expected-target TARGET]... [--offline]
 
---tag builds an anchored identity regexp for the exact release workflow tag.
---attestation verifies subjects with `gh attestation verify --bundle FILE`.
---offline checks integrity and signature-file presence only; it never claims
-cosign or attestation trust.
+Online verification requires --tag; the default identity is anchored to the
+exact release workflow tag. --identity-regexp overrides it but must be anchored
+with ^ and $. --require-attestation resolves the single --attestation file or
+the sole *.intoto.jsonl in --dir and fails when none is present.
+
+--offline checks integrity, signature-file shape and byte equality only; it
+never claims cosign or attestation trust and rejects --require-attestation.
 EOF
 }
 
@@ -26,6 +31,8 @@ IDENTITY=
 ISSUER='https://token.actions.githubusercontent.com'
 ATTESTATION=
 OFFLINE=
+REQUIRE_ATTESTATION=
+EXPECTED_TARGETS=
 
 escape_regex() {
     printf '%s' "$1" | sed -e 's/[][\.^$*+?(){}|]/\\&/g'
@@ -49,6 +56,17 @@ while [ $# -gt 0 ]; do
         --identity-regexp) IDENTITY=${2:?--identity-regexp needs a value}; shift 2 ;;
         --issuer) ISSUER=${2:?--issuer needs a value}; shift 2 ;;
         --attestation) ATTESTATION=${2:?--attestation needs a value}; shift 2 ;;
+        --require-attestation) REQUIRE_ATTESTATION=yes; shift ;;
+        --expected-target)
+            target=${2:?--expected-target needs a value}
+            if [ -n "$EXPECTED_TARGETS" ]; then
+                EXPECTED_TARGETS="$EXPECTED_TARGETS
+$target"
+            else
+                EXPECTED_TARGETS=$target
+            fi
+            shift 2
+            ;;
         --offline) OFFLINE=yes; shift ;;
         -h|--help) usage; exit 0 ;;
         *) printf 'verify_artifacts.sh: unknown argument: %s\n' "$1" >&2; usage >&2; exit 2 ;;
@@ -57,25 +75,39 @@ done
 [ -n "$DIR" ] || { usage >&2; exit 2; }
 [ -d "$DIR" ] || fail "missing directory $DIR"
 
-if [ -z "$OFFLINE" ] && [ -z "$IDENTITY" ]; then
-    [ -n "$TAG" ] || fail 'provide --tag or --identity-regexp; use --offline for integrity-only checks'
-    IDENTITY=$(identity_from_tag)
+if [ -n "$OFFLINE" ]; then
+    [ -z "$REQUIRE_ATTESTATION" ] || fail '--require-attestation cannot be combined with --offline'
+else
+    [ -n "$TAG" ] || fail 'online verification requires --tag (use --offline for integrity-only checks)'
+    if [ -z "$IDENTITY" ]; then
+        IDENTITY=$(identity_from_tag)
+    fi
+    printf '%s\n' "$IDENTITY" | grep -Eq '^\^.*\$$' || \
+        fail 'identity regexp must be anchored with ^ and $'
+    if [ -n "$REQUIRE_ATTESTATION" ] && [ -z "$ATTESTATION" ]; then
+        attestation_count=$(find "$DIR" -maxdepth 1 -type f -name '*.intoto.jsonl' | wc -l | tr -d ' ')
+        [ "$attestation_count" -eq 1 ] || \
+            fail "--require-attestation needs --attestation or exactly one *.intoto.jsonl in $DIR (found $attestation_count)"
+        ATTESTATION=$(find "$DIR" -maxdepth 1 -type f -name '*.intoto.jsonl')
+    fi
 fi
 
 REPORT=$(mktemp "${TMPDIR:-/tmp}/meld-verify-report.XXXXXX")
 SUBJECTS=$(mktemp "${TMPDIR:-/tmp}/meld-verify-subjects.XXXXXX")
 trap 'rm -f "$REPORT" "$SUBJECTS"' EXIT HUP INT TERM
 
-python3 - "$DIR" "$TAG" "$ATTESTATION" > "$REPORT" <<'PY'
-import fnmatch, hashlib, json, pathlib, re, sys, tarfile, zipfile
+python3 - "$DIR" "$TAG" "$ATTESTATION" "$EXPECTED_TARGETS" > "$REPORT" <<'PY'
+import base64, binascii, fnmatch, hashlib, json, pathlib, re, sys, tarfile, zipfile
 
 root = pathlib.Path(sys.argv[1])
 tag = sys.argv[2]
 attestation_arg = sys.argv[3]
+expected_arg = sys.argv[4]
 SCHEMA = 'meld-release-manifest/1'
 TARGET_RE = re.compile(r'[A-Za-z0-9_-]+')
 EXCLUDED_SUFFIXES = ('.sig', '.bundle', '.intoto.jsonl', '.sha256')
 EXCLUDED_NAMES = {'SHA256SUMS', 'SHA256SUMS.sig', 'SHA256SUMS.bundle'}
+expected_targets = sorted({line for line in expected_arg.splitlines() if line})
 
 
 def archive_target(name, version):
@@ -129,6 +161,51 @@ def signed_kind(name):
     return None
 
 
+def validate_entry_name(name, where):
+    if not name or '\\' in name or name.startswith('/'):
+        fail(f'{where}: unsafe archive entry {name!r}')
+    parts = pathlib.PurePosixPath(name).parts
+    if any(part in ('', '.', '..') for part in parts):
+        fail(f'{where}: unsafe archive entry {name!r}')
+
+
+def signature_bytes(path, where):
+    """Read a cosign .sig file as either raw bytes or its base64 text form."""
+    raw = path.read_bytes()
+    try:
+        decoded = base64.b64decode(raw.strip(), validate=True)
+    except (binascii.Error, ValueError):
+        decoded = None
+    if decoded:
+        return decoded
+    return raw
+
+
+def bundle_signature(path, where):
+    try:
+        bundle = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f'{where}: unreadable signature bundle: {exc}')
+    sigs = []
+    envelope = bundle.get('dsseEnvelope') if isinstance(bundle, dict) else None
+    if isinstance(envelope, dict):
+        sigs = [item.get('sig') for item in envelope.get('signatures', []) if isinstance(item, dict)]
+    if not sigs:
+        envelopes = bundle.get('dsseEnvelopes') if isinstance(bundle, dict) else None
+        if isinstance(envelopes, list) and envelopes and isinstance(envelopes[0], dict):
+            sigs = [item.get('sig') for item in envelopes[0].get('signatures', []) if isinstance(item, dict)]
+    if not sigs:
+        message = bundle.get('messageSignature') if isinstance(bundle, dict) else None
+        if isinstance(message, dict) and message.get('signature'):
+            sigs = [message['signature']]
+    if len(sigs) != 1 or not isinstance(sigs[0], str):
+        fail(f'{where}: expected exactly one signature in bundle')
+    try:
+        return base64.b64decode(sigs[0], validate=True)
+    except (binascii.Error, ValueError) as exc:
+        fail(f'{where}: invalid base64 signature in bundle: {exc}')
+
+
 sums = root / 'SHA256SUMS'
 if not sums.is_file():
     fail('SHA256SUMS is missing')
@@ -180,11 +257,15 @@ if len(sboms) != 1:
     fail(f'expected one SBOM in SHA256SUMS, found {len(sboms)}')
 if not archives:
     fail('no platform archives in SHA256SUMS')
-for name in signed:
-    for suffix in ('.sig', '.bundle'):
-        signature = root / f'{name}{suffix}'
-        if not signature.is_file() or signature.stat().st_size == 0:
-            fail(f'missing or empty signature file {signature.name}')
+for name in sorted(signed):
+    sig = root / f'{name}.sig'
+    bundle = root / f'{name}.bundle'
+    if not sig.is_file() or sig.stat().st_size == 0:
+        fail(f'missing or empty signature file {sig.name}')
+    if not bundle.is_file() or bundle.stat().st_size == 0:
+        fail(f'missing or empty signature bundle {bundle.name}')
+    if signature_bytes(sig, sig.name) != bundle_signature(bundle, bundle.name):
+        fail(f'signature bytes in {sig.name} do not match {bundle.name}')
 for path in root.rglob('*'):
     if not path.is_file():
         continue
@@ -192,15 +273,23 @@ for path in root.rglob('*'):
     for suffix in ('.sig', '.bundle'):
         if name.endswith(suffix) and name[:-len(suffix)] not in signed:
             fail(f'unexpected signature file {name}')
-info(f'PASS one .sig and .bundle for each of {len(signed)} signed artifacts')
+info(f'PASS one .sig and .bundle with equal signature bytes for {len(signed)} signed artifacts')
 
 attestations = sorted(p.name for p in root.glob('*.intoto.jsonl') if p.is_file())
 if len(attestations) > 1:
     fail(f'expected at most one attestation file, found {attestations}')
-if attestation_arg and not pathlib.Path(attestation_arg).is_file():
-    fail(f'attestation file is missing: {attestation_arg}')
+if attestation_arg:
+    attestation_path = pathlib.Path(attestation_arg).resolve()
+    if not attestation_path.is_file():
+        fail(f'attestation file is missing: {attestation_arg}')
+    if attestations and attestation_path != (root / attestations[0]).resolve():
+        fail('multiple attestation candidates: explicit file and directory scan disagree')
 
 manifest_name = manifests[0]
+if manifest_name not in entries:
+    fail(f'{manifest_name} is not covered by SHA256SUMS')
+info(f'PASS independent manifest digest {entries[manifest_name]} from SHA256SUMS')
+
 try:
     manifest = json.loads((root / manifest_name).read_text(encoding='utf-8'))
 except json.JSONDecodeError as exc:
@@ -214,9 +303,13 @@ if tag.startswith('v') and manifest.get('version') != tag[1:]:
 checksums_meta = manifest.get('checksums', {})
 if checksums_meta.get('file') != 'SHA256SUMS' or checksums_meta.get('generated_after_manifest') is not True:
     fail('manifest does not declare the post-manifest SHA256SUMS contract')
+if checksums_meta.get('includes_manifest') is not True:
+    fail('manifest must declare that SHA256SUMS includes the manifest digest')
 signature_policy = manifest.get('signature_policy', {})
 if signature_policy.get('embedded_signatures') is not False:
     fail('manifest must not embed signature data')
+if signature_policy.get('expected_files_per_artifact') != ['.sig', '.bundle']:
+    fail('manifest signature policy must require .sig and .bundle files')
 
 expected_artifacts = sorted(set(entries) - {'SHA256SUMS', manifest_name})
 listed = manifest.get('artifacts')
@@ -240,6 +333,17 @@ for name in expected_artifacts:
         fail(f'manifest size mismatch for {name}')
 info('PASS manifest schema, SemVer 2.0.0, artifact digests and sizes')
 
+manifest_targets = manifest.get('expected_targets')
+if not isinstance(manifest_targets, list) or not manifest_targets:
+    fail('manifest does not declare expected_targets')
+if any(not isinstance(target, str) or not TARGET_RE.fullmatch(target) for target in manifest_targets):
+    fail('manifest expected_targets contains invalid target triples')
+manifest_targets = sorted(set(manifest_targets))
+if manifest_targets != sorted(manifest.get('expected_targets')):
+    fail('manifest expected_targets must be unique and sorted')
+if expected_targets and expected_targets != manifest_targets:
+    fail(f'caller expected targets {expected_targets} != manifest {manifest_targets}')
+
 common = ('packs/python/pack.toml', 'packs/bash/pack.toml',
           'share/doc/meld-lang/LICENSE-APACHE',
           'share/doc/meld-lang/LICENSE-MIT',
@@ -255,20 +359,34 @@ for name in archives:
     archive_paths.append(root / name)
 if len(targets) != len(set(targets)):
     fail(f'duplicate archive targets: {targets}')
+actual_targets = sorted(set(targets))
+if actual_targets != manifest_targets:
+    fail(f'archive targets {actual_targets} != manifest expected_targets {manifest_targets}')
 for path in archive_paths:
     ext = '.exe' if path.name.endswith('.zip') else ''
     required = tuple(f'bin/{name}{ext}' for name in ('meld', 'meld-lsp', 'meld-pack')) + common
     names = set()
     if path.name.endswith('.tar.gz'):
         with tarfile.open(path, 'r:gz') as tf:
+            members = tf.getmembers()
+            for member in members:
+                validate_entry_name(member.name, path.name)
+                if member.issym() or member.islnk():
+                    validate_entry_name(member.linkname, path.name)
             names = {n.split('/', 1)[1] for n in tf.getnames() if '/' in n}
     else:
         with zipfile.ZipFile(path) as zf:
+            for name in zf.namelist():
+                validate_entry_name(name, path.name)
+                if (name.endswith('/') is False and
+                        ((zf.getinfo(name).external_attr >> 16) & 0o170000) == 0o120000):
+                    fail(f'{path.name}: symlink entries are not allowed ({name})')
             names = {n.split('/', 1)[1] for n in zf.namelist() if '/' in n}
-    missing = [item for item in required if item not in names]
-    if missing:
-        fail(f'{path.name} is missing {missing}')
-info(f'PASS archive payload ({len(archives)} archive(s), {len(set(targets))} target(s))')
+    absent = [item for item in required if item not in names]
+    if absent:
+        fail(f'{path.name} is missing {absent}')
+info(f'PASS archive payload and entry names ({len(archives)} archive(s), {len(actual_targets)} target(s))')
+info(f'PASS expected target set {actual_targets}')
 
 for name in sorted(signed):
     subject(name)
@@ -279,7 +397,7 @@ awk -F '\t' '$1 == "SUBJECT" { print $2 }' "$REPORT" > "$SUBJECTS"
 [ -s "$SUBJECTS" ] || fail 'no subjects were produced for signature verification'
 
 if [ -n "$OFFLINE" ]; then
-    printf 'verify_artifacts.sh: OFFLINE - cosign signatures and attestations were NOT verified\n'
+    printf 'verify_artifacts.sh: OFFLINE - cosign signatures and attestations were NOT verified for trust\n'
     exit 0
 fi
 
@@ -298,7 +416,7 @@ subject_count=$(wc -l < "$SUBJECTS" | tr -d ' ')
 printf 'verify_artifacts.sh: PASS %s Sigstore signature(s)\n' "$subject_count"
 
 if [ -z "$ATTESTATION" ]; then
-    printf 'verify_artifacts.sh: NOTICE GitHub attestation not verified; pass --attestation FILE after provenance\n'
+    printf 'verify_artifacts.sh: NOTICE GitHub attestation not verified; pass --attestation FILE or --require-attestation\n'
 else
     command -v gh >/dev/null 2>&1 || fail 'gh is required for --attestation verification'
     gh attestation verify --help 2>&1 | grep -q -- '--bundle' || \
