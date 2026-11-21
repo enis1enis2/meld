@@ -210,7 +210,7 @@ def render(root: pathlib.Path) -> str:
         "## Rust dependencies",
         "",
         "| Crate | Version | License | SHA256 (crates.io archive) |",
-        "|---|---|---|---|",
+        "| --- | --- | --- | --- |",
     ]
     problems: list[str] = []
     rows = []
@@ -246,7 +246,7 @@ def render(root: pathlib.Path) -> str:
         "`third-party/overrides.toml` for substitutions and mechanical fixups.",
         "",
         "| Crate | Version | Packs | Cargo SHA256 |",
-        "|---|---|---|---|",
+        "| --- | --- | --- | --- |",
     ]
     for entry in grammars["crates"]:
         lines.append(

@@ -668,6 +668,48 @@ fn test_unsandboxing_enabled() -> bool {
     false
 }
 
+/// Map a pack-declared `python3` command onto an interpreter that actually
+/// exists on stock Windows. The Python installer ships `python.exe` and the
+/// `py.exe` launcher, not `python3.exe`; the signed pack bytes stay untouched
+/// and only the launch command is adapted at spawn time.
+fn python_fallback(
+    program: &str,
+    args: &[String],
+    has_python3: bool,
+    has_py: bool,
+    has_python: bool,
+) -> Option<(String, Vec<String>)> {
+    if program != "python3" || has_python3 {
+        return None;
+    }
+    if has_py {
+        let mut fallback = vec!["-3".to_string()];
+        fallback.extend_from_slice(args);
+        Some(("py".to_string(), fallback))
+    } else if has_python {
+        Some(("python".to_string(), args.to_vec()))
+    } else {
+        None
+    }
+}
+
+/// Resolve a runner command against the host. Only the well-known Python 3
+/// alias is remapped, and only on Windows where that alias is not installed.
+fn resolve_runner_program(program: &str, args: &[String]) -> (String, Vec<String>) {
+    if cfg!(windows) {
+        if let Some(resolved) = python_fallback(
+            program,
+            args,
+            tool_on_path("python3"),
+            tool_on_path("py"),
+            tool_on_path("python"),
+        ) {
+            return resolved;
+        }
+    }
+    (program.to_string(), args.to_vec())
+}
+
 fn spawn_worker(
     pack: &PackInfo,
     t3: &Arc<meld_t3::T3Backend>,
@@ -690,8 +732,8 @@ fn spawn_worker(
     }
     effective.validate().map_err(sandbox_error)?;
 
-    let mut spec =
-        CommandSpec::new(&runner.program, runner.args.iter().cloned()).with_cwd(&runner.cwd);
+    let (program, args) = resolve_runner_program(&runner.program, &runner.args);
+    let mut spec = CommandSpec::new(&program, args).with_cwd(&runner.cwd);
     worker_environment(&mut spec);
 
     // JUDGMENT CALL: this switch exists only in debug test binaries so fixtures
@@ -1179,16 +1221,59 @@ fn cmd_repl() -> i32 {
     0
 }
 
+fn path_has_executable(paths: &std::ffi::OsStr, tool: &str, extensions: &[String]) -> bool {
+    for dir in std::env::split_paths(paths) {
+        for extension in extensions {
+            let candidate = dir.join(format!("{tool}{extension}"));
+            if !candidate.is_file() {
+                continue;
+            }
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                if let Ok(metadata) = candidate.metadata() {
+                    if metadata.permissions().mode() & 0o111 != 0 {
+                        return true;
+                    }
+                }
+                continue;
+            }
+            #[cfg(not(unix))]
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn tool_on_path(tool: &str) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    let extensions: Vec<String> = if cfg!(windows) {
+        let pathext =
+            std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+        let mut candidates = vec![String::new()];
+        candidates.extend(
+            pathext
+                .split(';')
+                .map(str::trim)
+                .filter(|ext| !ext.is_empty())
+                .map(|ext| ext.to_ascii_lowercase()),
+        );
+        candidates
+    } else {
+        vec![String::new()]
+    };
+    path_has_executable(&path, tool, &extensions)
+}
+
 fn cmd_doctor() -> i32 {
     // JUDGMENT CALL: `sh` is included because the built-in Bash pack executes
     // through it; doctor reports only, never installs (project.md §9).
     for tool in ["rustc", "cargo", "python3", "node", "lua", "sh"] {
-        let found = Command::new("sh")
-            .arg("-c")
-            .arg(format!("command -v {tool}"))
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
+        let found = tool_on_path(tool);
         println!(
             "{tool}: {}",
             if found {
@@ -1197,6 +1282,18 @@ fn cmd_doctor() -> i32 {
                 "MISSING (report only; never auto-installed)"
             }
         );
+    }
+    #[cfg(windows)]
+    {
+        if tool_on_path("python3") {
+            println!("python runtime: python3");
+        } else if tool_on_path("py") {
+            println!("python runtime: py -3 (fallback for python3)");
+        } else if tool_on_path("python") {
+            println!("python runtime: python (fallback for python3)");
+        } else {
+            println!("python runtime: MISSING (python3, py -3 and python all unavailable)");
+        }
     }
     let backend = platform_backend();
     let probe = backend.probe();
@@ -1337,4 +1434,79 @@ fn cmd_pack_new(lang: Option<&str>) -> i32 {
     let _ = std::fs::write(dir.join("pack.toml"), manifest);
     println!("created {}", dir.display());
     0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{path_has_executable, python_fallback};
+
+    #[test]
+    fn python3_runner_falls_back_to_py_launcher_then_python() {
+        let args = vec!["-u".to_string(), "worker.py".to_string()];
+
+        // A real python3 wins; no fallback is applied.
+        assert_eq!(python_fallback("python3", &args, true, true, true), None);
+        // Other runners are never remapped.
+        assert_eq!(python_fallback("node", &args, false, true, true), None);
+
+        // py -3 is preferred over python and preserves worker args verbatim.
+        assert_eq!(
+            python_fallback("python3", &args, false, true, true),
+            Some((
+                "py".to_string(),
+                vec!["-3".to_string(), "-u".to_string(), "worker.py".to_string()]
+            ))
+        );
+        // Without the launcher, plain python is used unchanged.
+        assert_eq!(
+            python_fallback("python3", &args, false, false, true),
+            Some(("python".to_string(), args.clone()))
+        );
+        // With neither interpreter the launch is left alone to fail clearly.
+        assert_eq!(python_fallback("python3", &args, false, false, false), None);
+    }
+
+    #[test]
+    fn doctor_path_detection_checks_path_directly() {
+        let dir = std::env::temp_dir().join(format!("meld-doctor-path-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        let tool = "meld-doctor-test-tool";
+        let filename = if cfg!(windows) {
+            format!("{tool}.exe")
+        } else {
+            tool.to_string()
+        };
+        let executable = dir.join(filename);
+        std::fs::write(&executable, b"").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut permissions = std::fs::metadata(&executable).unwrap().permissions();
+            permissions.set_mode(0o755);
+            std::fs::set_permissions(&executable, permissions).unwrap();
+        }
+
+        let extensions = if cfg!(windows) {
+            vec![".exe".to_string()]
+        } else {
+            vec![String::new()]
+        };
+        let paths = std::env::join_paths([dir.as_os_str()]).unwrap();
+
+        assert!(path_has_executable(&paths, tool, &extensions));
+        assert!(!path_has_executable(
+            &paths,
+            "meld-doctor-noexec",
+            &extensions
+        ));
+        assert!(!path_has_executable(
+            &paths,
+            "meld-doctor-absent",
+            &extensions
+        ));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }
