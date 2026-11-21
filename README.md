@@ -23,6 +23,10 @@ a language costs a Lang Pack (manifest, grammar, runner), not a core change.
 [book](docs/src/SUMMARY.md) · [schema stability](docs/schema-stability.md) ·
 [release artifacts](docs/release-artifacts.md)
 
+**Community:** [Code of Conduct](CODE_OF_CONDUCT.md) ·
+[Contributing](CONTRIBUTING.md) · [Support](SUPPORT.md) ·
+[Governance](GOVERNANCE.md) · [Issue templates](.github/ISSUE_TEMPLATE)
+
 ## Install
 
 The system package name is `meld-lang`; it provides three binaries: `meld`,
