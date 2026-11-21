@@ -2,8 +2,9 @@
 """Offline regression tests for scripts/verify_artifacts.sh.
 
 These tests build a synthetic release directory with fake (but structurally
-valid) cosign bundles. They exercise integrity and policy checks without
-requiring cosign, OIDC or network access.
+valid) cosign bundles in both the DSSE and legacy base64Signature shapes. They
+exercise integrity and policy checks without requiring cosign, OIDC or network
+access.
 """
 from __future__ import annotations
 
@@ -63,6 +64,17 @@ def write_fake_signatures(root: Path, name: str) -> None:
         },
     }
     (root / f"{name}.bundle").write_text(json.dumps(bundle), encoding="utf-8")
+
+
+def rewrite_legacy_bundles(root: Path) -> None:
+    """Convert all bundles to the shape cosign emits for keyless blob signing."""
+    for name in (ARCHIVE, SBOM, MANIFEST, "SHA256SUMS"):
+        encoded = (root / f"{name}.sig").read_text(encoding="ascii").strip()
+        bundle = {
+            "base64Signature": encoded,
+            "cert": "synthetic-certificate",
+        }
+        (root / f"{name}.bundle").write_text(json.dumps(bundle), encoding="utf-8")
 
 
 def build_release(root: Path) -> None:
@@ -125,6 +137,15 @@ class VerifyArtifactsOfflineTests(unittest.TestCase):
             self.assertIn("PASS expected target set", result.stdout)
             self.assertIn("equal signature bytes", result.stdout)
             self.assertIn("OFFLINE", result.stdout)
+
+    def test_legacy_cosign_bundle_signature_is_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "release"
+            build_release(root)
+            rewrite_legacy_bundles(root)
+            result = self.run_verifier(root)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("equal signature bytes", result.stdout)
 
     def test_signature_byte_mismatch_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:

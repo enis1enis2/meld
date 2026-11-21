@@ -198,6 +198,12 @@ def bundle_signature(path, where):
         message = bundle.get('messageSignature') if isinstance(bundle, dict) else None
         if isinstance(message, dict) and message.get('signature'):
             sigs = [message['signature']]
+    if not sigs:
+        # cosign sign-blob also emits the legacy bundle shape used by Keyless
+        # signing: {"base64Signature": ..., "cert": ..., "rekorBundle": ...}.
+        legacy = bundle.get('base64Signature') if isinstance(bundle, dict) else None
+        if isinstance(legacy, str) and legacy:
+            sigs = [legacy]
     if len(sigs) != 1 or not isinstance(sigs[0], str):
         fail(f'{where}: expected exactly one signature in bundle')
     try:
