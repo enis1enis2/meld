@@ -11,7 +11,7 @@ typed arguments". The proof is `crates/meld-t3/tests/python_bridge.rs` and
 
 ## 1. Layout
 
-```
+```text
 crates/meld-t3/
   wit/meld.wit                 # the IDL; source of truth for export names
   guest/                       # no_std Rust guest -> core wasm
@@ -102,8 +102,9 @@ independent of Wasmtime; no worker needs the wasm target or host libraries.
 `T5Backend::new(lang, build, run, cwd)` takes argv vectors, not shell strings.
 `{src}`, `{out}` and `{dir}` placeholders are substituted with a per-call temp
 directory; JSON arguments are appended as one trailing argv value so quotes and
-spaces cannot be reinterpreted. A final stdout line beginning `@meld ` is parsed
-as a Meld Value; remaining lines are ordinary ordered stdout.
+spaces cannot be reinterpreted. A final stdout line beginning `@meld` followed
+by a space is parsed as a Meld Value; remaining lines are ordinary ordered
+stdout.
 
 **JUDGMENT CALL:** this keeps T5 compatible with the T2 stdout contract while
 giving compiled regions a typed return path. T5 never downloads or installs a
@@ -135,7 +136,7 @@ cargo run -p meld-cli -- run examples/07-t3-bridge.meld
 
 Expected output:
 
-```
+```text
 add(20, 22) = 42
 mul(6, 7) = 42
 ```

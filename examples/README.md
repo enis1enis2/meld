@@ -5,7 +5,7 @@ Commands use the source-build path; replace `./target/debug/meld` with `meld`
 when the `meld-lang` package is installed.
 
 | File | Feature | Command | Expected output |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | [01-hello.meld](01-hello.meld) | Block switching plus an inline Python island | `./target/debug/meld run examples/01-hello.meld` | `hello from python`, `hello from javascript: world`, `5` |
 | [02-bridge.meld](02-bridge.meld) | Explicit Python → JavaScript value export/import | `./target/debug/meld run examples/02-bridge.meld` | `2,4,6` |
 | [03-fenced.meld](03-fenced.meld) | Fenced regions, raw hash delimiters and auto-detected tail | `./target/debug/meld run examples/03-fenced.meld` | `a } inside a string is fine`, `literal brace: }`, `default python region` |

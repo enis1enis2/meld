@@ -12,7 +12,7 @@ third-party shell fixture. Bundled grammars grew from 13 to 28, satisfying the
 "cheap route to a long tail" in `project.md` §4 without changing the core.
 
 | Pack | Tier/level | Crate (exact pin) | Aliases |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `typescript` | L0 | `tree-sitter-typescript 0.23.2` | `ts` |
 | `tsx` | L0 | `tree-sitter-typescript 0.23.2` | `react-tsx` |
 | `bash` | T2/L1 | `tree-sitter-bash 0.25.1` | `sh`, `shell`, `posix-sh` |

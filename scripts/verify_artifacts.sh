@@ -310,7 +310,6 @@ else
             --bundle "$ATTESTATION" \
             --cert-identity-regex "$IDENTITY" \
             --cert-oidc-issuer "$ISSUER" \
-            --signer-workflow "$REPO/.github/workflows/release.yml" \
             --predicate-type 'https://slsa.dev/provenance/v1' >/dev/null
     done < "$SUBJECTS"
     printf 'verify_artifacts.sh: PASS GitHub build-provenance attestations\n'
