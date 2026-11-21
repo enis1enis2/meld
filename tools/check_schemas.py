@@ -52,7 +52,7 @@ def main() -> int:
     check(isinstance(registry.get("packs"), list), "packs/registry/index.json: packs must be a list", errors)
 
     bucket = load_json("bucket/meld-lang.json")
-    check(bucket.get("version") == "0.2.0-rc.1", "bucket/meld-lang.json: unexpected version", errors)
+    check(bucket.get("version") == "0.2.0-rc.2", "bucket/meld-lang.json: unexpected version", errors)
     check(bool(bucket.get("architecture", {}).get("64bit", {}).get("url")),
           "bucket/meld-lang.json: missing 64bit URL", errors)
     check(len(bucket.get("bin", [])) == 3, "bucket/meld-lang.json: expected three binaries", errors)

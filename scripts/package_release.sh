@@ -11,7 +11,7 @@ usage() {
 usage: scripts/package_release.sh --version VERSION --target TRIPLE [--build-dir DIR] [--out DIR]
 
 Options:
-  --version VERSION     release version, e.g. 0.2.0-rc.1
+  --version VERSION     release version, e.g. 0.2.0-rc.2
   --target TRIPLE       target triple already built by build_matrix.sh
   --build-dir DIR       build root (default: dist/build)
   --out DIR             archive output directory (default: dist/packages)
