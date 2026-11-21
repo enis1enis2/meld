@@ -43,10 +43,12 @@ files inside third-party Lang Packs; those are described in
 sha256sum -c --strict SHA256SUMS
 python3 -c 'import json; d=json.load(open("sbom.cdx.json")); assert d["bomFormat"]=="CycloneDX"; assert d["specVersion"]=="1.6"'
 cosign verify-blob --bundle sbom.cdx.json.bundle \
-  --certificate-identity-regexp '^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.1$' \
+  --certificate-identity-regexp '^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.5$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
   sbom.cdx.json
 ```
+
+Future releases use stable `vX.Y.Z` tags; replace the example tag accordingly.
 
 `sh scripts/verify_artifacts.sh --dir <release-dir> --tag v0.2.0-rc.5` performs
 these checks together with an anchored, tag-specific identity (use `--offline`

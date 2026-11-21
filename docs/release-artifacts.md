@@ -35,6 +35,9 @@ flag. `meld` itself and `meld doctor` never install anything.
 
 ## Verify a download
 
+The example verifies the currently published release. For future releases,
+substitute the exact stable `vX.Y.Z` tag.
+
 ```sh
 # 1. Integrity
 sha256sum -c --strict SHA256SUMS
