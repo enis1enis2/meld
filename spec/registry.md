@@ -229,7 +229,7 @@ data copy, not a package manager; no uninstall/upgrade machinery is implied.
 ## 4. Trust model
 
 | Actor | Power | Defense |
-|---|---|---|
+| --- | --- | --- |
 | Pack author | supplies pack data and plugins | checksums detect changes after publication; Ed25519 binds checksums to a public key |
 | Registry maintainer | edits index and metadata files | signed attestation binds all metadata; canonical JSON is reviewable in version control |
 | Key custodian | holds a private key outside the repo | keygen enforces mode `0600`; signing refuses a key inside a pack; revocation rejects a compromised id |
@@ -252,7 +252,7 @@ Hard rules for registry tooling:
 ## 5. Failure modes
 
 | Condition | Result |
-|---|---|
+| --- | --- |
 | `checksums.sha256` missing | error for verify/publish/install (explicitly required for strict packs) |
 | Checksums malformed, unsorted, duplicate path, unsafe path, non-LF | `malformed checksums.sha256` / `not canonical` |
 | Payload edited after checksumming | `checksum mismatch: <path>` |

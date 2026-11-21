@@ -10,7 +10,7 @@ Meld itself is dual-licensed `MIT OR Apache-2.0`; see `LICENSE-MIT`,
 ## Rust dependencies
 
 | Crate | Version | License | SHA256 (crates.io archive) |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `addr2line` | `0.25.1` | Apache-2.0 OR MIT | `1b5d307320b3181d6d7954e663bd7c774a838b8220fe0593c86d9fb09f498b4b` |
 | `aho-corasick` | `1.1.5` | Unlicense OR MIT | `c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba` |
 | `allocator-api2` | `0.2.21` | MIT OR Apache-2.0 | `683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923` |
@@ -314,7 +314,7 @@ versions; see `grammar-sources.json` for per-query hashes and
 `third-party/overrides.toml` for substitutions and mechanical fixups.
 
 | Crate | Version | Packs | Cargo SHA256 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `tree-sitter-bash` | `0.25.1` | bash | `9e5ec769279cc91b561d3df0d8a5deb26b0ad40d183127f409494d6d8fc53062` |
 | `tree-sitter-c` | `0.24.2` | c | `a9b2eb57a55fed6b00812912e730b7a275cf4fe98bfd6a5d76263d4438371728` |
 | `tree-sitter-c-sharp` | `0.24.0` | csharp | `54b3cdb7aeae9018e60908aa18937708de29338c83ecf3701de534b23d365c30` |

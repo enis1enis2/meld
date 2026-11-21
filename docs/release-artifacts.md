@@ -53,7 +53,7 @@ checked. Without cosign, only checksums are verified.
 ## Install channels
 
 | Channel | File | Notes |
-|---|---|---|
+| --- | --- | --- |
 | Shell | `install.sh` | Linux/macOS; verifies SHA256SUMS and cosign when available. |
 | PowerShell | `install.ps1` | Windows; SHA256SUMS and optional cosign. |
 | Homebrew | `Formula/meld-lang.rb` | Formula named `meld-lang`; fill SHA256 from signed release. |

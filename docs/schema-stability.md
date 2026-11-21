@@ -5,7 +5,7 @@ This document records which persisted formats are contract surfaces for the
 unknown or unstable schemas instead of guessing.
 
 | Schema identifier | Location | Stability | Notes |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `pack.toml` / Lang Pack | `packs/*/pack.toml` | stable in 0.2.x | New optional fields are minor; removing or reinterpreting a required field is major. |
 | `meld-lang-library/1` | `library.toml` | stable in 0.2.x | Library manifest API version. |
 | `meld-lang-library-index/1` | installed library index | stable in 0.2.x | Keyed by canonical library id. |

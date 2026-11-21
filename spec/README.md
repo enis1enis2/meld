@@ -25,7 +25,7 @@ work began. **JUDGMENT CALL:** using prompt text as the authoritative file rathe
 Verified against crates.io API on 2026-11-19:
 
 | crate | current stable | rust-version | note |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `tree-sitter` | 0.27.2 | 1.90 | edition 2024; `wasm` feature exists |
 | `wasmtime` | 50.0.3 | 1.97 | historical T3 target; `component-model` is a default feature; see judgment call 28 |
 | `tower-lsp-server` | 0.23.0 | 1.85 | maintained fork (`tower-lsp` original is legacy); Phase 5 |

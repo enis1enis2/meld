@@ -7,7 +7,7 @@ the Phase 7 done-when criterion in `project.md` §11.
 ## Contents
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | `pack.toml` | Manifest: id, aliases, version, tier, level, capabilities, pinned grammar rev, `strict = true` |
 | `runner.toml` | T2 launch profile: `sh worker.sh`, JSON-line protocol, project-relative path |
 | `toolchain.toml` | Detect hints only; `install = "never"` (project.md §9) |

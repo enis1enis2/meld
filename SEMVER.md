@@ -10,7 +10,7 @@ pre-release identifier, so it ranks below `0.2.0`.
 The following are part of the versioned contract:
 
 | Surface | Schema / location | Stability |
-|---|---|---|
+| --- | --- | --- |
 | CLI commands and exit codes | `meld` | see [docs/schema-stability.md](docs/schema-stability.md) |
 | Language server capabilities | `meld-lsp` | see docs/schema-stability.md |
 | Lang Pack manifest | `pack.toml` | stable in 0.2.x |

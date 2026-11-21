@@ -48,7 +48,7 @@ a label trusted from the worker.
 ## 3. Methods
 
 | method | levels | params | result |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `execute` | L1, L2 | `{region_id, code, env}` | `{stdout:[...], exports:[{name,value}]}` |
 | `eval` | L2 only | `{region_id, code}` | `{value}` — evaluate one expression and return a Meld Value |
 | `fetch` | L2 only | `{name}` | `{value}` — read a native binding produced by `execute` |

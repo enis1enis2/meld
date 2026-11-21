@@ -24,7 +24,7 @@ Non-goals: one unified semantics for all languages; zero-cost cross-language cal
 Meld should assemble proven parts, not invent them.
 
 | Idea | What it proves | Source |
-|---|---|---|
+| --- | --- | --- |
 | Tree-sitter language injection | A parent syntax tree can hold injected child trees (HTML→JS/CSS, JS→regex, Markdown code fences, Vue/Svelte). Injections can be static or dynamically named, nested recursively, and incrementally reparsed. | tree-sitter multi-language docs (https://tree-sitter.github.io/tree-sitter/using-parsers#multi-language-documents); ast-grep (https://ast-grep.github.io/advanced/language-injection.html); gotreesitter (https://pkg.go.dev/github.com/odvcencio/gotreesitter) lists 206 grammars |
 | GraalVM Truffle polyglot | Many languages in one runtime, calling each other in shared memory via a standard interop protocol: a set of messages every language implements for foreign values, so languages need not know about each other. | https://docs.oracle.com/en/graalvm/jdk/17/docs/reference-manual/polyglot-programming/ |
 | WebAssembly Component Model + WIT | A language-agnostic IDL for typed interfaces (strings, lists, records, variants, resources). Components don't share memory; data is copied via the Canonical ABI. | https://component-model.bytecodealliance.org/design/wit.html ; https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md |
@@ -112,7 +112,7 @@ Packs declare a tier (§5) and a conformance level: L0 syntax-only, L1 executes 
 Not every language can be embedded. Use tiers; each pack picks the best available.
 
 | Tier | Mechanism | Fits | Cost |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | T1 | In-process embed via the language's embedding API (e.g. Python, Lua, a JS engine) | scripting languages with embedding APIs | fast bridge, fragile ABI, crash risk |
 | T2 | Worker process speaking a Meld protocol (JSON-RPC or binary over stdio/socket), like notebook kernels | anything with a REPL or script runner | safest, slowest, universal |
 | T3 | Compile to Wasm component with WIT bindings | Rust, C/C++, Go-ish, Zig, etc. | strong isolation, typed contract, copying at boundary |
@@ -167,7 +167,7 @@ Key dependencies: tree-sitter, wasmtime (+ component model), a JSON-RPC lib, tow
 
 11. Phased roadmap
 | Phase | Deliverable | Done when |
-|---|---|---|
+| --- | --- | --- |
 | 0. Spec | Syntax spec (§3.1), Value Model spec (§6), Lang Pack spec (§4), protocol spec for T2 | Specs reviewed; 3 example .meld files hand-written |
 | 1. Front end | Region splitter + tree-sitter syntax layer; meld check; highlighting for ≥10 languages via auto-generated syntax-only packs | Splitter fuzz suite passes; highlights mixed file correctly |
 | 2. T2 runner | Worker protocol + Python and JavaScript packs (L1) | meld run executes a Python+JS file, stdout merged in order |
@@ -179,7 +179,7 @@ Key dependencies: tree-sitter, wasmtime (+ component model), a JSON-RPC lib, tow
 
 12. Risks and mitigations
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | "Any language" is unbounded | Open pack contract; syntax-only tier L0 for the long tail (§4) |
 | Region-end ambiguity | Per-language end scanners + raw delimiters (§3.2) |
 | Semantic mismatch (GC, threads, async, exceptions, numerics) | Copy-by-value default, typed errors, documented numeric rules, no shared mutable state by default |

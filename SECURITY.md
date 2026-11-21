@@ -3,7 +3,7 @@
 ## Supported versions
 
 | Version | Status |
-|---|---|
+| --- | --- |
 | `0.2.x` (release candidates) | Security fixes accepted |
 | `0.1.x` | Development history; no security support |
 

@@ -280,7 +280,7 @@ Hard rules inherited from `project.md` §9 and `registry.md` §4:
   revocations) for local authenticity checks.
 
 | Condition | Result |
-|---|---|
+| --- | --- |
 | Missing/wrong `api` or `kind` | unsupported API or library kind |
 | Missing/empty `name`, invalid id/version/alias | manifest validation error |
 | `library.toml` disagrees with `pack.toml` id/version/aliases | consistency error |

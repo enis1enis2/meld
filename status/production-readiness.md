@@ -68,7 +68,7 @@ branch query exact-SHA matches: 5
 ```
 
 | Run ID | Workflow | Conclusion |
-|---|---|---|
+| --- | --- | --- |
 | 44822485137 | CI | `success` |
 | 44822485305 | Docs | `success` |
 | 44822485023 | MSRV | `success` |
