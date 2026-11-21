@@ -261,14 +261,14 @@
         "py",
         "python3"
       ],
-      "checksums_sha256": "b6ab23a5d3495ff7c53ceac86d43431bfb89369410fe185e471038e2cfbdede1",
+      "checksums_sha256": "3dc444ef38991ed4d1341764cb589a8259f927cec8ad2fd8b12264ebbc3ca71d",
       "id": "python",
       "level": "L2",
       "path": "../python",
       "signature": {
         "key_id": "8ec9528bf1f0e31f",
         "scheme": "meld-pack/ed25519/v1",
-        "signature": "3f9c64c8bec52ce77cb32d9feefd4674c16f90844546e1db13bcd52934823ca446770797e4220e2e01115e7c8c862469be08acf3ca6898009188b5c6fb5eaf02"
+        "signature": "d90f25ed6a8748e276dd1ee9c4adacaa1e4b64dd2c33d0eb624f6b2925bef4bf519de9d3b531294f93aa8d10b1e62af09eb17f4cbe42fe8e501c817d053a0700"
       },
       "strict": true,
       "tier": "T2",
