@@ -1,19 +1,23 @@
 # Release process
 
-The current published release is `v0.2.0-rc.5`, a stable GitHub Release whose
-tag name is retained as history. Going forward Meld publishes stable releases
-only, using `vMAJOR.MINOR.PATCH` tags; do not create `-rc.N`, `-alpha`, or
-`-beta` tags. Meld follows SemVer 2.0.0 ([SEMVER.md](SEMVER.md)). This document
-describes what CI does and what a human must verify before a tag is considered
-good. Publication is automated from stable tags after every gate below passes.
-The earlier `v0.2.0-rc.1`, `v0.2.0-rc.2` and `v0.2.0-rc.3` tags were never
-published; `rc.4` was published but superseded by `rc.5` after real Windows
-testing found an installer pack-directory bug.
+The current stable release target is `v0.2.0`. Meld publishes stable releases
+only, using `vMAJOR.MINOR.PATCH` tags; the stable-tag rule is enforced by the
+release workflow, so do not create `-rc.N`, `-alpha`, or `-beta` tags. Meld
+follows SemVer 2.0.0 ([SEMVER.md](SEMVER.md)). This document describes what CI
+does and what a human must verify before a tag is considered good. Publication
+is automated from stable tags after every gate below passes. The historical
+`v0.2.0-rc.5` tag remains published as history: `v0.2.0-rc.1`, `v0.2.0-rc.2`
+and `v0.2.0-rc.3` were never published, `rc.4` was published but superseded by
+`rc.5` after real Windows testing found an installer pack-directory bug, and
+the stable line is prepared from this worktree.
 
 ## Preconditions
 
 1. `CHANGELOG.md` has an entry for the stable version and the version passes the
-   SemVer 2.0.0 regex used by `scripts/generate_release_manifest.py`.
+   SemVer 2.0.0 regex used by `scripts/generate_release_manifest.py`. That regex
+   validates SemVer syntax only (it still accepts pre-release/build suffixes);
+   the release workflow, not the script, enforces the stable
+   `vMAJOR.MINOR.PATCH` tag and the Cargo/tag match.
 2. All required docs, licenses and Lang Pack data are present; the packager
    fails closed when any are missing.
 3. Dependency policy files (`deny.toml`, `audit.toml`, `about.toml`) and grammar
@@ -74,8 +78,8 @@ A stable `vMAJOR.MINOR.PATCH` tag triggers, in order:
 
 ## Local dry run
 
-Use the stable version from `Cargo.toml`; the example below shows the next
-`0.2.0` release and must be updated when the workspace version changes.
+Use the stable version from `Cargo.toml` (currently `0.2.0`); the example below
+matches it and must be updated when the workspace version changes.
 
 ```sh
 export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
@@ -104,14 +108,14 @@ never tied to a wildcard tag regex.
 ## Verification by consumers
 
 Use the exact tag; do not accept a broad `refs/tags/.*` identity regex. The
-example verifies the currently published release; substitute the exact stable
-`vX.Y.Z` tag for future releases:
+example uses the stable `v0.2.0` tag; substitute the exact stable `vX.Y.Z` tag
+for future releases:
 
 ```sh
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.5 \
+  --tag v0.2.0 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.5.intoto.jsonl
+  --attestation meld-lang-0.2.0.intoto.jsonl
 ```
 
 `--attestation` requires a `gh` build that supports `gh attestation verify
@@ -125,17 +129,22 @@ tag-specific identity.
 
 ## Package channels
 
-- Homebrew: `Formula/meld-lang.rb` — the `TODO_VERIFY_SHA256` guard must be
-  replaced from the signed `SHA256SUMS` before submitting.
+- Homebrew: `Formula/meld-lang.rb` — per-architecture checksums are rewritten
+  from the signed `SHA256SUMS` with
+  `python3 tools/generate_channel_metadata.py --dist-dir dist/release --version 0.2.0`;
+  the placeholder guard fails until then. Install wrappers point at the
+  installed `libexec/bin/*` binaries and packs at `share/meld-lang/packs`.
 - Scoop: `bucket/meld-lang.json` — uses `env_set` for `MELD_ROOT`; the checked-in
-  hash must come from the signed release before publishing. Autoupdate does not
-  verify cosign signatures, so its hash source must be trusted and hash changes
-  reviewed before merge.
+  hash must come from the signed release via the same generator before
+  publishing. Autoupdate/checkver are disabled because no automatic source
+  verifies cosign signatures and trusted hashes.
 - Debian: `packaging/deb/` — `dpkg-buildpackage -us -uc -b` is an unsigned source
   package build and is not part of the signed artifact set; verify upstream
   release artifacts separately.
 - Nix: `flake.nix` / `package.nix` — run `nix flake lock` and commit the real
-  `flake.lock`. Do not hand-write `narHash` or invent lock hashes.
+  `flake.lock`. No `flake.lock` is present in this worktree, so this channel is
+  a release blocker until it is generated; do not hand-write `narHash` or
+  invent lock hashes.
 - Docker: `Dockerfile` — built from a release tag or checkout; the image is
   outside the signed artifact set. Pinning base images by digest and using a
   reproducible exporter remain future work.
@@ -147,7 +156,22 @@ a language runtime.
 
 ## After publication
 
-- Record the release URL, commit, attestation links and cosign identity in
+- Record the release URL, tag, commit, artifact hashes from `SHA256SUMS`,
+  attestation links and cosign identity in
   `status/production-readiness.md` (owned by that workstream).
+- Run `python3 tools/generate_channel_metadata.py --dist-dir dist/release
+  --version <v> --check` before merging channel metadata, and confirm the
+  Homebrew/Scoop hashes match the signed release.
 - Confirm installers on clean machines, including macOS and Windows; this
   cannot be verified from a Linux authoring environment.
+
+## Release record (preparation baseline)
+
+At the audit baseline `main` was `3d4d378d68f5e455bafb861cd642dce64623a071`. A
+read-only query of the public Actions API for that SHA showed 23 completed
+checks, all `success`, across CI, Docs, MSRV, Fuzz, supply-chain audit and
+CodeQL. That evidence covers this repository's own gates only: eight external
+suites were pending at audit time and are not claimed as passed here. No `v0.2.0`
+release has been published (the latest GitHub release is the historical
+`v0.2.0-rc.5`), so channel hashes remain placeholders until generated from
+signed `SHA256SUMS`.

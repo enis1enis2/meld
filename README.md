@@ -31,11 +31,13 @@ a language costs a Lang Pack (manifest, grammar, runner), not a core change.
 
 The system package name is `meld-lang`; it provides three binaries: `meld`,
 `meld-lsp` and `meld-pack`. Signed release archives are published on the
-[releases page](https://github.com/enis1enis2/meld/releases) and can be
-installed with `install.sh` (Linux/macOS) or `install.ps1` (Windows). Both
-installers verify `SHA256SUMS` and, when `cosign` is available, the Sigstore
-signature. They detect missing language runtimes and install them by default;
-pass `--skip-dependencies` or `-SkipDependencies` to opt out.
+[releases page](https://github.com/enis1enis2/meld/releases) for stable
+`vMAJOR.MINOR.PATCH` tags (the current stable target is `v0.2.0`); pre-release
+tags are rejected by the release workflow. Archives can be installed with
+`install.sh` (Linux/macOS) or `install.ps1` (Windows). Both installers verify
+`SHA256SUMS` and, when `cosign` is available, the Sigstore signature. They
+detect missing language runtimes and install them by default; pass
+`--skip-dependencies` or `-SkipDependencies` to opt out.
 
 ### Building from source
 

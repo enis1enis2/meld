@@ -50,8 +50,9 @@ core. This is recorded inline in `crates/meld-grammars/Cargo.toml` and in
    duplicate dependencies; the chosen constant is recorded in
    `crates/meld-grammars/src/lib.rs`.
 3. The `bash` pack declares L1, not L2, because its worker implements
-   `initialize`/`execute`/`shutdown` but no value bridge. It runs through `sh`
-   so the `sh`/`shell`/`posix-sh` aliases are honest.
+   `initialize`/`execute`/`shutdown` but no value bridge. It runs through a
+   restricted `sh` toolchain, not a full interactive shell, so the
+   `sh`/`shell`/`posix-sh` aliases name the runner that is actually used.
 4. All new L0 fixtures and `examples/10-more-languages.meld` use
    `@lang##"..."##` raw delimiters. The generic brace scanner cannot see
    indentation-based region ends, and Phase 6 explicitly favored raw
@@ -73,8 +74,11 @@ core. This is recorded inline in `crates/meld-grammars/Cargo.toml` and in
 - `python3 tools/fuzz_splitter.py`: 1000 cases pass.
 - `python3 tools/meld_check_ref.py`: 0 problems across 11 examples.
 - `python3 tools/highlight_ref.py`: 15 mixed-language spans pass.
-- `python3 tools/t2_ref.py`: 0 problems (Node/Lua unavailable in this shell;
-  Python L2 matrix passes).
+- `python3 tools/t2_ref.py`: 0 problems (Node/Lua were unavailable in this
+  restricted shell, so only the Python L2 slice ran here). This is not a full
+  cross-language matrix claim; see [phase-3.md](phase-3.md) for the 3×3 value
+  round-trip matrix and [production-readiness.md](production-readiness.md) for
+  the platform coverage and explicit gaps.
 - `CARGO_HOME=… python3 tools/sync_grammars.py --check`: 0 stale query files.
 - `packtool verify … --trust-roots packs/registry/trust-roots.toml`: all 28
   built-in packs and the third-party fixture report `signature: verified` with

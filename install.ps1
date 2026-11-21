@@ -2,7 +2,7 @@
 # Lang Pack data, licenses and docs). Missing language runtimes and cosign are
 # installed by default via winget; pass -SkipDependencies to opt out.
 param(
-    [string]$Version = 'v0.2.0-rc.5',
+    [string]$Version = 'v0.2.0',
     [string]$Target = 'x86_64-pc-windows-msvc',
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'Meld'),
     [switch]$SkipSignatureVerification,

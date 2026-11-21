@@ -7,7 +7,8 @@
 | `0.2.x` | Security fixes accepted |
 | `0.1.x` | Development history; no security support |
 
-Published `0.2.x` releases use stable `vX.Y.Z` tags going forward; the
+Published `0.2.x` releases use stable `vX.Y.Z` tags; the stable-tag rule is
+enforced by the release workflow. The current stable target is `v0.2.0`; the
 `v0.2.0-rc.5` tag is retained as published history.
 
 Only signed release artifacts from the upstream repository are supported.
@@ -47,12 +48,12 @@ affecting signed releases. Maintainers may ask for a minimal reproducer.
 
 ## Signature identity
 
-Expected identity regexp for the release being verified (example tag
-`v0.2.0-rc.5`; replace with the exact tag you are verifying; future releases use
-stable `vX.Y.Z` tags):
+Expected identity regexp for the release being verified (example tag `v0.2.0`;
+replace with the exact stable tag you are verifying; future releases use
+`vX.Y.Z`):
 
 ```text
-^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.5$
+^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0$
 ```
 
 Issuer: `https://token.actions.githubusercontent.com`.
@@ -61,9 +62,9 @@ Verify with:
 
 ```sh
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.5 \
+  --tag v0.2.0 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.5.intoto.jsonl
+  --attestation meld-lang-0.2.0.intoto.jsonl
 ```
 
 The exact tag binds verification to one signed release. Never accept a broad

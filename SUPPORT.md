@@ -4,7 +4,7 @@ Meld is an open-source project. Support is provided through public documentation
 
 ## Where to get help
 
-- Start with the [README](README.md), the [book](docs/src/SUMMARY.md) and the [specifications](spec/README.md).
+- Start with the [README](README.md) and the [book](docs/src/SUMMARY.md). The normative specifications are the individual files under [spec/](spec/) (syntax, value model, Lang Pack, Lang Libraries, T2, T3, LSP/tooling and registry); [spec/README.md](spec/README.md) is a historical index, not a normative source.
 - Search [existing issues](https://github.com/enis1enis2/meld/issues) before opening a new one.
 - For a reproducible defect, use the [bug report form](https://github.com/enis1enis2/meld/issues/new/choose).
 - For a capability gap, use the [feature request form](https://github.com/enis1enis2/meld/issues/new/choose).
@@ -16,7 +16,7 @@ Meld is an open-source project. Support is provided through public documentation
 
 A useful report includes:
 
-- the Meld commit or release candidate and the source of the binary;
+- the Meld stable release tag (for example `v0.2.0`) or commit SHA, and the source of the binary;
 - operating system, Rust toolchain and Python version where relevant;
 - the smallest `.meld` file, Lang Pack or command line that reproduces the issue;
 - expected behavior, observed behavior, and the full diagnostic output;

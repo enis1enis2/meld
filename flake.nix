@@ -1,8 +1,9 @@
 {
   description = "Meld: language composition compiler, CLI and language server";
 
-  # No narHash is invented here. Generate flake.lock with `nix flake lock`
-  # before publishing; that records the verified nixpkgs revision and hash.
+  # No narHash is invented here. A committed flake.lock is required: generate
+  # it with `nix flake lock` before publishing (none is present in this tree).
+  # That records the verified nixpkgs revision and hash.
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
 
   outputs = { self, nixpkgs }:

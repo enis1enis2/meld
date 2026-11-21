@@ -1,18 +1,19 @@
 # Software bill of materials
 
-Every release archive set is accompanied by one CycloneDX 1.6 JSON SBOM:
+Every release archive set is accompanied by one CycloneDX 1.6 JSON SBOM, named
+canonically `meld-lang-<version>-sbom.cdx.json`:
 
 ```text
-meld-lang-<version>-sbom.cdx.json
+meld-lang-0.2.0-sbom.cdx.json
 ```
 
-In the examples below the file is named `sbom.cdx.json` inside the release
-directory.
+The examples below use the canonical filename inside the release directory.
 
 ## Generation
 
 ```sh
-sh scripts/generate_sbom.sh --version 0.2.0-rc.5 --out dist/release/sbom.cdx.json
+sh scripts/generate_sbom.sh --version 0.2.0 \
+  --out dist/release/meld-lang-0.2.0-sbom.cdx.json
 ```
 
 The script invokes the real `cargo sbom` tool (pinned to 0.10.0 in CI) against
@@ -41,16 +42,16 @@ files inside third-party Lang Packs; those are described in
 
 ```sh
 sha256sum -c --strict SHA256SUMS
-python3 -c 'import json; d=json.load(open("sbom.cdx.json")); assert d["bomFormat"]=="CycloneDX"; assert d["specVersion"]=="1.6"'
-cosign verify-blob --bundle sbom.cdx.json.bundle \
-  --certificate-identity-regexp '^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.5$' \
+python3 -c 'import json; d=json.load(open("meld-lang-0.2.0-sbom.cdx.json")); assert d["bomFormat"]=="CycloneDX"; assert d["specVersion"]=="1.6"'
+cosign verify-blob --bundle meld-lang-0.2.0-sbom.cdx.json.bundle \
+  --certificate-identity-regexp '^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0$' \
   --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
-  sbom.cdx.json
+  meld-lang-0.2.0-sbom.cdx.json
 ```
 
 Future releases use stable `vX.Y.Z` tags; replace the example tag accordingly.
 
-`sh scripts/verify_artifacts.sh --dir <release-dir> --tag v0.2.0-rc.5` performs
-these checks together with an anchored, tag-specific identity (use `--offline`
-for integrity checks only). No SBOM, hash or signature is fabricated by the
-scripts; each is produced by a real tool and verified before publication.
+`sh scripts/verify_artifacts.sh --dir <release-dir> --tag v0.2.0` performs these
+checks together with an anchored, tag-specific identity (use `--offline` for
+integrity checks only). No SBOM, hash or signature is fabricated by the scripts;
+each is produced by a real tool and verified before publication.

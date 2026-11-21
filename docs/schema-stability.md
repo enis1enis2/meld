@@ -2,7 +2,9 @@
 
 This document records which persisted formats are contract surfaces for the
 `0.2.x` line. It is intentionally explicit so release tooling can refuse
-unknown or unstable schemas instead of guessing.
+unknown or unstable schemas instead of guessing. Contract versions are shipped
+under stable `vMAJOR.MINOR.PATCH` tags; the release workflow rejects pre-release
+tags.
 
 | Schema identifier | Location | Stability | Notes |
 | --- | --- | --- | --- |

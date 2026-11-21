@@ -15,7 +15,8 @@ The canonical policy files live at the repository root:
 - [SECURITY](https://github.com/enis1enis2/meld/blob/main/SECURITY.md)
 - [THIRD-PARTY-NOTICES](https://github.com/enis1enis2/meld/blob/main/THIRD-PARTY-NOTICES.md)
 
-The current published release is `v0.2.0-rc.5`, a stable GitHub Release whose
-tag name is retained as history; future releases use stable `vX.Y.Z` tags.
-Meld follows SemVer 2.0.0. The system package is `meld-lang`; binaries are
-`meld`, `meld-lsp` and `meld-pack`.
+The current stable release target is `v0.2.0`; the historical `v0.2.0-rc.5`
+tag remains published as history. Releases use stable `vMAJOR.MINOR.PATCH`
+tags only, and the release workflow rejects pre-release tags. Meld follows
+SemVer 2.0.0. The system package is `meld-lang`; binaries are `meld`,
+`meld-lsp` and `meld-pack`.

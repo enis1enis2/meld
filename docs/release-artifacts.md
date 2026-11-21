@@ -35,8 +35,8 @@ flag. `meld` itself and `meld doctor` never install anything.
 
 ## Verify a download
 
-The example verifies the currently published release. For future releases,
-substitute the exact stable `vX.Y.Z` tag.
+The example uses the stable `v0.2.0` tag. For future releases, substitute the
+exact stable `vX.Y.Z` tag; pre-release tags are rejected by the release workflow.
 
 ```sh
 # 1. Integrity
@@ -44,9 +44,9 @@ sha256sum -c --strict SHA256SUMS
 
 # 2. Signature and manifest + archive payload checks
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.5 \
+  --tag v0.2.0 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.5.intoto.jsonl
+  --attestation meld-lang-0.2.0.intoto.jsonl
 
 # 3. Installed files
 sh scripts/verify_install.sh --root <install-prefix>
@@ -61,10 +61,10 @@ checked. Without cosign, only checksums are verified.
 | --- | --- | --- |
 | Shell | `install.sh` | Linux/macOS; verifies SHA256SUMS and cosign when available. |
 | PowerShell | `install.ps1` | Windows; SHA256SUMS and optional cosign. |
-| Homebrew | `Formula/meld-lang.rb` | Formula named `meld-lang`; fill SHA256 from signed release. |
-| Scoop | `bucket/meld-lang.json` | Fill `TODO_VERIFY_SHA256` before publishing. |
+| Homebrew | `Formula/meld-lang.rb` | Formula named `meld-lang`; generate per-arch SHA256 from signed `SHA256SUMS`. |
+| Scoop | `bucket/meld-lang.json` | Generate hash from signed `SHA256SUMS`; autoupdate disabled. |
 | Debian | `packaging/deb/` | Source package `meld-lang`; profile.d exports MELD_PACKS. |
-| Nix | `flake.nix`, `package.nix` | `nix flake lock` first; wrappers export MELD_PACKS. |
+| Nix | `flake.nix`, `package.nix` | Commit a real `flake.lock` (missing in this tree); wrappers export MELD_PACKS. |
 | Docker | `Dockerfile` | Copies binaries, packs, docs and licenses; sets MELD_PACKS. |
 
 ## Honesty about verification scope

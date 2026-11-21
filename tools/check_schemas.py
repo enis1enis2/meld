@@ -51,14 +51,39 @@ def main() -> int:
     check(registry.get("schema") == "meld-pack-registry/1", "packs/registry/index.json: bad schema", errors)
     check(isinstance(registry.get("packs"), list), "packs/registry/index.json: packs must be a list", errors)
 
+    # Cargo.toml is the single source of truth for the release version.
+    workspace = load_toml("Cargo.toml")
+    expected_version = workspace.get("workspace", {}).get("package", {}).get("version")
+    check(bool(expected_version), "Cargo.toml: missing workspace.package.version", errors)
+
     bucket = load_json("bucket/meld-lang.json")
-    check(bucket.get("version") == "0.2.0-rc.5", "bucket/meld-lang.json: unexpected version", errors)
+    check(bucket.get("version") == expected_version,
+          f"bucket/meld-lang.json: version must match Cargo.toml ({expected_version})", errors)
     check(bool(bucket.get("architecture", {}).get("64bit", {}).get("url")),
           "bucket/meld-lang.json: missing 64bit URL", errors)
     check(len(bucket.get("bin", [])) == 3, "bucket/meld-lang.json: expected three binaries", errors)
+    check("autoupdate" not in bucket,
+          "bucket/meld-lang.json: autoupdate must be disabled (no trusted hash verification)", errors)
     if PLACEHOLDER in json.dumps(bucket):
         message = "bucket/meld-lang.json: checksum placeholder must be filled from the signed release"
         (errors if args.release_ready else warnings).append(message)
+
+    formula_path = root / "Formula/meld-lang.rb"
+    try:
+        formula = formula_path.read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 - report the file and reason
+        errors.append(f"Formula/meld-lang.rb: unreadable ({exc})")
+    else:
+        check(f'version "{expected_version}"' in formula,
+              f"Formula/meld-lang.rb: version must match Cargo.toml ({expected_version})", errors)
+        begin = "# BEGIN MANAGED CHECKSUMS (tools/generate_channel_metadata.py)"
+        end = "# END MANAGED CHECKSUMS"
+        has_managed_block = begin in formula and end in formula
+        check(has_managed_block, "Formula/meld-lang.rb: managed checksum block is missing", errors)
+        managed = formula.split(begin, 1)[1].split(end, 1)[0] if has_managed_block else formula
+        if PLACEHOLDER in managed:
+            message = "Formula/meld-lang.rb: checksum placeholder must be filled from the signed release"
+            (errors if args.release_ready else warnings).append(message)
 
     for manifest in sorted((root / "packs").glob("*/pack.toml")):
         data = load_toml(str(manifest.relative_to(root)))

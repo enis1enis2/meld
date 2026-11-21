@@ -1,14 +1,14 @@
 {
   "$schema": "https://raw.githubusercontent.com/ScoopInstaller/Scoop/master/schema.json",
-  "version": "0.2.0-rc.5",
+  "version": "0.2.0",
   "description": "Meld language-composition compiler, CLI and language server",
   "homepage": "https://github.com/enis1enis2/meld",
   "license": "MIT OR Apache-2.0",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/enis1enis2/meld/releases/download/v0.2.0-rc.5/meld-lang-0.2.0-rc.5-x86_64-pc-windows-msvc.zip",
+      "url": "https://github.com/enis1enis2/meld/releases/download/v0.2.0/meld-lang-0.2.0-x86_64-pc-windows-msvc.zip",
       "hash": "TODO_VERIFY_SHA256",
-      "extract_dir": "meld-lang-0.2.0-rc.5-x86_64-pc-windows-msvc"
+      "extract_dir": "meld-lang-0.2.0-x86_64-pc-windows-msvc"
     }
   },
   "bin": [
@@ -22,19 +22,9 @@
   "post_install": [
     "if (Test-Path \"$dir\\share\\doc\\meld-lang\\README.md\") { Write-Host 'meld-lang: licenses and docs are in share\\doc\\meld-lang' }"
   ],
-  "checkver": {
-    "github": "https://github.com/enis1enis2/meld"
-  },
-  "autoupdate": {
-    "architecture": {
-      "64bit": {
-        "url": "https://github.com/enis1enis2/meld/releases/download/v$version/meld-lang-$version-x86_64-pc-windows-msvc.zip"
-      }
-    }
-  },
   "notes": [
     "The checked-in hash must come from the signed release SHA256SUMS before this manifest is published; do not publish an unverified hash.",
-    "Autoupdate does not verify cosign signatures: configure a trusted hash source (or disable autoupdate) and review hash changes before merge.",
+    "Automatic version updates are disabled: no autoupdate/checkver source is trusted to supply a hash without cosign verification. Update hashes with tools/generate_channel_metadata.py after a signed release.",
     "MELD_ROOT points at the bundled Lang Packs; no language runtime is installed."
   ]
 }

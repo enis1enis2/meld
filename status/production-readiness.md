@@ -426,3 +426,18 @@ Every gate that can be executed on this host passes, the five workflows are
 green on the final code SHA, and the code fails closed where a platform control
 cannot be attested. The remaining items above are environment/platform gaps,
 not hidden failures.
+
+## Addendum — v0.2.0 release preparation (2026-11-21)
+
+- Release tags are stable `vMAJOR.MINOR.PATCH` only (`v0.2.0` is the current
+  target); the release workflow rejects pre-release tags.
+- At the audit baseline `main` was
+  `3d4d378d68f5e455bafb861cd642dce64623a071`. A read-only Actions API query for
+  that SHA returned 23 completed checks, all `success`, covering CI, Docs, MSRV,
+  Fuzz, supply-chain audit and CodeQL.
+- Eight external suites were pending at audit time and are not claimed as passed
+  here. No `v0.2.0` release has been published (the latest GitHub release is the
+  historical `v0.2.0-rc.5`); channel hashes stay as placeholders until generated
+  from signed `SHA256SUMS`.
+- See [RELEASE.md](../RELEASE.md) §“Release record (preparation baseline)” for
+  the same evidence and the post-publication record requirement.

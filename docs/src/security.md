@@ -1,8 +1,9 @@
 # Security
 
 Report vulnerabilities privately through GitHub security advisories. Signed
-releases use Sigstore keyless identities bound to the release workflow and tag;
-the expected identity regexp is documented in the root SECURITY.md.
+releases use Sigstore keyless identities bound to the release workflow and an
+exact stable tag (for example `v0.2.0`); pre-release tags are rejected. The
+expected identity regexp is documented in the root SECURITY.md.
 
 Supply-chain controls include cargo audit/deny, exact grammar pins, SBOM,
 reproducible builds, cosign signatures and GitHub build-provenance attestations.

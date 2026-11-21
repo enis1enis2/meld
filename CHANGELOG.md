@@ -5,6 +5,8 @@ All notable changes to Meld are documented here. Meld follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-21
+
 - Release engineering assets: signed, reproducible release pipeline, install
   channels, SBOM/provenance, dependency auditing and bounded libFuzzer targets.
 - Release now calls the unified CI and docs workflows as gates, while keeping

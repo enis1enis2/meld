@@ -1,8 +1,8 @@
-meld-lang (0.2.0~rc.1-1) unstable; urgency=medium
+meld-lang (0.2.0-1) unstable; urgency=medium
 
-  * First release candidate of Meld.
+  * First stable release of Meld (v0.2.0).
   * Ships meld, meld-lsp and meld-pack with bundled Lang Pack data.
   * Upstream archives are signed in CI; this Debian source package is built
     without source or changes signing (dpkg-buildpackage -us -uc -b).
 
- -- Meld maintainers <meld@example.invalid>  Fri, 20 Nov 2026 00:00:00 +0000
+ -- Meld maintainers <meld@example.invalid>  Sat, 21 Nov 2026 00:00:00 +0000

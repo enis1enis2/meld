@@ -1,9 +1,10 @@
 # Release pipeline
 
-A `v*` tag runs gates (fmt, clippy, tests, docs), pack verification, cargo
-audit/deny, MSRV 1.90 checks, bounded libFuzzer runs, native Linux/macOS/Windows
-builds, reproducible packaging, SBOM generation, cosign signing, build
-provenance and release creation.
+A strict stable `vMAJOR.MINOR.PATCH` tag (for example `v0.2.0`) runs gates
+(fmt, clippy, tests, docs), pack verification, cargo audit/deny, MSRV 1.90
+checks, bounded libFuzzer runs, native Linux/macOS/Windows builds, reproducible
+packaging, SBOM generation, cosign signing, build provenance and release
+creation. Pre-release tags are rejected by the release workflow.
 
 The pipeline produces signed archives, `SHA256SUMS`, a signed release manifest,
 a CycloneDX 1.6 SBOM and signature bundles. It does not assert an SLSA Build
