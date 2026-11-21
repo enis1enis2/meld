@@ -14,8 +14,8 @@ class MeldLang < Formula
 
   # BEGIN MANAGED CHECKSUMS (tools/generate_channel_metadata.py)
   SHA256S = {
-    "aarch64-apple-darwin" => "TODO_VERIFY_SHA256",
-    "x86_64-apple-darwin" => "TODO_VERIFY_SHA256",
+    "aarch64-apple-darwin" => "07fb4cd20c24829395ed20cca17c6dc9fe65e4a3a2cc2d3fcd75fbc97ccdc9bb",
+    "x86_64-apple-darwin" => "16937be21eec5b0813a42c479c7ca98933825f4c88e06f8ee3ab3b63ce020ae9",
   }.freeze
   # END MANAGED CHECKSUMS
 
