@@ -5,8 +5,8 @@
 
 rustPlatform.buildRustPackage rec {
   pname = "meld-lang";
-  # Matches the workspace Cargo.toml version and the v0.2.0-rc.2 release tag.
-  version = "0.2.0-rc.2";
+  # Matches the workspace Cargo.toml version and the v0.2.0-rc.3 release tag.
+  version = "0.2.0-rc.3";
 
   src = builtins.path {
     path = ../.;

@@ -41,9 +41,9 @@ sha256sum -c --strict SHA256SUMS
 
 # 2. Signature and manifest + archive payload checks
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.2 \
+  --tag v0.2.0-rc.3 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.2.intoto.jsonl
+  --attestation meld-lang-0.2.0-rc.3.intoto.jsonl
 
 # 3. Installed files
 sh scripts/verify_install.sh --root <install-prefix>

@@ -45,7 +45,7 @@ affecting signed releases. Maintainers may ask for a minimal reproducer.
 ## Signature identity
 
 Expected identity regexp for the release being verified (example tag
-`v0.2.0-rc.2`; replace with the exact tag you are verifying):
+`v0.2.0-rc.3`; replace with the exact tag you are verifying):
 
 ```text
 ^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.1$
@@ -57,9 +57,9 @@ Verify with:
 
 ```sh
 sh scripts/verify_artifacts.sh --dir <release-dir> \
-  --tag v0.2.0-rc.2 \
+  --tag v0.2.0-rc.3 \
   --issuer https://token.actions.githubusercontent.com \
-  --attestation meld-lang-0.2.0-rc.2.intoto.jsonl
+  --attestation meld-lang-0.2.0-rc.3.intoto.jsonl
 ```
 
 The exact tag binds verification to one signed release. Never accept a broad
