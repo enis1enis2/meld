@@ -1,9 +1,9 @@
 [package]
 name = "meld-sandbox"
-version = "0.1.0"
-edition = "2021"
-rust-version = "1.90"
-license = "MIT OR Apache-2.0"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 description = "Deny-by-default OS sandbox policy model and backends for Meld"
 
 publish = false

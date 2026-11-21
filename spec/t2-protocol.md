@@ -48,7 +48,7 @@ a label trusted from the worker.
 ## 3. Methods
 
 | method | levels | params | result |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `execute` | L1, L2 | `{region_id, code, env}` | `{stdout:[...], exports:[{name,value}]}` |
 | `eval` | L2 only | `{region_id, code}` | `{value}` — evaluate one expression and return a Meld Value |
 | `fetch` | L2 only | `{name}` | `{value}` — read a native binding produced by `execute` |
@@ -151,7 +151,7 @@ compiled out of release builds and never changes production launch behavior.
 
 ## 7. Example session (Python worker)
 
-```
+```text
 → {"id":1,"method":"initialize",...}
 ← {"id":1,"result":{"protocol":"meld-t2/1","level":"L2",...}}
 → {"id":2,"method":"execute","params":{"region_id":"r0","code":"print('hi')","env":{}}}

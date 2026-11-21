@@ -4,7 +4,7 @@ Status: normative. Derived from `project.md` §4, §5, §9.
 
 ## 1. Layout
 
-```
+```text
 packs/<lang-id>/
   pack.toml          # required manifest
   library.toml       # install/import manifest (spec/libraries.md)

@@ -16,7 +16,7 @@
   error propagation, and value round-trips.
 - `examples/05-t2-run.meld` executed by the real `meld` binary:
 
-  ```
+  ```text
   python region one
   python region two
   javascript region one
