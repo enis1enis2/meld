@@ -345,14 +345,14 @@
         "posix-sh",
         "sh"
       ],
-      "checksums_sha256": "71ca022f8494dbb6cc2ccb15bef779da75970a46dfd89f3d1a5ea1f3dea0af67",
+      "checksums_sha256": "ede351792ae5344c548d8626aad52cfe608cb940855d541ac047b0ea4c740c5e",
       "id": "shell",
       "level": "L1",
       "path": "../../tests/fixtures/pack-third-party",
       "signature": {
         "key_id": "8ec9528bf1f0e31f",
         "scheme": "meld-pack/ed25519/v1",
-        "signature": "d49643ace3455af3df55dc082c9815eafcbf6223f6accdc08a47b8ac7e03fdb3e20ac3b9c271f72b535b601dee50ee7ec3eb1d582781e5c6750028569ea67e08"
+        "signature": "7b09aa869ae32f8c46846edb1de85f27a9c9f0fa6494a265ae93774f5d80f5c4e37c0db40c1e2bc977f10b26ee3b41f3886dafe4742aa3b3696b75aac0187503"
       },
       "strict": true,
       "tier": "T2",
