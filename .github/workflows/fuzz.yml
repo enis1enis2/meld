@@ -31,7 +31,7 @@ jobs:
         with:
           tool: cargo-fuzz@0.13.2
           fallback: cargo-install
-      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - name: Create crash artifact directory
         run: mkdir -p fuzz/artifacts
       - name: Run bounded fuzz target
@@ -45,7 +45,7 @@ jobs:
             -artifact_prefix=artifacts/
       - name: Upload failing inputs
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: fuzz-failure-${{ matrix.target }}
           path: fuzz/artifacts
