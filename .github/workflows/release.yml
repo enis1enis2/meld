@@ -5,12 +5,15 @@ on:
     tags:
       - "v*.*.*"
       - "!v*-*"
+      - "!v*+*"
 
 permissions:
   contents: read
 
+# Serialize every release in the repository, not just one ref: two stable tags
+# must never publish or change `latest` concurrently.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
 
 env:
@@ -57,29 +60,43 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          printf '%s\n' "$TAG" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' || {
-            echo "release tags must be stable vMAJOR.MINOR.PATCH (got: $TAG)" >&2
-            exit 1
-          }
-          version="${TAG#v}"
-          cargo_version=$(awk -F'"' '/^version = / {print $2; exit}' Cargo.toml)
-          [ -n "$cargo_version" ] || { echo 'could not read workspace version' >&2; exit 1; }
-          [ "$cargo_version" = "$version" ] || {
-            echo "tag $TAG requires Cargo workspace version $version, found $cargo_version" >&2
-            exit 1
-          }
+          python3 - "$TAG" <<'PY'
+          import os
+          import re
+          import sys
+          import tomllib
+
+          tag = sys.argv[1]
+          if not re.fullmatch(r'v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', tag):
+              raise SystemExit(f'release tags must be stable vMAJOR.MINOR.PATCH (got: {tag})')
+          version = tag[1:]
+          with open('Cargo.toml', 'rb') as handle:
+              manifest = tomllib.load(handle)
+          cargo_version = manifest.get('workspace', {}).get('package', {}).get('version')
+          if cargo_version != version:
+              raise SystemExit(
+                  f'tag {tag} requires Cargo workspace version {version}, found {cargo_version}'
+              )
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+              env_file.write(f'MELD_VERSION={version}\n')
+          print(f'release version verified: {version}')
+          PY
       - name: Grammar, schema and pack gates at the release tag
         shell: bash
         run: |
           python3 tools/check_grammar_sources.py
-          python3 tools/check_schemas.py
+          python3 tools/check_schemas.py --release-ready
           status=0
           for pack in packs/* tests/fixtures/pack-third-party; do
             if [ -f "$pack/pack.toml" ]; then
-              python3 tools/packtool.py verify "$pack" || status=1
+              python3 tools/packtool.py verify "$pack" \
+                --trust-roots packs/registry/trust-roots.toml \
+                --require-trusted || status=1
             fi
           done
           exit "$status"
+      - name: Verify committed T3 guest digest
+        run: python3 tools/check_t3_guest_digest.py --check
 
   native-matrix:
     name: native build (${{ matrix.os }}, ${{ matrix.target }})
@@ -139,17 +156,7 @@ jobs:
         run: |
           archive=$(find dist/release -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) | head -n 1)
           [ -n "$archive" ] || { echo 'no release archive found' >&2; exit 1; }
-          mkdir -p dist/install-check
-          case "$archive" in
-            *.zip)
-              python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
-                "$archive" dist/install-check
-              ;;
-            *)
-              python3 -c 'import sys, tarfile; tarfile.open(sys.argv[1]).extractall(sys.argv[2])' \
-                "$archive" dist/install-check
-              ;;
-          esac
+          python3 scripts/extract_release_archive.py "$archive" dist/install-check
           payload=$(find dist/install-check -mindepth 1 -maxdepth 1 -type d | head -n 1)
           [ -n "$payload" ] || { echo 'archive has no payload directory' >&2; exit 1; }
           sh scripts/verify_install.sh \
@@ -268,7 +275,10 @@ jobs:
   sign:
     name: sign and verify release artifacts
     needs: [ci, docs, release-gates, audit, msrv, fuzz, native-matrix, reproducible, sbom]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      needs.release-gates.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') && !contains(github.ref_name, '+')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -330,7 +340,11 @@ jobs:
             --dir dist/release \
             --repo "$MELD_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
-            --issuer "$MELD_ISSUER"
+            --issuer "$MELD_ISSUER" \
+            --expected-target x86_64-unknown-linux-gnu \
+            --expected-target aarch64-apple-darwin \
+            --expected-target x86_64-apple-darwin \
+            --expected-target x86_64-pc-windows-msvc
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: signed-release
@@ -340,7 +354,10 @@ jobs:
   provenance:
     name: GitHub build provenance
     needs: sign
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      needs.sign.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') && !contains(github.ref_name, '+')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -383,7 +400,11 @@ jobs:
   release:
     name: publish GitHub release
     needs: [ci, docs, release-gates, audit, msrv, fuzz, native-matrix, reproducible, sbom, sign, provenance]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: >-
+      needs.release-gates.result == 'success' &&
+      needs.provenance.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') && !contains(github.ref_name, '+')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -409,12 +430,76 @@ jobs:
             --repo "$MELD_REPOSITORY" \
             --tag "$GITHUB_REF_NAME" \
             --issuer "$MELD_ISSUER" \
-            --attestation "dist/release/meld-lang-${GITHUB_REF_NAME#v}.intoto.jsonl"
-      - name: Create release
+            --attestation "dist/release/meld-lang-${GITHUB_REF_NAME#v}.intoto.jsonl" \
+            --require-attestation \
+            --expected-target x86_64-unknown-linux-gnu \
+            --expected-target aarch64-apple-darwin \
+            --expected-target x86_64-apple-darwin \
+            --expected-target x86_64-pc-windows-msvc
+      - name: Verify channel metadata readiness
+        shell: bash
+        run: |
+          python3 tools/generate_channel_metadata.py \
+            --dist-dir dist/release \
+            --version "${GITHUB_REF_NAME#v}" \
+            --check
+      - name: Extract exact changelog section
+        shell: bash
+        run: |
+          python3 scripts/extract_changelog_section.py \
+            --version "${GITHUB_REF_NAME#v}" \
+            --input CHANGELOG.md \
+            --output release-notes.md
+      - name: Publish release idempotently
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          flags=(--verify-tag --latest --title "Meld $version" --notes-file CHANGELOG.md)
-          gh release create "$GITHUB_REF_NAME" dist/release/* "${flags[@]}"
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+
+          mapfile -t assets < <(find dist/release -maxdepth 1 -type f | LC_ALL=C sort)
+          [ "${#assets[@]}" -gt 0 ] || { echo 'no release assets found' >&2; exit 1; }
+
+          # `latest` follows the newest stable tag, not the order in which
+          # workflows happen to be re-run. This prevents an older re-run from
+          # demoting a newer release.
+          latest_tag=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | grep -Ev -- '[-+]' | LC_ALL=C sort -V | tail -n 1)
+          [ -n "$latest_tag" ] || { echo 'could not determine latest stable tag' >&2; exit 1; }
+          if [ "$latest_tag" = "$tag" ]; then
+            expect_latest=yes
+            latest_flag=(--latest)
+          else
+            expect_latest=no
+            latest_flag=(--latest=false)
+          fi
+
+          asset_args=()
+          for asset in "${assets[@]}"; do
+            asset_args+=(--asset "${asset##*/}")
+          done
+
+          if gh release view "$tag" --json isLatest,isPrerelease,body,assets > release-state.json 2> release-view.err; then
+            python3 scripts/check_release_state.py \
+              --state release-state.json \
+              --notes release-notes.md \
+              --expect-latest "$expect_latest" \
+              "${asset_args[@]}" > missing-assets.txt
+            while IFS= read -r asset; do
+              [ -n "$asset" ] || continue
+              gh release upload "$tag" "dist/release/$asset" --clobber
+            done < missing-assets.txt
+            echo "release $tag already published; notes, latest flag and assets verified"
+          else
+            if grep -Eqi 'not found|could not resolve' release-view.err; then
+              gh release create "$tag" "${assets[@]}" \
+                --verify-tag \
+                "${latest_flag[@]}" \
+                --title "Meld $version" \
+                --notes-file release-notes.md
+            else
+              cat release-view.err >&2
+              exit 1
+            fi
+          fi
