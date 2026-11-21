@@ -7,7 +7,6 @@
 use crate::backend::{
     require_enforcement, BackendFeatures, BackendKind, BackendProbe, SandboxBackend,
 };
-use crate::capability::Access;
 use crate::error::{Result, SandboxError};
 use crate::io::IoPolicy;
 use crate::policy::SandboxPolicy;
@@ -15,103 +14,9 @@ use crate::process::{CommandSpec, SpawnedProcess};
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
 
-/// Escape a path for an SBPL string literal. Only literal argv is used; the
-/// host never builds a shell command.
-pub fn sbpl_quote(value: &str) -> String {
-    let mut out = String::with_capacity(value.len() + 2);
-    out.push('"');
-    for ch in value.chars() {
-        match ch {
-            '\\' => out.push_str("\\\\"),
-            '"' => out.push_str("\\\""),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            c if c.is_control() => continue,
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
-}
-
-/// Generate a deny-by-default SBPL profile for the policy.
-pub fn seatbelt_profile(spec: &CommandSpec, policy: &SandboxPolicy) -> Result<String> {
-    if !policy.network.hosts.is_empty() {
-        return Err(SandboxError::Unsupported(
-            "Seatbelt cannot enforce hostname allowlists; use the OCI backend".to_string(),
-        ));
-    }
-    let mut lines = vec![
-        "(version 1)".to_string(),
-        "(deny default)".to_string(),
-        format!(
-            "(allow process-exec (literal {}))",
-            sbpl_quote(&spec.program.to_string_lossy())
-        ),
-        "(allow process-fork)".to_string(),
-        "(allow sysctl-read)".to_string(),
-        "(allow mach-lookup (global-name \"com.apple.system.notificationcenter\"))".to_string(),
-    ];
-    // Read-only base system access needed by dynamic loaders and interpreters.
-    lines.push(
-        "(allow file-read* (subpath \"/usr\") (subpath \"/System\") (subpath \"/lib\"))"
-            .to_string(),
-    );
-    for root in policy.fs.roots() {
-        let path = root.path().to_string_lossy();
-        let read = policy
-            .fs
-            .rules()
-            .iter()
-            .any(|r| r.root() == root.name() && r.access() == Access::Read);
-        let write = policy
-            .fs
-            .rules()
-            .iter()
-            .any(|r| r.root() == root.name() && r.access() == Access::Write);
-        let exec = policy
-            .fs
-            .rules()
-            .iter()
-            .any(|r| r.root() == root.name() && r.access() == Access::Exec);
-        if read {
-            lines.push(format!(
-                "(allow file-read* (subpath {}))",
-                sbpl_quote(&path)
-            ));
-        }
-        if write {
-            lines.push(format!(
-                "(allow file-write* (subpath {}))",
-                sbpl_quote(&path)
-            ));
-        }
-        if exec {
-            lines.push(format!(
-                "(allow file-execute (subpath {}))",
-                sbpl_quote(&path)
-            ));
-        }
-    }
-    if policy.network.protocols.any() {
-        if policy.network.protocols.tcp
-            || policy.network.protocols.http
-            || policy.network.protocols.https
-        {
-            lines.push("(allow network-outbound (remote tcp))".to_string());
-            lines.push("(allow network-inbound (local tcp))".to_string());
-        }
-        if policy.network.protocols.udp || policy.network.protocols.dns {
-            lines.push("(allow network-outbound (remote udp))".to_string());
-        }
-        if policy.network.protocols.unix {
-            lines.push("(allow network-outbound (remote unix-socket))".to_string());
-        }
-    } else {
-        lines.push("(deny network*)".to_string());
-    }
-    Ok(lines.join("\n"))
-}
+/// Re-exported for macOS-only integration tests; profile generation itself is
+/// compiled and tested on every host in `crate::sbpl`.
+pub use crate::sbpl::{sbpl_quote, seatbelt_profile};
 
 fn apply_rlimits(command: &mut Command, policy: &SandboxPolicy) -> Result<()> {
     // pre_exec closures must be 'static, so capture the limit values by copy.
@@ -207,6 +112,7 @@ impl SandboxBackend for MacosBackend {
     fn spawn(&self, spec: &CommandSpec, policy: &SandboxPolicy) -> Result<SpawnedProcess> {
         require_enforcement(self, policy)?;
         let profile = seatbelt_profile(spec, policy)?;
+        let filtered = spec.clone().filtered_env(policy);
         let mut command = Command::new("/usr/bin/sandbox-exec");
         command
             .arg("-p")
@@ -216,7 +122,7 @@ impl SandboxBackend for MacosBackend {
             .args(&spec.args)
             .current_dir(&spec.cwd)
             .env_clear();
-        for (key, value) in &spec.env {
+        for (key, value) in &filtered.env {
             command.env(key, value);
         }
         command

@@ -28,6 +28,13 @@ pub enum MeldError {
         importing_region_id: String,
         source_region: String,
     },
+    /// A glue import referenced a region that appears later in the file.
+    /// Execution order is file order, so forward references cannot be planned.
+    #[error("forward import in {importing_region_id}: region '{source_region}' is declared later")]
+    ForwardImport {
+        importing_region_id: String,
+        source_region: String,
+    },
     #[error("toolchain missing: {0}")]
     ToolchainMissing(String),
     #[error("worker crashed: {0}")]

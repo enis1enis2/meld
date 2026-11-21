@@ -197,6 +197,7 @@ impl Grant {
                 } else {
                     relative.to_string()
                 };
+                let subtree = relative.ends_with("/**") || relative == "**";
                 let logical = relative.strip_suffix("/**").unwrap_or(&relative);
                 let check_logical = if logical.is_empty() { "." } else { logical };
                 let accesses: Vec<_> = match access_text {
@@ -210,12 +211,11 @@ impl Grant {
                         .collect::<Result<_>>()?,
                 };
                 for access in accesses {
-                    if !relative.ends_with("/**") && relative != "**" {
-                        return Err(SandboxError::Invalid(format!(
-                            "grant fs path must end in /** or name a root: {path}"
-                        )));
-                    }
+                    // Both exact paths and `/**` subtrees are supported. The
+                    // subtree flag is carried into the effective rule instead
+                    // of being lost when the suffix was stripped for checks.
                     let rule = crate::capability::FsRule::new(root, &relative, access)?;
+                    debug_assert_eq!(rule.is_subtree(), subtree);
                     // A grant path may be a subtree below a policy rule. Only
                     // accept it when the policy rule covers the requested path.
                     let covered = policy.fs.rules().iter().any(|r| {
@@ -236,7 +236,7 @@ impl Grant {
                 out.fs.add_root(root.clone())?;
             }
             for rule in rules {
-                out.fs.grant(rule.root(), rule.path(), rule.access())?;
+                out.fs.grant_rule(rule)?;
             }
         }
 
@@ -256,6 +256,9 @@ impl Grant {
             out.network.protocols = policy.network.protocols.intersection(&requested);
             if !out.network.protocols.any() {
                 out.capabilities.retain_without(Capability::Network);
+                // `net=none` is a full network denial: keeping a stale host
+                // allowlist would leave an unusable but misleading policy.
+                out.network.hosts.clear();
             }
         }
 
@@ -269,6 +272,11 @@ impl Grant {
                 }
             }
             out.network.hosts = wanted;
+            if out.network.hosts.is_empty() {
+                // `host=none` cannot leave protocols enabled with no destination.
+                out.network.protocols = crate::capability::ProtocolCapability::none();
+                out.capabilities.retain_without(Capability::Network);
+            }
         }
 
         if let Some(env) = &self.env {
@@ -280,6 +288,9 @@ impl Grant {
                 }
             }
             out.env = env.iter().cloned().collect();
+            if out.env.is_empty() {
+                out.capabilities.retain_without(Capability::Env);
+            }
         }
 
         check_limit(policy.limits.memory_bytes, self.mem, "memory")?;

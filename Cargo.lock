@@ -1142,9 +1142,11 @@ name = "meld-t3"
 version = "0.2.0-rc.5"
 dependencies = [
  "meld-core",
+ "meld-sandbox",
  "meld-t2",
  "meld-value",
  "serde_json",
+ "sha2 0.11.1",
  "wasmtime",
 ]
 

@@ -3,12 +3,14 @@
 
 use crate::error::{Result, SandboxError};
 use crate::io::IoPolicy;
+use crate::policy::SandboxPolicy;
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, ChildStdout, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 /// JUDGMENT CALL 48: `std::fs::canonicalize` on Windows returns `\\?\`
@@ -65,6 +67,19 @@ impl CommandSpec {
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.insert(key.into(), value.into());
         self
+    }
+
+    /// Drop every environment variable that the effective policy does not name.
+    /// `policy.env` is an allowlist, so an unset list means a cleared
+    /// environment. This must happen before any backend builds a `Command`.
+    pub fn filtered_env(mut self, policy: &SandboxPolicy) -> Self {
+        self.env.retain(|key, _| policy.env.contains(key));
+        self
+    }
+
+    /// Build a `Command` whose environment is already narrowed by the policy.
+    pub fn to_command_for(&self, policy: &SandboxPolicy) -> Command {
+        self.clone().filtered_env(policy).to_command()
     }
 
     /// Build a `Command` from the argv vector. `program` is never parsed by a
@@ -474,8 +489,36 @@ impl SpawnedProcess {
         self.guard.child_mut().try_wait().map_err(Into::into)
     }
 
+    /// Poll for exit with a hard deadline. Returning `Ok(None)` means the
+    /// deadline expired without an exit; the caller decides whether to kill.
+    pub fn wait_timeout(&mut self, timeout: Duration) -> Result<Option<ExitStatus>> {
+        const POLL: Duration = Duration::from_millis(10);
+        let deadline = Instant::now() + timeout;
+        loop {
+            if let Some(status) = self.try_wait()? {
+                return Ok(Some(status));
+            }
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Ok(None);
+            }
+            thread::sleep(POLL.min(remaining));
+        }
+    }
+
+    /// Wait within the policy's overall deadline. A worker that outlives the
+    /// deadline is killed before the error is returned.
     pub fn wait(&mut self) -> Result<ExitStatus> {
-        self.guard.wait()
+        let timeout = self.io.overall_timeout;
+        match self.wait_timeout(timeout)? {
+            Some(status) => Ok(status),
+            None => {
+                self.kill_tree()?;
+                Err(SandboxError::Denied(
+                    "worker overall timeout exceeded while waiting".to_string(),
+                ))
+            }
+        }
     }
 }
 
@@ -492,6 +535,49 @@ pub const PROCESS_TREE_KILL_REQUIRED: bool = true;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_spec_env_is_filtered_by_policy_allowlist() {
+        let spec = CommandSpec::new("/bin/echo", ["ok"])
+            .with_env("SAFE", "1")
+            .with_env("SECRET", "2");
+        let mut policy = SandboxPolicy::deny_all("p");
+        policy.env.insert("SAFE".to_string());
+        let filtered = spec.clone().filtered_env(&policy);
+        assert_eq!(filtered.env.get("SAFE").map(String::as_str), Some("1"));
+        assert!(!filtered.env.contains_key("SECRET"));
+        assert!(
+            spec.env.contains_key("SECRET"),
+            "original spec is unchanged"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bounded_wait_does_not_block_forever() {
+        use std::process::Stdio;
+        let mut child = Command::new("/bin/sleep")
+            .arg("5")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let mut spawned = SpawnedProcess::new(
+            child,
+            stdout,
+            stderr,
+            IoPolicy::from_limits(&Default::default()),
+        )
+        .unwrap();
+        let status = spawned
+            .wait_timeout(Duration::from_millis(30))
+            .expect("poll must not fail");
+        assert!(status.is_none(), "a sleeping worker must not have exited");
+        spawned.kill_tree().unwrap();
+    }
 
     #[test]
     fn command_spec_keeps_argv_separate() {

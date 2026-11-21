@@ -23,9 +23,10 @@ pub enum Value {
     Bool(bool),
     /// Canonical decimal string, arbitrary precision.
     ///
-    /// Wire note: `Int` is encoded as a JSON string, the same JSON shape used
-    /// by `String`. `from_json` therefore applies the compatibility rule
-    /// documented on that method when decoding decimal-looking strings.
+    /// Wire note: `Int` is encoded as the tagged object `{"$int":"..."}` so it
+    /// is never confused with a `String`. The legacy decimal-string reader is
+    /// retained in [`Value::from_json`] for old fixtures; use
+    /// [`Value::from_json_strict`] to reject that ambiguous form.
     Int(String),
     Float(f64),
     String(String),
@@ -68,7 +69,7 @@ impl Value {
         match self {
             Value::Null => J::Null,
             Value::Bool(b) => J::Bool(*b),
-            Value::Int(s) => J::String(s.clone()),
+            Value::Int(s) => json!({ "$int": s.clone() }),
             Value::Float(f) => {
                 if f.is_nan() {
                     J::String("NaN".to_string())
@@ -117,54 +118,132 @@ impl Value {
 
     /// Decode a Meld value from its JSON wire representation.
     ///
-    /// Wire compatibility rules:
-    ///
-    /// - `Int` and `String` both encode as JSON strings. Because the wire
-    ///   format has no discriminator between them, this decoder treats any
-    ///   decimal-looking string (including leading zeros and an optional `-`)
-    ///   as `Int`. A safer tagged representation would break existing wire
-    ///   fixtures and is deliberately not introduced here.
-    /// - `$bytes` payloads must be canonical padded base64. Whitespace,
-    ///   missing padding, and non-zero trailing bits are rejected.
+    /// Compatibility reader: old fixtures encode `Int` as a bare decimal
+    /// string, so such strings are still decoded as `Int` here. New encoders
+    /// emit the unambiguous `{"$int":"..."}` tag. Use
+    /// [`Value::from_json_strict`] when reading untrusted or newly produced
+    /// wire data. `$`-prefixed keys are reserved: unknown tags, multiple tags
+    /// in one object, and reserved keys in records/maps are hard errors.
     pub fn from_json(j: &serde_json::Value) -> Result<Self, ValueError> {
-        use serde_json::Value as J;
-        match j {
-            J::Null => Ok(Value::Null),
-            J::Bool(b) => Ok(Value::Bool(*b)),
-            J::Number(n) => Ok(Value::Float(n.as_f64().ok_or_else(|| {
-                ValueError::TypeMismatch("number out of f64 range".to_string())
-            })?)),
-            J::String(s) => match s.as_str() {
-                "NaN" => Ok(Value::Float(f64::NAN)),
-                "Inf" => Ok(Value::Float(f64::INFINITY)),
-                "-Inf" => Ok(Value::Float(f64::NEG_INFINITY)),
-                _ if is_decimal(s) => Ok(Value::Int(s.clone())),
-                _ => Ok(Value::String(s.clone())),
-            },
-            J::Array(xs) => Ok(Value::List(
-                xs.iter().map(Value::from_json).collect::<Result<_, _>>()?,
-            )),
-            J::Object(o) => {
-                if let Some(v) = o.get("$bytes") {
-                    let s = v
-                        .as_str()
-                        .ok_or_else(|| ValueError::InvalidTag("$bytes".to_string()))?;
-                    return Ok(Value::Bytes(unbase64(s)?));
+        decode(j, false)
+    }
+
+    /// Strict decoder: rejects the legacy untagged decimal-string form.
+    pub fn from_json_strict(j: &serde_json::Value) -> Result<Self, ValueError> {
+        decode(j, true)
+    }
+}
+
+/// Tags owned by the Meld wire format. Any other `$`-prefixed key is reserved
+/// and must be rejected rather than silently decoded as a record field.
+const WIRE_TAGS: &[&str] = &[
+    "$bytes", "$int", "$map", "$variant", "$some", "$ok", "$err", "$handle", "$fn",
+];
+
+fn single_reserved_tag(
+    object: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Option<&str>, ValueError> {
+    let tags: Vec<&str> = object
+        .keys()
+        .map(String::as_str)
+        .filter(|key| key.starts_with('$'))
+        .collect();
+    match tags.as_slice() {
+        [] => Ok(None),
+        [tag] if WIRE_TAGS.contains(tag) => {
+            if object.len() == 1 {
+                Ok(Some(*tag))
+            } else {
+                Err(ValueError::InvalidTag(format!(
+                    "tag {tag} must be the only key in its object"
+                )))
+            }
+        }
+        [tag] => Err(ValueError::InvalidTag(format!("unknown wire tag {tag}"))),
+        _ => Err(ValueError::InvalidTag(
+            "multiple wire tags in one object".to_string(),
+        )),
+    }
+}
+
+fn reject_reserved_keys(
+    object: &serde_json::Map<String, serde_json::Value>,
+    context: &str,
+) -> Result<(), ValueError> {
+    if let Some(key) = object.keys().find(|key| key.starts_with('$')) {
+        return Err(ValueError::InvalidTag(format!(
+            "reserved key {key} is not valid in {context}"
+        )));
+    }
+    Ok(())
+}
+
+fn decode(j: &serde_json::Value, strict: bool) -> Result<Value, ValueError> {
+    use serde_json::Value as J;
+    match j {
+        J::Null => Ok(Value::Null),
+        J::Bool(b) => Ok(Value::Bool(*b)),
+        J::Number(n) => Ok(Value::Float(n.as_f64().ok_or_else(|| {
+            ValueError::TypeMismatch("number out of f64 range".to_string())
+        })?)),
+        J::String(s) => match s.as_str() {
+            "NaN" => Ok(Value::Float(f64::NAN)),
+            "Inf" => Ok(Value::Float(f64::INFINITY)),
+            "-Inf" => Ok(Value::Float(f64::NEG_INFINITY)),
+            _ if is_decimal(s) => {
+                if strict {
+                    Err(ValueError::InvalidTag(
+                        "untagged integer string; use {\"$int\": \"...\"}".to_string(),
+                    ))
+                } else {
+                    Ok(Value::Int(s.clone()))
                 }
-                if let Some(v) = o.get("$map") {
-                    let obj = v
-                        .as_object()
+            }
+            _ => Ok(Value::String(s.clone())),
+        },
+        J::Array(xs) => Ok(Value::List(
+            xs.iter()
+                .map(|item| decode(item, strict))
+                .collect::<Result<_, _>>()?,
+        )),
+        J::Object(o) => {
+            let tag = single_reserved_tag(o)?;
+            match tag {
+                Some("$int") => {
+                    let s = o
+                        .get("$int")
+                        .and_then(|value| value.as_str())
+                        .ok_or_else(|| ValueError::InvalidTag("$int".to_string()))?;
+                    if !is_decimal(s) {
+                        return Err(ValueError::InvalidTag(format!("invalid integer: {s:?}")));
+                    }
+                    Ok(Value::Int(s.to_string()))
+                }
+                Some("$bytes") => {
+                    let s = o
+                        .get("$bytes")
+                        .and_then(|value| value.as_str())
+                        .ok_or_else(|| ValueError::InvalidTag("$bytes".to_string()))?;
+                    Ok(Value::Bytes(unbase64(s)?))
+                }
+                Some("$map") => {
+                    let obj = o
+                        .get("$map")
+                        .and_then(|value| value.as_object())
                         .ok_or_else(|| ValueError::InvalidTag("$map".to_string()))?;
+                    reject_reserved_keys(obj, "$map")?;
                     let mut m = BTreeMap::new();
                     for (k, val) in obj {
-                        m.insert(k.clone(), Value::from_json(val)?);
+                        m.insert(k.clone(), decode(val, strict)?);
                     }
-                    return Ok(Value::Map(m));
+                    Ok(Value::Map(m))
                 }
-                if let Some(v) = o.get("$variant") {
-                    let obj = v
-                        .as_object()
+                Some("$variant") => {
+                    let obj = o
+                        .get("$variant")
+                        .and_then(|value| value.as_object())
                         .ok_or_else(|| ValueError::InvalidTag("$variant".to_string()))?;
+                    reject_reserved_keys(obj, "$variant")?;
                     let case = obj
                         .get("case")
                         .and_then(|x| x.as_str())
@@ -173,25 +252,30 @@ impl Value {
                     let value = obj
                         .get("value")
                         .ok_or_else(|| ValueError::InvalidTag("$variant.value".to_string()))?;
-                    return Ok(Value::Variant {
+                    Ok(Value::Variant {
                         case,
-                        value: Box::new(Value::from_json(value)?),
-                    });
+                        value: Box::new(decode(value, strict)?),
+                    })
                 }
-                if let Some(v) = o.get("$some") {
-                    return Ok(Value::Option(Some(Box::new(Value::from_json(v)?))));
-                }
-                if let Some(v) = o.get("$ok") {
-                    return Ok(Value::ResultOk(Box::new(Value::from_json(v)?)));
-                }
-                if let Some(v) = o.get("$err") {
-                    return Ok(Value::ResultErr(Box::new(Value::from_json(v)?)));
-                }
-                if let Some(v) = o.get("$handle") {
-                    let obj = v
-                        .as_object()
+                Some("$some") => Ok(Value::Option(Some(Box::new(decode(
+                    o.get("$some").expect("tag present"),
+                    strict,
+                )?)))),
+                Some("$ok") => Ok(Value::ResultOk(Box::new(decode(
+                    o.get("$ok").expect("tag present"),
+                    strict,
+                )?))),
+                Some("$err") => Ok(Value::ResultErr(Box::new(decode(
+                    o.get("$err").expect("tag present"),
+                    strict,
+                )?))),
+                Some("$handle") => {
+                    let obj = o
+                        .get("$handle")
+                        .and_then(|value| value.as_object())
                         .ok_or_else(|| ValueError::InvalidTag("$handle".to_string()))?;
-                    return Ok(Value::Handle {
+                    reject_reserved_keys(obj, "$handle")?;
+                    Ok(Value::Handle {
                         id: obj
                             .get("id")
                             .and_then(|x| x.as_str())
@@ -203,20 +287,23 @@ impl Value {
                             .unwrap_or("")
                             .to_string(),
                         borrow: obj.get("borrow").and_then(|x| x.as_bool()).unwrap_or(false),
-                    });
+                    })
                 }
-                if let Some(v) = o.get("$fn") {
-                    return Ok(Value::Fn(
-                        v.as_str()
-                            .ok_or_else(|| ValueError::InvalidTag("$fn".to_string()))?
-                            .to_string(),
-                    ));
+                Some("$fn") => Ok(Value::Fn(
+                    o.get("$fn")
+                        .and_then(|value| value.as_str())
+                        .ok_or_else(|| ValueError::InvalidTag("$fn".to_string()))?
+                        .to_string(),
+                )),
+                None => {
+                    reject_reserved_keys(o, "record")?;
+                    let mut m = BTreeMap::new();
+                    for (k, val) in o {
+                        m.insert(k.clone(), decode(val, strict)?);
+                    }
+                    Ok(Value::Record(m))
                 }
-                let mut m = BTreeMap::new();
-                for (k, val) in o {
-                    m.insert(k.clone(), Value::from_json(val)?);
-                }
-                Ok(Value::Record(m))
+                Some(_) => unreachable!("single_reserved_tag only returns known tags"),
             }
         }
     }

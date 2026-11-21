@@ -2,9 +2,9 @@
 
 > **Historical record, not current guidance.** This file preserves
 > phase-by-phase decisions and research snapshots. Entries marked *historical*
-> are superseded: current authority is judgment call 26 (Ed25519 pack trust),
-> judgment call 28 (Wasmtime `=36.0.23`, MSRV `1.90`), and judgment call 45
-> (floating Python `3.12`) below, together with the final evidence in
+> are superseded: current authority is judgment calls **26–59 (inclusive)** in
+> this file (including 26 Ed25519 pack trust, 28 Wasmtime `=36.0.23`/MSRV
+> `1.90`, and 45 floating Python `3.12`), together with the final evidence in
 > [../status/production-readiness.md](../status/production-readiness.md).
 
 ## Reviewed deliverables

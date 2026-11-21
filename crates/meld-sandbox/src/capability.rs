@@ -20,12 +20,7 @@ pub enum Capability {
     FsWrite,
     FsExec,
     Network,
-    Dns,
     Env,
-    Spawn,
-    HostCall,
-    Time,
-    Entropy,
     Stdio,
 }
 
@@ -36,17 +31,18 @@ impl Capability {
             Self::FsWrite => "fs.write",
             Self::FsExec => "fs.exec",
             Self::Network => "network",
-            Self::Dns => "dns",
             Self::Env => "env",
-            Self::Spawn => "spawn",
-            Self::HostCall => "hostcall",
-            Self::Time => "time",
-            Self::Entropy => "entropy",
             Self::Stdio => "stdio",
         }
     }
 
     /// Unknown capability strings are a hard error, never ignored.
+    ///
+    /// `spawn`, `hostcall`, `dns`, `time` and `entropy` were previously parsed
+    /// but never enforced. They are now rejected rather than silently claimed
+    /// (M): process creation is denied by the seccomp baseline, host calls are
+    /// a protocol-layer T2 decision, DNS is a protocol bit, and time/entropy
+    /// are baseline syscalls, not grantable authorities.
     pub fn parse(value: &str) -> Result<Self> {
         check_text("capability", value)?;
         Ok(match value {
@@ -54,12 +50,7 @@ impl Capability {
             "fs.write" | "fs:write" | "fs-write" => Self::FsWrite,
             "fs.exec" | "fs:exec" | "fs-exec" => Self::FsExec,
             "network" | "net" => Self::Network,
-            "dns" => Self::Dns,
             "env" => Self::Env,
-            "spawn" | "process.spawn" => Self::Spawn,
-            "hostcall" | "host.call" => Self::HostCall,
-            "time" => Self::Time,
-            "entropy" => Self::Entropy,
             "stdio" => Self::Stdio,
             _ => return Err(SandboxError::Unknown("capability", value.to_string())),
         })
@@ -494,6 +485,11 @@ impl FsRule {
         self.access
     }
 
+    /// Whether this rule came from a `/**` suffix (as opposed to an exact path).
+    pub fn is_subtree(&self) -> bool {
+        self.subtree
+    }
+
     /// Whether this rule covers `logical` under `root`.
     pub fn covers(&self, root: &str, logical: &str) -> bool {
         if self.root != root {
@@ -565,6 +561,17 @@ impl FsPolicy {
             return Err(SandboxError::Invalid(format!("unknown fs root {root:?}")));
         }
         let rule = FsRule::new(root, path, access)?;
+        self.grant_rule(rule)
+    }
+
+    /// Insert an already-parsed rule, preserving its exact/subtree flag.
+    pub fn grant_rule(&mut self, rule: FsRule) -> Result<()> {
+        if !self.roots.contains_key(rule.root()) {
+            return Err(SandboxError::Invalid(format!(
+                "unknown fs root {:?}",
+                rule.root()
+            )));
+        }
         if !self.rules.contains(&rule) {
             self.rules.push(rule);
         }
@@ -667,6 +674,13 @@ impl NetworkPolicy {
                     "wildcard host is not allowed: {host}"
                 )));
             }
+            if host.is_empty()
+                || host.trim() != host
+                || host.chars().any(char::is_whitespace)
+                || host.contains('/')
+            {
+                return Err(SandboxError::Invalid(format!("invalid host: {host:?}")));
+            }
         }
         if self.protocols.any() && self.hosts.is_empty() {
             return Err(SandboxError::Denied(
@@ -674,6 +688,13 @@ impl NetworkPolicy {
             ));
         }
         Ok(())
+    }
+
+    /// True when a policy would need hostname-aware filtering. Seccomp and
+    /// Seatbelt can only allow/deny protocols, so Linux and macOS reject such
+    /// policies instead of pretending to enforce the host list (H1).
+    pub fn requires_host_enforcement(&self) -> bool {
+        self.protocols.any() && !self.hosts.is_empty()
     }
 
     pub fn intersection(&self, other: &Self) -> Self {
@@ -794,17 +815,29 @@ mod tests {
             Capability::parse("execute_anything"),
             Err(SandboxError::Unknown("capability", _))
         ));
+        // Capabilities that were parsed but never enforced are removed rather
+        // than silently claimed (M).
+        for name in [
+            "spawn",
+            "process.spawn",
+            "hostcall",
+            "host.call",
+            "dns",
+            "time",
+            "entropy",
+        ] {
+            assert!(Capability::parse(name).is_err(), "{name} must be rejected");
+        }
     }
 
     #[test]
     fn intersections_only_narrow() {
-        let mut a = CapabilitySet::parse(["fs.read", "network"]).unwrap();
-        a.allow(Capability::Spawn);
-        let b = CapabilitySet::parse(["fs.read", "spawn"]).unwrap();
+        let a = CapabilitySet::parse(["fs.read", "network"]).unwrap();
+        let b = CapabilitySet::parse(["fs.read", "env"]).unwrap();
         let c = a.intersection(&b);
         assert!(c.contains(Capability::FsRead));
-        assert!(c.contains(Capability::Spawn));
         assert!(!c.contains(Capability::Network));
+        assert!(!c.contains(Capability::Env));
 
         let p = ProtocolCapability::parse_list(["tcp", "dns"]).unwrap();
         let q = ProtocolCapability::parse("dns").unwrap();

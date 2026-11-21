@@ -266,7 +266,7 @@ impl SandboxBackend for WindowsBackend {
     fn spawn(&self, spec: &CommandSpec, policy: &SandboxPolicy) -> Result<SpawnedProcess> {
         require_enforcement(self, policy)?;
         let job = Arc::new(JobObject::create(policy)?);
-        let mut command: Command = spec.to_command();
+        let mut command: Command = spec.to_command_for(policy);
         let mut child = command.spawn()?;
         if let Err(e) = job.assign(&child) {
             let _ = child.kill();

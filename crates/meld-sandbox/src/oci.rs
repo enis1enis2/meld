@@ -420,7 +420,8 @@ pub fn build_spec(spec: &CommandSpec, policy: &SandboxPolicy) -> Result<Spec> {
     // not by NNP. Once those were fixed, runc 1.1.15 started the process with
     // NNP set; disabling it would weaken the fallback for no benefit.
     process.set_no_new_privileges(Some(true));
-    let env: Vec<String> = spec
+    let filtered = spec.clone().filtered_env(policy);
+    let env: Vec<String> = filtered
         .env
         .iter()
         .map(|(key, value)| format!("{key}={value}"))
@@ -799,6 +800,9 @@ impl OciBackend {
             seccomp: available && mechanisms.seccomp,
             cgroup_v2: available && mechanisms.cgroup_v2,
             rlimits: available,
+            // runc creates a fresh mount namespace and a read-only rootfs in
+            // the bundle, so declared paths cannot reach arbitrary host files.
+            root_confinement: namespace_admin && available,
             process_group_kill: available && mechanisms.kill_all,
             ..Default::default()
         };
@@ -986,6 +990,39 @@ mod tests {
             .unwrap()
             .iter()
             .any(|entry| entry.destination() == Path::new("/proc")));
+    }
+
+    #[test]
+    fn spec_filters_environment_to_the_policy_allowlist() {
+        let spec = CommandSpec::new("/bin/echo", ["ok"])
+            .with_cwd("/")
+            .with_env("HOME", "/home/user")
+            .with_env("SECRET", "do-not-leak");
+        let mut policy = SandboxPolicy::deny_all("oci-env");
+        policy.env.insert("HOME".to_string());
+        let config = build_spec(&spec, &policy).unwrap();
+        let env = config.process().as_ref().unwrap().env().as_ref().unwrap();
+        assert!(env.contains(&"HOME=/home/user".to_string()));
+        assert!(!env.iter().any(|entry| entry.starts_with("SECRET=")));
+    }
+
+    #[test]
+    fn probe_claims_root_confinement_only_with_namespaces() {
+        let backend = OciBackend {
+            runc: Some(PathBuf::from("/bin/true")),
+        };
+        let full = backend.probe_with(Some(all_caps()), all_mechanisms(), Vec::new());
+        assert!(full.features.root_confinement);
+        let no_ns = backend.probe_with(
+            Some(all_caps()),
+            MechanismPresence {
+                namespaces: false,
+                ..all_mechanisms()
+            },
+            Vec::new(),
+        );
+        assert!(!no_ns.available);
+        assert!(!no_ns.features.root_confinement);
     }
 
     #[test]

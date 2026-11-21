@@ -14,6 +14,8 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct EnforcementRequirements {
     pub network_denial: bool,
+    /// Destination hostname allowlists require a real host-aware mechanism.
+    pub host_allowlist: bool,
     pub fs_isolation: bool,
     pub syscall_filter: bool,
     pub resource_limits: bool,
@@ -157,25 +159,51 @@ impl SandboxPolicy {
         Ok(acc)
     }
 
+    /// Mechanisms a backend must actually enforce for this policy.
+    ///
+    /// Untrusted workers are always subject to a syscall filter and a
+    /// process-tree kill, even for a deny-all policy. Every declared security
+    /// limit (including I/O and deadlines) contributes a resource-limit
+    /// requirement, so adding a new limit cannot silently weaken `requires()`.
     pub fn requires(&self) -> EnforcementRequirements {
+        let limits = &self.limits;
         EnforcementRequirements {
             // Denying network by default needs a real mechanism, not just an
             // assumption that the worker will behave.
             network_denial: !self.capabilities.contains(Capability::Network)
                 && !self.network.protocols.any(),
+            host_allowlist: self.requires_host_allowlist_enforcement(),
             fs_isolation: !self.fs.rules().is_empty()
                 || !self.capabilities.contains(Capability::FsWrite)
                 || !self.capabilities.contains(Capability::FsRead),
-            syscall_filter: !self.capabilities.contains(Capability::Spawn)
-                || !self.capabilities.contains(Capability::Network),
-            resource_limits: self.limits.memory_bytes.is_some()
-                || self.limits.cpu_time_ms.is_some()
-                || self.limits.processes.is_some()
-                || self.limits.file_size_bytes.is_some()
-                || self.limits.open_files.is_some(),
+            // `spawn` is no longer a grantable capability (M): the seccomp
+            // baseline is default-EPERM for every worker.
+            syscall_filter: true,
+            resource_limits: [
+                limits.memory_bytes,
+                limits.cpu_time_ms,
+                limits.wall_time_ms,
+                limits.file_size_bytes,
+                limits.processes,
+                limits.open_files,
+                limits.stack_bytes,
+                limits.max_line_bytes,
+                limits.max_stderr_bytes,
+                limits.max_output_lines,
+                limits.idle_timeout_ms,
+                limits.overall_timeout_ms,
+            ]
+            .into_iter()
+            .any(|value| value.is_some()),
             // Every untrusted worker must be killable as a process tree.
             process_tree_kill: true,
         }
+    }
+
+    /// Whether the policy depends on hostname-level network filtering that a
+    /// mechanistic backend cannot express.
+    pub fn requires_host_allowlist_enforcement(&self) -> bool {
+        self.network.requires_host_enforcement()
     }
 
     /// Narrow this policy with a region grant. The grant must be covered by the

@@ -9,7 +9,7 @@ below is the T2 JSON envelope; WIT is reused as the IDL per project.md §13.
 | --- | --- | --- | --- |
 | `null` | `null` | `option<none>` sentinel | single value |
 | `bool` | `true`/`false` | `bool` | |
-| `int` | decimal string, e.g. `"42"` | `s64`/`u64` when in range | arbitrary precision; string avoids JSON f64 loss |
+| `int` | tagged decimal string `{"$int":"42"}` | `s64`/`u64` when in range | arbitrary precision; tag prevents collision with `string` |
 | `float` | JSON number | `float64` | `NaN`/`Inf` serialized as strings `"NaN"`, `"Inf"`, `"-Inf"` |
 | `string` | JSON string | `string` | UTF-8, invalid surrogate rejected |
 | `bytes` | base64 string tagged `{"$bytes":"..."}` | `list<u8>` | explicit tag distinguishes from string |
@@ -25,6 +25,19 @@ below is the T2 JSON envelope; WIT is reused as the IDL per project.md §13.
 **JUDGMENT CALL:** JSON was chosen for the T2 wire because every language with a
 CLI can emit it; the canonical ABI/WIT mapping is documented so T3 can later
 replace the envelope without changing the bridge semantics (project.md §5/§6).
+
+### 1.1 Tagged integers and reserved keys
+
+`$`-prefixed object keys are reserved by the wire format. A tagged object must
+contain exactly one known tag (`$int`, `$bytes`, `$map`, `$variant`, `$some`,
+`$ok`, `$err`, `$handle`, `$fn`); unknown tags, multiple tags, and tags mixed
+with record fields are decode errors. Records and maps may not use `$`-prefixed
+field/key names.
+
+Legacy fixtures that encode `int` as a bare decimal string remain readable by
+`Value::from_json` and Python `decode()` (the compatibility reader). New code
+must emit the `$int` tag and should use `Value::from_json_strict` / `decode(...,
+strict=True)`, which rejects the ambiguous bare-string form.
 
 ## 2. Numeric rules (documented, not hidden)
 

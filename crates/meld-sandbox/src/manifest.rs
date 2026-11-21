@@ -37,11 +37,9 @@ pub fn parse_manifest(text: &str, base: &Path, source: &str) -> Result<SandboxPo
         .ok_or_else(|| SandboxError::Invalid(format!("{source} manifest is not a table")))?;
 
     let mut policy = SandboxPolicy::deny_all(source);
-    if let Some(limits) = table.get("limits") {
+    let top_limits = parse_limit_table(table, source, "top-level")?;
+    if let Some(limits) = &top_limits {
         parse_limits(&mut policy.limits, limits, source)?;
-    }
-    if let Some(resources) = table.get("resources") {
-        parse_limits(&mut policy.limits, resources, source)?;
     }
 
     let Some(sandbox) = table.get("sandbox") else {
@@ -63,10 +61,16 @@ pub fn parse_manifest(text: &str, base: &Path, source: &str) -> Result<SandboxPo
         ],
         &format!("{source} [sandbox]"),
     )?;
-    if let Some(resources) = sandbox.get("resources").or_else(|| sandbox.get("limits")) {
+    let sandbox_limits = parse_limit_table(sandbox, source, "[sandbox]")?;
+    if top_limits.is_some() && sandbox_limits.is_some() {
+        return Err(SandboxError::Conflict(format!(
+            "{source} declares limits both at the top level and in [sandbox]"
+        )));
+    }
+    if let Some(limits) = sandbox_limits {
         parse_limits(
             &mut policy.limits,
-            resources,
+            &limits,
             &format!("{source} [sandbox.resources]"),
         )?;
     }
@@ -96,9 +100,6 @@ pub fn parse_manifest(text: &str, base: &Path, source: &str) -> Result<SandboxPo
         }
         if policy.network.protocols.any() {
             caps.allow(Capability::Network);
-            if policy.network.protocols.dns {
-                caps.allow(Capability::Dns);
-            }
         }
         policy.capabilities = caps;
     }
@@ -323,14 +324,45 @@ fn parse_network(
 }
 
 fn parse_env(policy: &mut SandboxPolicy, value: Option<&toml::Value>, _source: &str) -> Result<()> {
-    if let Some(value) = value {
-        for name in as_strings(value, "env")? {
-            check_text("env name", &name)?;
-            policy.env.insert(name);
-        }
+    let Some(value) = value else {
+        return Ok(());
+    };
+    for name in as_strings(value, "env")? {
+        check_text("env name", &name)?;
+        policy.env.insert(name);
+    }
+    // An explicit empty list grants no environment access; do not leave a
+    // stale `env` capability behind.
+    if policy.env.is_empty() {
+        policy.capabilities.retain_without(Capability::Env);
+    } else {
         policy.capabilities.allow(Capability::Env);
     }
     Ok(())
+}
+
+/// Return the single allowed limit table in `table`, rejecting `resources` and
+/// `limits` together. The two spellings are aliases, not layers: accepting both
+/// made key order decide which limit survived (M).
+fn parse_limit_table(
+    table: &toml::map::Map<String, toml::Value>,
+    source: &str,
+    context: &str,
+) -> Result<Option<toml::Value>> {
+    match (table.get("resources"), table.get("limits")) {
+        (Some(_), Some(_)) => Err(SandboxError::Conflict(format!(
+            "{source} {context} declares both [resources] and [limits]"
+        ))),
+        (Some(value), None) | (None, Some(value)) => {
+            if !value.is_table() {
+                return Err(SandboxError::Invalid(format!(
+                    "{source} {context} resources/limits must be a table"
+                )));
+            }
+            Ok(Some(value.clone()))
+        }
+        (None, None) => Ok(None),
+    }
 }
 
 /// Known limit keys. A misspelled key is an error, never a silent no-op.
@@ -416,6 +448,7 @@ fn reject_unknown(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     fn temp_base(label: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!(
@@ -462,6 +495,39 @@ mod tests {
         let result = parse_runner("[limits]\nmax_lines_bytes = 5\n", &base);
         assert!(matches!(result, Err(SandboxError::Unknown("limit key", _))));
         std::fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn resources_and_limits_cannot_both_be_declared() {
+        let base = temp_base("duplicate-limits");
+        let top = "[resources]\nmemory_bytes = 1024\n[limits]\nmemory_bytes = 2048\n";
+        assert!(matches!(
+            parse_runner(top, &base),
+            Err(SandboxError::Conflict(_))
+        ));
+
+        let inner = "[sandbox]\n[sandbox.resources]\nmemory_bytes = 1024\n[sandbox.limits]\nmemory_bytes = 2048\n";
+        assert!(matches!(
+            parse_pack(inner, &base),
+            Err(SandboxError::Conflict(_))
+        ));
+
+        let split =
+            "[limits]\nmemory_bytes = 1024\n[sandbox]\n[sandbox.resources]\nmemory_bytes = 2048\n";
+        assert!(matches!(
+            parse_pack(split, &base),
+            Err(SandboxError::Conflict(_))
+        ));
+        fs::remove_dir_all(base).ok();
+    }
+
+    #[test]
+    fn empty_env_list_does_not_grant_env_capability() {
+        let base = temp_base("empty-env");
+        let policy = parse_pack("[sandbox]\nenv = []\n", &base).unwrap();
+        assert!(policy.env.is_empty());
+        assert!(!policy.capabilities.contains(Capability::Env));
+        fs::remove_dir_all(base).ok();
     }
 
     #[test]

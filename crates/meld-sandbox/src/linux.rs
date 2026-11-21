@@ -150,10 +150,14 @@ impl LinuxBackend {
             // Deliberately false: only a successful in-child installation can
             // set this, and probe cannot make that claim.
             landlock_enforced: false,
+            // Namespace mounting does not confine the root: declared paths
+            // still refer to host files. Only OCI claims root confinement.
+            root_confinement: false,
             process_group_kill: true,
             seatbelt: false,
             job_object: false,
             appcontainer: false,
+            host_allowlist: false,
         };
         BackendProbe {
             kind: BackendKind::LinuxNamespaces,
@@ -438,7 +442,9 @@ pub fn write_cgroup_limits(root: &Path, group: &str, limits: &ResourceLimits) ->
         )));
     }
     let dir = root.join(group);
-    fs::create_dir_all(&dir)?;
+    // Exclusive create: two workers must never share (and race to remove) a
+    // cgroup. The name is generated with process id plus monotonic nanos.
+    fs::create_dir(&dir)?;
     let mut written = Vec::new();
     let write = |name: &str, value: String, written: &mut Vec<String>| -> Result<()> {
         fs::write(dir.join(name), value.as_bytes())?;
@@ -480,6 +486,20 @@ pub fn assign_pid_to_cgroup(root: &Path, group: &str, pid: u32) -> Result<()> {
 
 pub fn cleanup_cgroup(root: &Path, group: &str) {
     let _ = fs::remove_dir_all(root.join(group));
+}
+
+/// Unique, filesystem-safe cgroup name. Limits are written to this directory
+/// *before* the child is spawned so no user instruction can run before the
+/// cgroup caps exist.
+fn cgroup_group_name() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(0);
+    let sequence = SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("meld-{}-{nanos}-{sequence}", std::process::id())
 }
 
 fn mount_worker_roots(policy: &SandboxPolicy) -> Result<()> {
@@ -549,6 +569,7 @@ fn child_setup(
     policy: &SandboxPolicy,
     filter: Arc<BpfProgram>,
     backend: LinuxBackend,
+    cgroup: Option<(PathBuf, String)>,
 ) -> Result<()> {
     let flags = libc::CLONE_NEWUSER
         | libc::CLONE_NEWNS
@@ -567,6 +588,12 @@ fn child_setup(
     let gid = unsafe { libc::getegid() };
     fs::write("/proc/self/uid_map", format!("0 {uid} 1"))?;
     fs::write("/proc/self/gid_map", format!("0 {gid} 1"))?;
+
+    // Join the pre-created cgroup before exec. The limits were already written
+    // by the parent, so the first user instruction runs under them.
+    if let Some((root, group)) = cgroup {
+        assign_pid_to_cgroup(&root, &group, unsafe { libc::getpid() as u32 })?;
+    }
 
     if unsafe { libc::prctl(libc::PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) } != 0 {
         return Err(io_error("no_new_privs"));
@@ -593,19 +620,50 @@ impl SandboxBackend for LinuxBackend {
     fn spawn(&self, spec: &CommandSpec, policy: &SandboxPolicy) -> Result<SpawnedProcess> {
         require_enforcement(self, policy)?;
         let filter = Arc::new(compile_seccomp(policy)?);
-        let mut command = spec.to_command();
+        let mut command = spec.to_command_for(policy);
         let backend = self.clone();
         let child_policy = policy.clone();
+        // Pre-create the cgroup and write its limits before spawning. Doing
+        // this after `spawn` would let the child execute user code outside the
+        // limits for a scheduling quantum.
+        let cgroup = if self.probe().features.cgroup_v2
+            && (policy.limits.memory_bytes.is_some()
+                || policy.limits.cpu_time_ms.is_some()
+                || policy.limits.processes.is_some())
+        {
+            let group = cgroup_group_name();
+            if let Err(error) = write_cgroup_limits(&self.cgroup_root, &group, &policy.limits) {
+                cleanup_cgroup(&self.cgroup_root, &group);
+                return Err(error);
+            }
+            Some((self.cgroup_root.clone(), group))
+        } else {
+            None
+        };
+        let child_cgroup = cgroup.clone();
         // SAFETY: pre_exec runs in the forked child before exec; all captured
         // values are owned and no non-async-signal-safe Rust allocation occurs
         // after the first syscall. io::Error construction is the only path out.
         unsafe {
             command.pre_exec(move || {
-                child_setup(&child_policy, Arc::clone(&filter), backend.clone())
-                    .map_err(|e| io::Error::new(io::ErrorKind::PermissionDenied, e.to_string()))
+                child_setup(
+                    &child_policy,
+                    Arc::clone(&filter),
+                    backend.clone(),
+                    child_cgroup.clone(),
+                )
+                .map_err(|e| io::Error::new(io::ErrorKind::PermissionDenied, e.to_string()))
             });
         }
-        let mut child = command.spawn()?;
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                if let Some((root, group)) = &cgroup {
+                    cleanup_cgroup(root, group);
+                }
+                return Err(error.into());
+            }
+        };
         let stdout = child
             .stdout
             .take()
@@ -615,18 +673,30 @@ impl SandboxBackend for LinuxBackend {
             .take()
             .ok_or_else(|| SandboxError::Denied("stderr pipe missing".to_string()))?;
         let io = crate::io::IoPolicy::from_limits(&policy.limits);
-        let mut spawned = SpawnedProcess::new(child, stdout, stderr, io)?;
-        if self.probe().features.cgroup_v2 {
-            let group = format!("meld-{}", spawned.pid());
-            if let Err(e) = write_cgroup_limits(&self.cgroup_root, &group, &policy.limits)
-                .and_then(|_| assign_pid_to_cgroup(&self.cgroup_root, &group, spawned.pid()))
-            {
-                spawned.kill_tree()?;
-                cleanup_cgroup(&self.cgroup_root, &group);
-                return Err(e);
+        let spawned = match SpawnedProcess::new(child, stdout, stderr, io) {
+            Ok(spawned) => spawned,
+            Err(error) => {
+                if let Some((root, group)) = &cgroup {
+                    cleanup_cgroup(root, group);
+                }
+                return Err(error);
             }
-        }
-        Ok(spawned)
+        };
+        // Keep the cgroup alive for teardown; the child joined it in pre_exec,
+        // before any user instruction was executed.
+        Ok(match cgroup {
+            Some((root, group)) => {
+                let cleanup_root = root.clone();
+                let cleanup_group = group.clone();
+                spawned
+                    .with_kill_hook(move || {
+                        cleanup_cgroup(&cleanup_root, &cleanup_group);
+                        Ok(())
+                    })
+                    .with_keep_alive(group)
+            }
+            None => spawned,
+        })
     }
 }
 
@@ -680,7 +750,18 @@ mod tests {
             "4"
         );
         assert!(write_cgroup_limits(&root, "../escape", &limits).is_err());
+        assert!(write_cgroup_limits(&root, "meld-test", &limits).is_err());
         fs::remove_dir_all(root).ok();
+    }
+
+    #[test]
+    fn cgroup_names_are_unique_and_filesystem_safe() {
+        let a = cgroup_group_name();
+        let b = cgroup_group_name();
+        assert_ne!(a, b);
+        assert!(a
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 
     #[test]

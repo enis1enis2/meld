@@ -2,8 +2,8 @@
 //! invoked and no platform enforcement is assumed.
 
 use meld_sandbox::{
-    parse_grant, parse_pack, Access, Capability, CapabilitySet, Grant, Result, SafeRoot,
-    SandboxError, SandboxPolicy,
+    parse_grant, parse_pack, Access, BackendFeatures, BackendKind, BackendProbe, Capability,
+    CapabilitySet, Grant, Result, SafeRoot, SandboxError, SandboxPolicy,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -100,6 +100,61 @@ fn unknown_capabilities_and_protocols_are_errors() -> Result<()> {
     assert!(Grant::default().evaluate(&policy).is_ok());
     policy.network.protocols = meld_sandbox::ProtocolCapability::parse("tcp")?;
     assert!(policy.validate().is_err());
+    Ok(())
+}
+
+#[test]
+fn grant_preserves_exact_and_subtree_flags() -> Result<()> {
+    let base = temp_base("grant-flags");
+    let mut policy = SandboxPolicy::deny_all("pack");
+    policy.fs.add_root(SafeRoot::new("project", &base)?)?;
+    policy.fs.grant("project", "src/exact.txt", Access::Read)?;
+    policy.fs.grant("project", "docs/**", Access::Read)?;
+    policy.capabilities.allow(Capability::FsRead);
+
+    let grant = parse_grant("grant(fs=[\"project/src/exact.txt\", \"project/docs/**\"])")?;
+    let narrowed = policy.apply_grant(&grant)?;
+    let exact = narrowed
+        .fs
+        .rules()
+        .iter()
+        .find(|rule| rule.path() == "src/exact.txt")
+        .expect("exact rule preserved");
+    let subtree = narrowed
+        .fs
+        .rules()
+        .iter()
+        .find(|rule| rule.path() == "docs")
+        .expect("subtree rule preserved");
+    assert!(!exact.is_subtree(), "exact grant widened to a subtree");
+    assert!(subtree.is_subtree(), "subtree grant lost its flag");
+    fs::remove_dir_all(base).ok();
+    Ok(())
+}
+
+#[test]
+fn hostname_allowlist_cannot_be_honoured_by_protocol_only_backends() -> Result<()> {
+    let mut policy = SandboxPolicy::deny_all("net");
+    policy.network.protocols = meld_sandbox::ProtocolCapability::parse("tcp")?;
+    policy.capabilities.allow(Capability::Network);
+    policy.network.hosts.insert("example.com".to_string());
+    policy.validate()?;
+
+    let probe = BackendProbe {
+        kind: BackendKind::LinuxNamespaces,
+        available: true,
+        features: BackendFeatures {
+            network_namespace: true,
+            seccomp: true,
+            process_group_kill: true,
+            ..Default::default()
+        },
+        notes: Vec::new(),
+    };
+    assert!(matches!(
+        probe.require(&policy),
+        Err(SandboxError::Unsupported(_))
+    ));
     Ok(())
 }
 
