@@ -30,15 +30,28 @@ a language costs a Lang Pack (manifest, grammar, runner), not a core change.
 ## Install
 
 The system package name is `meld-lang`; it provides three binaries: `meld`,
-`meld-lsp` and `meld-pack`. No signed release has been published yet, so build
-from source for now:
+`meld-lsp` and `meld-pack`. Signed release archives are published on the
+[releases page](https://github.com/enis1enis2/meld/releases) and can be
+installed with `install.sh` (Linux/macOS) or `install.ps1` (Windows). Both
+installers verify `SHA256SUMS` and, when `cosign` is available, the Sigstore
+signature. They detect missing language runtimes and install them by default;
+pass `--skip-dependencies` or `-SkipDependencies` to opt out.
+
+### Building from source
 
 ```sh
-cargo build --workspace
+cargo build --workspace          # dev profile, unoptimized (fast iteration)
+cargo rbuild                     # optimized release profile, binaries in target/release/
 ```
 
-The source build places the binaries under `./target/debug/`. Commands below
-use that path; substitute `meld`, `meld-lsp` or `meld-pack` from `PATH` when a
+`rbuild` is a cargo alias for `cargo build --workspace --release --locked` and
+uses the tuned `[profile.release]` settings in the root `Cargo.toml`. On Windows
+the optimized binary is `target\release\meld.exe`; on Linux and macOS it is
+`target/release/meld`. Other aliases: `rtest`, `rcheck` and `rclippy`.
+
+The source build places the binaries under `./target/debug/` (or
+`./target/release/` with `rbuild`). Commands below use the dev path; substitute
+the release path or `meld`, `meld-lsp` and `meld-pack` from `PATH` when a
 packaged installation is available.
 
 ## Quick start

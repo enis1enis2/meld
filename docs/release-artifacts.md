@@ -29,7 +29,9 @@ share/meld-lang/examples/   example .meld sources
 Archives place docs under `share/doc/meld-lang`. Installers adapt this to the
 host layout and expose pack data via `MELD_PACKS` (POSIX) or `MELD_ROOT`
 (Windows, because `MELD_PACKS` is colon-separated and Windows paths contain a
-colon). No language runtime is installed by any channel.
+colon). The archives contain no runtimes; the shell and PowerShell installers
+detect missing language runtimes and install them by default, with an opt-out
+flag. `meld` itself and `meld doctor` never install anything.
 
 ## Verify a download
 

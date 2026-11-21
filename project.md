@@ -161,7 +161,7 @@ Running every language means running arbitrary code from arbitrary toolchains.
 
 Default: no network, no filesystem outside a project dir, per-region capability grants in pack.toml/file header.
 T3 (Wasm) gives real sandboxing; T1/T2/T5 need OS-level confinement (container/seccomp/job objects), call it out per tier.
-Never auto-install toolchains without explicit consent. meld doctor reports, doesn't install.
+The `meld` binary never auto-installs toolchains; `meld doctor` reports, doesn't install. The standalone installers install missing runtimes only when the user runs them, with `--skip-dependencies`/`-SkipDependencies` to opt out.
 Pack supply chain: signed packs, pinned versions, reproducible grammar builds.
 ## 10. Implementation language and stack (judgment call)
 
