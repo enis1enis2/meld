@@ -50,7 +50,7 @@ concept at all.
 
 Measured on the demo in `prototype.py`:
 
-```
+```text
 body_start          = 7
 intended region end = 54  (byte offset of the final '}')
 generic brace end   = 31  -> WRONG
@@ -98,7 +98,7 @@ is in `benchmark-results.json`.
 ### Correctness (returned end offset == intended end offset)
 
 | Category | n | generic | composed |
-|---|---:|---:|---:|
+| --- | ---: | ---: | ---: |
 | `adversarial_heredoc` | 60 | 0/60 (0.00%) | 60/60 (100%) |
 | `adversarial_lookalike` | 30 | 0/30 (0.00%) | 30/30 (100%) |
 | `adversarial_multiple_heredocs` | 20 | 0/20 (0.00%) | 20/20 (100%) |
@@ -115,7 +115,7 @@ heredoc cases and passed **130/130 (100%)** of the benign cases.
 ### Timing (all 240 cases, 200 repetitions)
 
 | Parser | Total | Per call |
-|---|---:|---:|
+| --- | ---: | ---: |
 | Generic scanner (transliteration of `splitter.rs`) | 720.010 ms | 15.0002 µs |
 | Composed parser (Prototype B) | 1465.100 ms | 30.5229 µs |
 | **Slowdown** | | **2.04x** |
@@ -274,7 +274,7 @@ observed:
 ## 9. Files
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | `research/composition/prototype.py` | Prototype B: deterministic scannerless-style state-machine grammar stack, the failure demo, and the transliterated Phase 1 scanner. Run directly for the demo. |
 | `research/composition/benchmark.py` | 240-case deterministic corpus, correctness + timing, drift check, JSON writer. |
 | `research/composition/benchmark-results.json` | Frozen generated raw results; `meta.results_path` is a stale Phase 1 path (see §2). |

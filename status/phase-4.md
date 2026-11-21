@@ -35,7 +35,7 @@
   `python_meld_call_reaches_rust_wit_component` pass.
 - `meld run examples/07-t3-bridge.meld` prints:
 
-  ```
+  ```text
   add(20, 22) = 42
   mul(6, 7) = 42
   ```

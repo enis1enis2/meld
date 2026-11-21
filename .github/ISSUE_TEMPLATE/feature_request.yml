@@ -1,0 +1,55 @@
+name: Feature request
+description: Propose a new capability or a change to existing behavior.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement. By submitting this issue you agree to follow the [Code of Conduct](https://github.com/enis1enis2/meld/blob/main/CODE_OF_CONDUCT.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that Meld cannot do today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the behavior you want and any syntax, API, wire-format or CLI shape it implies.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other designs did you consider, and why are they insufficient?
+    validations:
+      required: false
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Where would this change land?
+      options:
+        - Core or splitter
+        - Runtime or value model
+        - LSP or tooling
+        - Lang Pack or registry
+        - Release or packaging
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and discussions for this proposal.
+          required: true
+        - label: I understand that design changes may require updates to `project.md` and the relevant spec.
+          required: true
+        - label: I agree to follow this project's Code of Conduct.
+          required: true

@@ -20,15 +20,34 @@ All notable changes to Meld are documented here. Meld follows
 - Package-channel guards were tightened: Scoop uses `env_set`, Debian wording
   no longer implies a signed source package, and release docs require a real
   committed `flake.lock`.
-- No source or wire-format changes are planned for `0.2.0-rc.1`; the release
-  candidate exists to validate the release process end to end.
+- The bundled Python pack now launches through `py -3` or `python` on Windows
+  when `python3` is absent, without changing signed pack bytes. `meld doctor`
+  reports the interpreter that will actually be used.
+- Added a tuned release profile and `cargo rbuild`/`rtest`/`rcheck`/`rclippy`
+  aliases so optimized binaries are a single command away on every platform.
+- Both installers now detect and install missing language runtimes and cosign
+  by default, with `--skip-dependencies`/`-SkipDependencies` to opt out.
+- Release tags are now stable `vMAJOR.MINOR.PATCH` only. The release workflow
+  rejects `-rc.N` tags and requires the Cargo workspace version to match the
+  tag; GitHub releases are always published as stable and latest.
 
-## [0.2.0-rc.1] - planned first signed candidate
+## [0.2.0-rc.5] - 2026-11-21
 
-This is the first candidate intended to be signed with Sigstore keyless
-signing and published from CI. It is a release candidate, not a final release.
-The workspace `Cargo.toml` still declares `0.1.0`; bumping the workspace
-version requires a separate authorized change and is not done here.
+This historical tag was signed with Sigstore keyless signing and published from
+CI. It was later converted to a stable GitHub Release; the workspace version,
+lockfiles, notices and package metadata at this tag report `0.2.0-rc.5`. New
+tags no longer use `-rc.N` suffixes.
+
+- The `v0.2.0-rc.1`, `v0.2.0-rc.2` and `v0.2.0-rc.3` tags were created but never
+  published. `rc.1` failed before uploading any asset because the tag gates did
+  not install the pinned `cryptography` dependency and Windows packaging used an
+  unsupported `os.utime(follow_symlinks=False)` call. `rc.2` fixed those but its
+  archives lacked the top-level payload directory, so install-layout verification
+  failed. `rc.3` fixed the archives and all build/signing jobs passed, but the
+  publish job passed mutually exclusive `gh attestation verify` identity flags.
+  `rc.4` published successfully, but real Windows testing found that
+  `install.ps1` did not create the pack destination directory before copying
+  pack data. All fixes are included here, so `rc.5` supersedes earlier candidates.
 
 ### Added
 
@@ -50,8 +69,8 @@ version requires a separate authorized change and is not done here.
 
 ### Notes
 
-- macOS/Windows builds, the public release upload and public signature
-  verification are CI obligations; they are not claimed to have run in the
-  environment where these assets were authored.
+- Native macOS, Windows and Linux builds, the public release upload and public
+  signature verification are performed by the release workflow, not by the
+  local dry run documented in [RELEASE.md](RELEASE.md).
 - GitHub build attestations are not a SLSA level certification; no SLSA level
   is claimed.
