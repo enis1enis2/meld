@@ -71,6 +71,23 @@ props.extend([
     {'name': 'meld:commit', 'value': commit},
 ])
 props.sort(key=lambda p: p['name'])
+# cargo-sbom walks a HashMap when emitting components/dependencies, so the
+# array order changes between runs even though the graph is identical. Sort
+# every order-independent collection to make the SBOM byte-reproducible.
+components = doc.get('components', [])
+components.sort(key=lambda c: (str(c.get('bom-ref', '')), json.dumps(c, sort_keys=True)))
+for component in components:
+    for key in ('externalReferences', 'licenses', 'hashes'):
+        if isinstance(component.get(key), list):
+            component[key].sort(key=lambda item: json.dumps(item, sort_keys=True))
+dependencies = doc.get('dependencies', [])
+dependencies.sort(key=lambda d: str(d.get('ref', '')))
+for dependency in dependencies:
+    if isinstance(dependency.get('dependsOn'), list):
+        dependency['dependsOn'].sort()
+for key in ('authors', 'tools'):
+    if isinstance(meta.get(key), list):
+        meta[key].sort(key=lambda item: json.dumps(item, sort_keys=True))
 out.write_text(json.dumps(doc, indent=2, sort_keys=True, ensure_ascii=False) + '\n', encoding='utf-8')
 print(f'generate_sbom.sh: wrote {out} ({len(doc.get("components", []))} component(s))')
 PY

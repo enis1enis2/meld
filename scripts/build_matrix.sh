@@ -20,6 +20,9 @@ Environment:
   MELD_VERSION         fallback release version
   MELD_TARGETS         fallback target list
   MELD_BUILD_DIR       fallback output root
+  MELD_CARGO_TARGET_DIR
+                       Cargo target root (default: ROOT/target); reproducibility
+                       checks set a distinct root for each independent build
   MELD_ALLOW_DIRTY_VERSION=1
                        opt in to --dirty/commit-hash suffixes in BUILD_INFO;
                        by default the version comes from the exact tag or the
@@ -31,6 +34,8 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=${MELD_VERSION:-}
 TARGETS=${MELD_TARGETS:-}
 OUT=${MELD_BUILD_DIR:-$ROOT/dist/build}
+CARGO_TARGET_DIR=${MELD_CARGO_TARGET_DIR:-$ROOT/target}
+export CARGO_TARGET_DIR
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -79,7 +84,7 @@ for target in $TARGETS; do
         *windows*) ext=.exe ;;
         *) ext= ;;
     esac
-    srcdir="$ROOT/target/$target/release"
+    srcdir="$CARGO_TARGET_DIR/$target/release"
     destdir="$OUT/$target/bin"
     mkdir -p "$destdir"
     for bin in meld meld-lsp meld-pack; do
@@ -87,6 +92,18 @@ for target in $TARGETS; do
         [ -f "$src" ] || { printf 'build_matrix.sh: missing built binary %s\n' "$src" >&2; exit 1; }
         cp "$src" "$destdir/$bin$ext"
     done
+
+    # link.exe/lld-link write the current time into the COFF header, all debug
+    # directory entries and the CodeView GUID. Normalize them before anything
+    # is hashed or signed so a rebuild of the same commit is byte-identical.
+    case "$target" in
+        *windows*)
+            python3 "$ROOT/scripts/normalize_pe.py" \
+                --epoch "$SOURCE_DATE_EPOCH" \
+                --seed "$VERSION/$target" \
+                "$destdir/bin/"*.exe
+            ;;
+    esac
 
     # Normalized metadata: no local paths, no wall-clock times, no host name.
     {

@@ -56,7 +56,12 @@ else
 
     mkdir -p "$OUT"
     for run in a b; do
-        sh "$ROOT/scripts/build_matrix.sh" --version "$VERSION" --targets "$TARGET" --out "$OUT/build-$run"
+        # A distinct Cargo target root forces a genuine second compile+link.
+        # Reusing ROOT/target made the second "build" a no-op that copied the
+        # first binary, which hid toolchain-introduced nondeterminism such as
+        # PE link timestamps.
+        MELD_CARGO_TARGET_DIR="$OUT/cargo-$run" \
+            sh "$ROOT/scripts/build_matrix.sh" --version "$VERSION" --targets "$TARGET" --out "$OUT/build-$run"
         sh "$ROOT/scripts/package_release.sh" --version "$VERSION" --target "$TARGET" \
             --build-dir "$OUT/build-$run" --out "$OUT/package-$run"
     done
