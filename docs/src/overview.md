@@ -15,5 +15,7 @@ The canonical policy files live at the repository root:
 - [SECURITY](https://github.com/enis1enis2/meld/blob/main/SECURITY.md)
 - [THIRD-PARTY-NOTICES](https://github.com/enis1enis2/meld/blob/main/THIRD-PARTY-NOTICES.md)
 
-The first signed candidate is `v0.2.0-rc.5`. Meld follows SemVer 2.0.0. The
-system package is `meld-lang`; binaries are `meld`, `meld-lsp` and `meld-pack`.
+The current published release is `v0.2.0-rc.5`, a stable GitHub Release whose
+tag name is retained as history; future releases use stable `vX.Y.Z` tags.
+Meld follows SemVer 2.0.0. The system package is `meld-lang`; binaries are
+`meld`, `meld-lsp` and `meld-pack`.

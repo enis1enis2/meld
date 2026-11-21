@@ -4,8 +4,11 @@
 
 | Version | Status |
 | --- | --- |
-| `0.2.x` (release candidates) | Security fixes accepted |
+| `0.2.x` | Security fixes accepted |
 | `0.1.x` | Development history; no security support |
+
+Published `0.2.x` releases use stable `vX.Y.Z` tags going forward; the
+`v0.2.0-rc.5` tag is retained as published history.
 
 Only signed release artifacts from the upstream repository are supported.
 Locally built binaries and third-party repackaging are not covered by these
@@ -45,10 +48,11 @@ affecting signed releases. Maintainers may ask for a minimal reproducer.
 ## Signature identity
 
 Expected identity regexp for the release being verified (example tag
-`v0.2.0-rc.5`; replace with the exact tag you are verifying):
+`v0.2.0-rc.5`; replace with the exact tag you are verifying; future releases use
+stable `vX.Y.Z` tags):
 
 ```text
-^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.1$
+^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0-rc\.5$
 ```
 
 Issuer: `https://token.actions.githubusercontent.com`.

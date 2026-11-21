@@ -27,12 +27,16 @@ All notable changes to Meld are documented here. Meld follows
   aliases so optimized binaries are a single command away on every platform.
 - Both installers now detect and install missing language runtimes and cosign
   by default, with `--skip-dependencies`/`-SkipDependencies` to opt out.
+- Release tags are now stable `vMAJOR.MINOR.PATCH` only. The release workflow
+  rejects `-rc.N` tags and requires the Cargo workspace version to match the
+  tag; GitHub releases are always published as stable and latest.
 
 ## [0.2.0-rc.5] - 2026-11-21
 
-This is the current candidate signed with Sigstore keyless signing and published
-from CI. It is a release candidate, not a final release. The workspace version,
-lockfiles, notices and package metadata all report `0.2.0-rc.5`.
+This historical tag was signed with Sigstore keyless signing and published from
+CI. It was later converted to a stable GitHub Release; the workspace version,
+lockfiles, notices and package metadata at this tag report `0.2.0-rc.5`. New
+tags no longer use `-rc.N` suffixes.
 
 - The `v0.2.0-rc.1`, `v0.2.0-rc.2` and `v0.2.0-rc.3` tags were created but never
   published. `rc.1` failed before uploading any asset because the tag gates did

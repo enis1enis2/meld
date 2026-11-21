@@ -1,39 +1,45 @@
 # Release process
 
-The current signed candidate is `v0.2.0-rc.5`. Meld follows SemVer 2.0.0
-([SEMVER.md](SEMVER.md)). This document describes what CI does and what a human
-must verify before a tag is considered good. Publication is automated from `v*`
-tags after every gate below passes. The earlier `v0.2.0-rc.1`, `v0.2.0-rc.2` and
-`v0.2.0-rc.3` tags were never published; `rc.4` was published but superseded by
-`rc.5` after real Windows testing found an installer pack-directory bug.
+The current published release is `v0.2.0-rc.5`, a stable GitHub Release whose
+tag name is retained as history. Going forward Meld publishes stable releases
+only, using `vMAJOR.MINOR.PATCH` tags; do not create `-rc.N`, `-alpha`, or
+`-beta` tags. Meld follows SemVer 2.0.0 ([SEMVER.md](SEMVER.md)). This document
+describes what CI does and what a human must verify before a tag is considered
+good. Publication is automated from stable tags after every gate below passes.
+The earlier `v0.2.0-rc.1`, `v0.2.0-rc.2` and `v0.2.0-rc.3` tags were never
+published; `rc.4` was published but superseded by `rc.5` after real Windows
+testing found an installer pack-directory bug.
 
 ## Preconditions
 
-1. `CHANGELOG.md` has an entry for the candidate and the version passes the
+1. `CHANGELOG.md` has an entry for the stable version and the version passes the
    SemVer 2.0.0 regex used by `scripts/generate_release_manifest.py`.
 2. All required docs, licenses and Lang Pack data are present; the packager
    fails closed when any are missing.
 3. Dependency policy files (`deny.toml`, `audit.toml`, `about.toml`) and grammar
    pins (`grammar-sources.json`) pass their checks. Any `TODO_VERIFY` value
    fails the grammar checker by design.
-4. The workspace version is `0.2.0-rc.5`, matching the candidate tag and the
-   release manifest. Lockfiles, third-party notices and package metadata are
-   regenerated as part of the bump; no version mismatch is shipped.
+4. The workspace version is the stable version being tagged (for example
+   `0.2.0`), matching the tag and the release manifest. The release workflow
+   rejects any tag whose version differs from `Cargo.toml`. Lockfiles,
+   third-party notices and package metadata are regenerated as part of the
+   bump; no version mismatch is shipped.
 5. There is no standard Linux aarch64 GitHub-hosted runner. `install.sh` fails
    clearly on Linux aarch64 instead of downloading a target that was never
    published. Do not hand-edit a target into the manifest or installer map.
 
 ## CI pipeline (`.github/workflows/release.yml`)
 
-A `v*` tag triggers, in order:
+A stable `vMAJOR.MINOR.PATCH` tag triggers, in order:
 
 1. **unified CI gates** — `.github/workflows/ci.yml` is called with `uses`; it
    runs locked fmt/clippy/test/doc, Python/grammar/schema/reference gates, pack
    verification, cross-target clippy and the supply-chain audit on the tag.
 2. **docs gates** — `.github/workflows/docs.yml` is called with `uses`; it
    builds rustdoc/mdbook and runs markdownlint against `.markdownlint.json`.
-3. **release tag gates** — grammar, schema and checked-in pack verification run
-   again against the exact tagged tree.
+3. **release tag gates** — the stable tag shape and Cargo/tag version match are
+   enforced, then grammar, schema and checked-in pack verification run again
+   against the exact tagged tree.
 4. **audit / deny / notices**, **msrv** and **fuzz** remain separate reusable
    gates; fuzz runs are bounded (`60s`, `4096`-byte inputs) and failures are
    uploaded, never committed.
@@ -62,26 +68,30 @@ A `v*` tag triggers, in order:
     files. The published release job re-verifies artifacts and checks the
     `.intoto.jsonl` bundle with `gh attestation verify --bundle`. This is **not**
     a SLSA L3 claim; no SLSA level is asserted.
-12. **release** — `gh release create`, prerelease for `-rc` tags, with all
+12. **release** — `gh release create`, always stable and marked latest, with all
     archives, checksums, manifest, SBOM, signatures, bundles and attestations
     attached.
 
 ## Local dry run
 
+Use the stable version from `Cargo.toml`; the example below shows the next
+`0.2.0` release and must be updated when the workspace version changes.
+
 ```sh
 export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
 target=$(rustc -vV | sed -n 's/^host: //p')
-sh scripts/build_matrix.sh --version 0.2.0-rc.5 --targets "$target"
-sh scripts/package_release.sh --version 0.2.0-rc.5 --target "$target"
-sh scripts/check_reproducibility.sh --version 0.2.0-rc.5 --target "$target"
-sh scripts/generate_sbom.sh --version 0.2.0-rc.5 --out dist/release/meld-lang-0.2.0-rc.5-sbom.cdx.json
-python3 scripts/generate_release_manifest.py --version 0.2.0-rc.5 \
+version=0.2.0
+sh scripts/build_matrix.sh --version "$version" --targets "$target"
+sh scripts/package_release.sh --version "$version" --target "$target"
+sh scripts/check_reproducibility.sh --version "$version" --target "$target"
+sh scripts/generate_sbom.sh --version "$version" --out "dist/release/meld-lang-$version-sbom.cdx.json"
+python3 scripts/generate_release_manifest.py --version "$version" \
   --artifacts-dir dist/release \
-  --sbom dist/release/meld-lang-0.2.0-rc.5-sbom.cdx.json \
+  --sbom "dist/release/meld-lang-$version-sbom.cdx.json" \
   --commit "$(git rev-parse HEAD)" \
   --source-date-epoch "$SOURCE_DATE_EPOCH" \
   --expected-target "$target" \
-  --out dist/release/meld-lang-0.2.0-rc.5.release-manifest.json
+  --out "dist/release/meld-lang-$version.release-manifest.json"
 sh scripts/generate_checksums.sh --dir dist/release --out dist/release/SHA256SUMS
 sh scripts/verify_artifacts.sh --dir dist/release --offline
 ```
@@ -93,7 +103,9 @@ never tied to a wildcard tag regex.
 
 ## Verification by consumers
 
-Use the exact tag; do not accept a broad `refs/tags/.*` identity regex:
+Use the exact tag; do not accept a broad `refs/tags/.*` identity regex. The
+example verifies the currently published release; substitute the exact stable
+`vX.Y.Z` tag for future releases:
 
 ```sh
 sh scripts/verify_artifacts.sh --dir <release-dir> \

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Assemble and archive one signed-release candidate payload.
+# Assemble and archive one signed-release payload.
 #
 # Archives contain the three binaries, all bundled Lang Pack data, licenses and
 # docs. File order, ownership and timestamps are normalized before archiving,
@@ -11,7 +11,7 @@ usage() {
 usage: scripts/package_release.sh --version VERSION --target TRIPLE [--build-dir DIR] [--out DIR]
 
 Options:
-  --version VERSION     release version, e.g. 0.2.0-rc.5
+  --version VERSION     stable release version, e.g. 0.2.0
   --target TRIPLE       target triple already built by build_matrix.sh
   --build-dir DIR       build root (default: dist/build)
   --out DIR             archive output directory (default: dist/packages)
