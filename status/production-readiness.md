@@ -441,3 +441,46 @@ not hidden failures.
   from signed `SHA256SUMS`.
 - See [RELEASE.md](../RELEASE.md) §“Release record (preparation baseline)” for
   the same evidence and the post-publication record requirement.
+
+## Addendum — v0.2.0 stable publication (2026-11-22)
+
+- The stable tag `v0.2.0` points to
+  `dcecc8521b3127e225c6714ca2b113e9dbc30041`. That exact tree was built twice
+  with separate Cargo target roots, signed, attested and published. The
+  reproducibility job and the `check_binary_paths.py` guard passed for every
+  native target.
+- Branch CI was green before publication: 23/23 checks `success` at `dcecc85`
+  and 23/23 at the channel-metadata commit
+  `97df103dcd69a4507ad920f5d1fd4c3c2f35cc92`.
+- Tagged run
+  [44966777259](https://github.com/enis1enis2/meld/actions/runs/44966777259)
+  attempt 2 completed `success`. Its `channel metadata readiness` job emitted
+  `ready=true`, and `publish GitHub release` completed `success`.
+- The GitHub release is
+  [v0.2.0](https://github.com/enis1enis2/meld/releases/tag/v0.2.0), published
+  at `2026-11-22T01:17:21Z`. It is non-draft, non-prerelease, and
+  `/releases/latest` resolves to `v0.2.0`. The release has 22 assets.
+- The published `SHA256SUMS` file digest is
+  `c115f2269c3108548d7ce2f10b4facb1164895dbc4cb8a3a319c1fad1a331c7a`. Its
+  channel digests are:
+  `aarch64-apple-darwin` = `e75f960bf988599a43395d584912594615d4cfd6795ee99425c57f408f9290cc`;
+  `x86_64-apple-darwin` = `cdd969df6869d730651fcbc947102aac5f8681d8234a48c14bfbfb9c5391bf9f`;
+  `x86_64-pc-windows-msvc` = `6b2d3ee1b6318b4dfa2ee1cfb22b722c34d779961d2e0f85f45fb6159ea81987`;
+  `x86_64-unknown-linux-gnu` = `7d1d6d6cb610cde2e389cee62aa22565da5542212efbe27c19deb15c260221a7`.
+  `Formula/meld-lang.rb` and `bucket/meld-lang.json` were regenerated from that
+  signed file and pass `generate_channel_metadata.py --check`.
+- All 22 published assets were downloaded and re-verified: strict `SHA256SUMS`
+  coverage, manifest schema with matching digests and sizes, archive payload
+  and entry names, 7/7 cosign signatures, and the GitHub build-provenance
+  attestation. Cosign identity was
+  `^https://github\.com/enis1enis2/meld/\.github/workflows/release\.yml@refs/tags/v0\.2\.0$`
+  with issuer `https://token.actions.githubusercontent.com`. The attestation
+  bundle was verified with `gh` 2.105.0, predicate type
+  `https://slsa.dev/provenance/v1`.
+- An earlier attempt on this same commit skipped publication because the
+  workflow requested the unsupported `gh release view --json isLatest` field.
+  The publish step was corrected to resolve `latest` through `gh api` and
+  revalidated with `actionlint` 1.7.12 before the successful rerun. No release
+  was created by the failed attempt.
+- The historical `v0.2.0-rc.5` release and tag were not modified. Its tag still
+  points to `c77d518223db30598ae736f0715bc24b8a96e41d`.

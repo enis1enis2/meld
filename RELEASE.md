@@ -181,7 +181,8 @@ At the audit baseline `main` was `3d4d378d68f5e455bafb861cd642dce64623a071`. A
 read-only query of the public Actions API for that SHA showed 23 completed
 checks, all `success`, across CI, Docs, MSRV, Fuzz, supply-chain audit and
 CodeQL. That evidence covers this repository's own gates only: eight external
-suites were pending at audit time and are not claimed as passed here. No `v0.2.0`
-release has been published (the latest GitHub release is the historical
-`v0.2.0-rc.5`), so channel hashes remain placeholders until generated from
-signed `SHA256SUMS`.
+suites were pending at audit time and are not claimed as passed here. No
+`v0.2.0` release had been published at that baseline; the final stable
+publication record, signed hashes, cosign identity and attestation evidence are
+in `status/production-readiness.md` §“Addendum — v0.2.0 stable publication
+(2026-11-22)”.
