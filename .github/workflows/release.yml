@@ -524,7 +524,20 @@ jobs:
             asset_args+=(--asset "${asset##*/}")
           done
 
-          if gh release view "$tag" --json isLatest,isPrerelease,body,assets > release-state.json 2> release-view.err; then
+          if gh release view "$tag" --json tagName,isPrerelease,body,assets > release-view.json 2> release-view.err; then
+            # `gh release view --json` has no isLatest field. Resolve the latest
+            # release through the API, then let check_release_state.py compare
+            # that fact without ever changing the flag itself.
+            latest_release_tag=$(gh api "repos/$MELD_REPOSITORY/releases/latest" --jq '.tag_name')
+            python3 - "$latest_release_tag" > release-state.json <<'PY'
+          import json
+          import sys
+
+          with open("release-view.json", encoding="utf-8") as handle:
+              state = json.load(handle)
+          state["isLatest"] = state.get("tagName") == sys.argv[1]
+          print(json.dumps(state))
+          PY
             python3 scripts/check_release_state.py \
               --state release-state.json \
               --notes release-notes.md \

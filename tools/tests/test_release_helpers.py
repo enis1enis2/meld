@@ -13,6 +13,16 @@ SCRIPTS = ROOT / "scripts"
 TOOLS = ROOT / "tools"
 
 
+class ReleaseWorkflowTests(unittest.TestCase):
+    def test_publish_job_uses_supported_gh_release_fields(self):
+        workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
+        for line in workflow.splitlines():
+            if "gh release view" in line and "$tag" in line:
+                self.assertNotIn("isLatest", line)
+                self.assertIn("tagName", line)
+        self.assertIn("repos/$MELD_REPOSITORY/releases/latest", workflow)
+
+
 class ExtractChangelogSectionTests(unittest.TestCase):
     def run_extract(self, changelog: str, version: str) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as td:
