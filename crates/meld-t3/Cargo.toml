@@ -15,7 +15,7 @@ sha2 = "=0.11.1"
 # supports the workspace MSRV (Rust 1.90). Pin it exactly so a dependency bump
 # cannot silently raise the MSRV or change trap semantics. The compiled demo
 # component is committed, so tests need no wasm toolchain.
-wasmtime = { version = "=36.0.23", features = [
+wasmtime = { version = "=51.0.0", features = [
     "component-model",
     "cranelift",
     "runtime",
